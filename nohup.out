@@ -1,0 +1,21 @@
+./mc: line 3: 26650 Terminated              memcached -m 2 -p 112029
+./mc: line 3: 27342 Terminated              memcached -m 2 -p 112029
+./mc: line 3:  2436 Killed                  memcached -m 2 -p 112029
+./mc: line 3: 26888 Terminated              memcached -m 2 -p 112029
+./mc: line 3: 20076 Terminated              memcached -m 2 -p 112029
+failed to listen on TCP port 112029: Address already in use
+./mc: line 3: 32735 Terminated              memcached -m 2 -p 112029
+failed to listen on TCP port 112029: Address already in use
+./mc: line 3:  1681 Terminated              memcached -m 2 -p 112029
+./mc: line 3: 29948 Terminated              memcached -m 2 -p 112029
+./mc: line 3: 27645 Terminated              memcached -m 2 -p 112029
+./mc: line 3: 31933 Terminated              memcached -m 2 -p 112029
+./mc: line 3:  3912 Terminated              memcached -m 2 -p 112029
+./mc: line 3:  8013 Terminated              memcached -m 2 -p 112029
+./mc: line 3: 14813 Terminated              memcached -m 2 -p 112029
+./mc: line 3: 20430 Terminated              memcached -m 2 -p 112029
+./mc: line 3:  3347 Terminated              memcached -m 2 -p 112029
+./mc: line 3: 26112 Terminated              memcached -m 2 -p 112029
+./mc: line 3: 30113 Terminated              memcached -m 2 -p 112029
+./mc: line 3: 30984 Terminated              memcached -m 2 -p 112029
+./mc: line 3: 31543 Terminated              memcached -m 2 -p 112029

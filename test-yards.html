@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html>
+  <head>
+		<title>test</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <style type="text/css">
+      html { height: 100% }
+      body { height: 70%; margin: 0; padding: 0 }
+    </style>
+    <script type="text/javascript"
+		      src="http://maps.googleapis.com/maps/api/js?sensor=false">
+					    </script>
+		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
+		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
+		<script type="text/javascript" src="common.js"></script>
+    <script type="text/javascript">
+
+
+var g_objects = new Array();
+var g_grid_lons = null;
+
+function initialize() {
+
+	init_map();
+
+	var yards = eval(get_sync("yards.json"));
+	var yard = yards[0];
+	var latlons = new Array();
+	for(var i=0; i<yard.length; i++) {
+		var yardpt = yard[i];
+		latlons.push(new google.maps.LatLng(yardpt[0], yardpt[1]));
+	}
+	latlons.push(new google.maps.LatLng(yard[0][0], yard[0][1]));
+	new google.maps.Polyline({map: g_map, 
+			path: latlons 
+			});
+
+	var marker = new google.maps.Marker({map: g_map, draggable: true, 
+			position: new google.maps.LatLng(yardpt[0], yardpt[1])});
+
+	//var maxlat = 43.6412924, minlat = 43.6375499, minlon = -79.4503009, maxlon= -79.4446468;
+	var maxlat=43.6406091, minlon=-79.4493031, minlat=43.6384506, maxlon=-79.4459557;
+	var n = 13.0;
+	for(var lat=minlat; lat<=maxlat; lat+=(maxlat-minlat)/n) {
+		for(var lon=minlon; lon<=maxlon; lon+=(maxlon-minlon)/n) {
+			var r = callpy_sync('geom.inside_polygon', lat, lon);
+			if(r) {
+				make_mark(lat, lon);
+			}
+		}
+	}
+
+	google.maps.event.addListener(marker, 'dragend', function() {
+		/*
+		var pt = new Array();
+		pt.push(marker.getPosition().lat());
+		pt.push(marker.getPosition().lng());
+		callpy('geom.inside_polygon', pt[0], pt[1], function(r_) {
+			set_contents('p1', r_);
+			
+		});
+		*/
+		set_contents('p1', sprintf('%.7f, %.7f', marker.getPosition().lat(), marker.getPosition().lng()));
+	});
+
+}
+
+function make_mark(lat_, lon_) {
+	return new google.maps.Marker({
+		position: new google.maps.LatLng(lat_, lon_),
+		map: g_map,
+		title:"",
+		draggable: false
+		});
+}
+
+function erase_grid() {
+	while(g_objects.length > 0) {
+		g_objects.pop().setMap(null);
+	}
+}
+
+    </script>
+  </head>
+  <body onload="initialize()" >
+		<div id="map_canvas" style="width:80%; height:100%"></div>
+		<p id="p1"/>
+  </body>
+</html>

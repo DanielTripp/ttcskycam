@@ -1,0 +1,151 @@
+
+left off: 
+
+
+
+
+vid 4079 report for 2012-09-30 14:15
+	- headings - where are these coming from 
+	- misreported dirtag is making things difficult but we could do better 
+	- are we throwing away some good readings as an unwanted detour? 
+
+
+draw 'no traffic' in white. 
+
+test historical
+
+is interpolation still very broken?  
+try something like    route = 501 and lon > 55lon and lon < 58lon and time around(60,60) '2012-09-05 12:00'  
+
+look for more wrong direction reportings with util.py.
+
+
+
+- queen eastbound   2012-10-01 01:34  a lot of westbound vehicles showing up. 
+	4246  4233  4231   
+
+- backup.    what if my computer dies? 
+
+- consider an "in the city" check.  a lot of vehicles showing up in the lake etc. 
+for hours.  eg. 4246  2012-08-01.  it went to russell yard then the lake.  
+
+- fetch rows into the future in order to get stuck vehicles w/ blank dir_tag. 
+don't get stuck vehicles that were going in the opposite direction. 
+
+- change remove_unwanted_detours() to keep stationary vehicles. 
+	- sum distance for entire detour and make a decision. 
+
+- do stopped (i.e. completely traffic-jammed, or in-an-accident) vehicles 
+show up w/ blank dirtag?  if so, then shouldn't these contribute to the traffic 
+report?
+
+- 2012-09-30 16:15   vid 4103 (church & queen) is showing up in both e.b. and w.b. reports 
+
+- scrutinize est. trip times near start (and end) of route.  i.e. mofr == 0.  
+
+- don't interpolate across too large a time gap.  at least don't do it by non-mofr. 
+
+- 2012-10-01 01:08 dundas eastbound traffic report - shows vid 4114 on howard park which is/was westbound.
+
+- make sure that vehicles parked in yards don't affect traffic. 
+
+
+traffic dundas eastbound  2012-09-24 01:45
+	- 3 vehicles, 3 problems 
+
+vehicle_id = '4047' and time >  '2012-09-18 21:34' and time < '2012-09-18 22:04' 
+	- cyan cutting corner at broadview / gerrard 
+	- green going to ontario place / lake 
+
+
+
+find out how much I'm pushing nextbuses data quotas.  use wireshark maybe. 
+
+find max speed of a streetcar in the wild.  bus? 
+
+are we removing bad gps readings on traffic too?  
+	- no I don't think we are.  I think that we should.  mofr on a bad gps reading will probably be -1 and thus discarded 
+		anyway, but you never know. 
+	- concoct a test case. 
+
+think about getting vehicle locations differently w.r.t. dir_tag.  sometimes vehicles go in circles, more or less.  
+eg. vehicle 7693 around '2012-09-24 13:45'.  maybe we should get all the vehicles locations if at any point 
+in the timeframe it matched the desired direction. 
+
+also the current method of taking a blank dir_tag as our desired direction if
+the first and last points in a blank dir_tag stretch go in generally the same
+direction as the route is flawed.  eg. vehicles ending service at broadview at
+the end of the night then going to russell yard with a blank dir_tag all the
+way.  we currently interpret these as eastbound.  sometimes, I think.  (also
+complicating things is that some of them don't report in for the trip down
+broadview, then they do when they're in the yard, so we interpolate a diagonal
+which looks ridiculous.) 
+
+be sure include not-moving (or moving very little) vehicles with blank dirtag
+in locations report, because they will be one of the best indications of a
+major problem. 
+
+2012-06-13 23:10  - dundas eastbound - rogue vehicle - broadview to mississauga 
+
+2012-06-09 12:03  - dundas eastbound - traffic gaps and backward vehicles 
+	- what is that vehicle creeping around mid-block south of imperial pub? 
+
+2012-06-09 13:03 - dundas westbound - corner cutting in cabbagetown 
+
+2012-06-07 00:10ish - dundas eastbound - no traffic showing up for roncesvalles strip. 
+	- also: some westbound vehicles showing up? 
+		- especially vid 4175.  Is that 2 overshots? 
+
+2012-03-01 01:28  dundas   bad-looking vehicles and suspect red traffic 
+
+2012-05-29 18:51 king westbound   'mofr too high' 
+
+2012-05-30 03:00 king westbound   sparse traffic.  that's okay.  but why isn't briefly-appearing vehicle on broadview 
+	causing some traffic chevrons in that area?
+	- or other vehicle between shaw and train tracks.
+
+2012-06-01 01:11   dundas eastbound   why so red?  
+
+2012-06-09 00:19  dundas eastbound    vehicle goes westbound briefly between yonge and church.  (twice?) 
+
+2012-06-09 01:17  queen eastbound  traffic looks way to red and white.
+
+then fix db.py assert fail for queen 
+
+make something nice out of queen / spadina detour of aug 2012. 
+
+
+
+make polling a cron job 
+use python instead of wget. 
+
+vehicle markers - try to make them arrows.
+
+fix eg. a dundas streetcar appearing to go along bloor due to interpolation 
+	- now that we interpolate by mofr, that will be fixed.  but will it appear to go backwards on the 
+		track now?  find this case.  we should interpolate only between vis less than a certain time span 
+		apart. 
+
+should we be reaching farther in get_bounding_mofr_vis()?  what if a slowdown happens between 
+mofr steps? 
+	- what are we currently doing? 
+
+how accurate is our reporting of current vehicle locations and 
+interpolation anyway?  
+
+are we extrapolating vehicle locations into the future already without noticing? 
+
+historical reports should not extrapolate (for vehicle locations or traffic?).
+they can get db records more recent than the upper end of the time window.  
+
+stop showing first and last mofr traffic arrows.  they are often red and flashing.  not much point in showing this.
+	- think more.  is it the max mofr when dir==0, min mofr when dir==1 that I want to not show?  
+		is the colour of the chevron of the first mofr step out of the origin station informative?  
+
+zindex of vehicles vs. traffic arrows.  (put vehicles in front.)
+
+zoom level 11.  traffic arrows seem to be appearing a few hundred meters to the south of where they should be.
+
+
+
+

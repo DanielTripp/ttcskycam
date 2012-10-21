@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+tail -f /www/logs/dt.theorem.ca_error_log 
+

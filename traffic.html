@@ -1,0 +1,899 @@
+<!DOCTYPE html>
+<html>
+  <head>
+		<title>traffic</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <style type="text/css">
+      html { height: 100% }
+      body { height: 70%; margin: 0; padding: 0 }
+    </style>
+		<link type="text/css" href="css/ui-lightness/jquery-ui-1.8.17.custom.css" rel="stylesheet" />
+    <script type="text/javascript"
+      src="http://maps.googleapis.com/maps/api/js?sensor=false">
+    </script>
+		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
+		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
+		<script type="text/javascript" src="js/jquery-ui-1.8.17.custom.min.js"></script>
+		<script type="text/javascript" src="js/jquery-ui-timepicker-addon.js"></script>
+		<script type="text/javascript" src="js/buckets-minified.js"></script>
+		<script type="text/javascript" src="common.js"></script>
+    <script type="text/javascript">
+
+var g_traffic_mofr2speed = null, g_traffic_linedefs = null;
+var g_traffic_lines = new Array();
+var g_origmark=null, g_destmark=null;
+var g_route=null, g_direction=null;
+var g_orig_stoptag=null, g_dest_stoptag=null;
+var g_orig_mofr=0, g_dest_mofr=0;
+var g_play_timer = null;
+/* a list of lists of VehicleInfo objects. */
+var g_minute_to_vid_to_vi = null;
+/* current time location (index into g_minute_to_vid_to_vi and g_times) of the animation. */
+var g_cur_minute = 0;
+/* contains date/time strings.  same size as g_minute_to_vid_to_vi.  */
+var g_times = null;
+var g_vid_to_static_vehicle_marker = new Array();
+var g_vid_to_heading_to_moving_vehicle_marker = null;
+var g_refresh_data_from_server_timer = null;
+var g_hidden_vids = new buckets.Set();
+var g_playing = true;
+
+var HEADING_ROUNDING_DEGREES = 5;
+var REFRESH_INTERVAL_MS = 15*1000;
+var MOVING_VEHICLES_OVERTIME_FLASH_INTERVAL_MS = 500;
+var MOVING_VEHICLES_ANIM_INTERVAL_MS = 100;
+var MOFR_STEP = parseInt(get_sync('MOFR_STEP'));
+
+var g_zoom_to_vehicle_size = [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 10, 13, 15, 25, 40, 50, 60, 70, 80, 100, 130, 100, ];
+
+function get_vehicle_size(zoom_) {
+	if(0 <= zoom_ && zoom_ < g_zoom_to_vehicle_size.length) {
+		return g_zoom_to_vehicle_size[zoom_];
+	} else {
+		return g_zoom_to_vehicle_size[g_zoom_to_vehicle_size.length];
+	}
+}
+
+function get_mofrstepincr(zoom_) {
+	if(zoom_ <= 11) {
+		return 10;
+	} else if(zoom_ == 12) {
+		return 8;
+	} else if(zoom_ == 13) {
+		return 4;
+	} else if(zoom_ == 14) {
+		return 3;
+	} else if(zoom_ == 15) {
+		return 2;
+	} else if(zoom_ == 16) {
+		return 1;
+	} else {
+		return 1;
+	}
+}
+
+function kmph_to_color(kmph_) {
+	var r = kmph_to_color_ints(kmph_);
+	return sprintf('rgb(%d,%d,%d)', r[0], r[1], r[2]);
+}
+
+function kmph_to_color_ints(kmph_) {
+	if(kmph_==null) {
+		return [255, 255, 255];
+	}
+	var red = [150, 0, 0], yellow = [250, 250, 0], green = [0, 255, 0];
+	var red_kmph = 5, yellow_kmph = 15, green_kmph = 25;
+	if(kmph_ <= red_kmph) {
+		return [0, 0, 0];
+	} else if(red_kmph < kmph_ && kmph_ <= yellow_kmph) {
+		return interp_color(red, yellow, (kmph_ - red_kmph)/(yellow_kmph - red_kmph));
+	} else if(yellow_kmph < kmph_ && kmph_ <= green_kmph) {
+		return interp_color(yellow, green, (kmph_ - yellow_kmph)/(green_kmph - yellow_kmph));
+	} else {
+		return green;
+	}
+}
+
+function interp_color(c1_, c2_, percent_) {
+	var r = [0, 0, 0];
+	for(var i in r) {
+		r[i] = get_range_val(0, c1_[i], 1.0, c2_[i], percent_);
+	}
+	return r;
+}
+
+function remove_existing_traffic_lines() {
+	for(var i in g_traffic_lines) {
+		var marker = g_traffic_lines[i];
+		marker.setMap(null);
+		delete marker;
+	}
+	g_traffic_lines.length = 0;
+}
+
+function refresh_traffic_from_server() {
+	callpy('traffic.get_traffics', g_route, g_direction, true, get_datetime_from_gui(), 
+		function(r_) {
+			g_traffic_linedefs = r_[0];
+			g_traffic_mofr2speed = r_[1];
+			update_trip_time();
+			draw_traffic_lines();
+		});
+}
+
+function clear_traffic() {
+	delete g_traffic_linedefs;
+	g_traffic_linedefs = null;
+	delete g_traffic_mofr2speed;
+	g_traffic_mofr2speed = null;
+	remove_existing_traffic_lines();
+}
+
+function refresh_vehicles_from_server() {
+	callpy('traffic.get_recent_vehicle_locations', g_route, g_direction, is_traffictype_current(), get_datetime_from_gui(), 
+		function(r_) {
+			clear_vehicles();
+			update_last_updated_time();
+			stop_play_timer();
+			appropriate_vehicle_locations(r_);
+			if(g_times.length > 0) {
+				draw_static_vehicles();
+				create_moving_vehicle_markers();
+				create_vid_checkboxes();
+				g_cur_minute = 0;
+				show_cur_minute_vehicles();
+				if(g_playing) {
+					g_play_timer = setTimeout('moving_vehicles_timer_func()', MOVING_VEHICLES_ANIM_INTERVAL_MS);
+				}
+			} else {
+				remove_vid_checkboxes();
+			}
+		});
+}
+
+function create_vid_checkboxes() {
+	set_contents('p_vid_checkboxes', make_vids_html());
+}
+
+function remove_vid_checkboxes() {
+	set_contents('p_vid_checkboxes', '');
+}
+
+function make_vids_html() {
+	var r = '';
+	var vids = all_vids();
+	vids.sort();
+	for(var i in vids) {
+		var vid = vids[i];
+		r += sprintf('%s <span onclick="%s" ondblclick="set_solo_vid(%s)">%s</span>, ', 
+			make_vid_checkbox_html(vid), 
+			"$('#"+vid_checkbox_id(vid)+"').trigger('click')", 
+			vid, 
+			vid);
+	}
+	return r;
+}
+
+function all_vids() {
+	return g_vid_to_heading_to_moving_vehicle_marker.keys();
+}
+
+function make_vid_checkbox_html(vid_) {
+	return sprintf('<input type="checkbox" id="'+vid_checkbox_id(vid_)+'" onclick="on_vid_checkbox_clicked(\''+vid_+'\')" %s/>', 
+			(g_hidden_vids.contains(vid_) ? '' : 'checked="checked"'));
+}
+
+function vid_checkbox_id(vid_) {
+	return 'vid-checkbox-'+vid_;
+}
+
+function on_vid_checkbox_clicked(vid_) {
+	if(g_hidden_vids.contains(vid_)) {
+		g_hidden_vids.remove(vid_);
+	} else {
+		g_hidden_vids.add(vid_);
+	}
+
+	if(vid_ in g_vid_to_static_vehicle_marker) {
+		var show_static_marker = !g_hidden_vids.contains(vid_);
+		if(in_overtime()) {
+			show_static_marker = show_static_marker && in_overtime_flash_on();
+		}
+		g_vid_to_static_vehicle_marker[vid_].setVisible(show_static_marker);
+	}
+
+	var moving_marker = get_moving_vehicle_marker_for_cur_minute(vid_);
+	if(moving_marker != null) {
+		moving_marker.setVisible(!g_hidden_vids.contains(vid_));
+	}
+}
+
+function get_moving_vehicle_marker_for_cur_minute(vid_) {
+	var real_cur_minute = Math.min(g_cur_minute, g_times.length-1); // 'real' as in 'ignoring overtime' 
+	var vi = g_minute_to_vid_to_vi[real_cur_minute].get(vid_);
+	if(vi!=undefined) {
+		return g_vid_to_heading_to_moving_vehicle_marker.get(vid_).get(round_heading(vi.heading));
+	} else {
+		return null;
+	}
+}
+
+function svg_square(color_) {
+	return sprintf('<svg width="20" height="20" version="1.1">' +
+			'<polygon points="0,0 19,0 19,19, 0,19" fill="%s" fill-opacity="1" stroke="rgb(100,100,100)" stroke-width="0.5" />' + 
+			'</svg>', color_);
+}
+
+function appropriate_vehicle_locations(raw_) {
+	g_times = new Array();
+	g_minute_to_vid_to_vi = new Array();
+	for(var minute in raw_) {
+		var timeslice = raw_[minute];
+		g_times.push(timeslice.shift());
+		var vid_to_vi = new buckets.Dictionary();
+		g_minute_to_vid_to_vi.push(vid_to_vi);
+		for(var j in timeslice) {
+			var vi = timeslice[j];
+			vid_to_vi.set(vi.vehicle_id, vi);
+		}
+	}
+}
+
+function create_moving_vehicle_markers() {
+	var d = new buckets.Dictionary();
+	for(var minute in g_minute_to_vid_to_vi) {
+		g_minute_to_vid_to_vi[minute].forEach(function(vid, vi) {
+			var d2 = d.get(vid);
+			if(d2 == undefined) {
+				d2 = new buckets.Dictionary();
+				d.set(vid, d2);
+			}
+			var rounded_heading = round_heading(vi.heading);
+			if(!d2.containsKey(rounded_heading)) {
+				var marker = make_vehicle_marker(vid, rounded_heading, 43, 79, false);
+				d2.set(rounded_heading, marker);
+			}
+		});
+	}
+	g_vid_to_heading_to_moving_vehicle_marker = d;
+}
+
+function round_heading(heading_) {
+	return round(heading_, HEADING_ROUNDING_DEGREES);
+}
+
+function update_last_updated_time() {
+	var d = new Date();
+	set_contents('p_last_updated', sprintf('Last updated at %02d:%02d:%02d', d.getHours(), d.getMinutes(), d.getSeconds()));
+}
+
+function refresh_data_from_server_timer_func() {
+	refresh_traffic_and_vehicles_from_server();
+	schedule_refresh_data_from_server();
+}
+
+function refresh_traffic_and_vehicles_from_server() {
+	refresh_traffic_from_server();
+	refresh_vehicles_from_server();
+}
+
+function stop_play_timer() {
+	if(g_play_timer!=null) {
+		clearTimeout(g_play_timer);
+		g_play_timer = null;
+	}
+}
+
+function draw_static_vehicles() {
+	g_minute_to_vid_to_vi[g_minute_to_vid_to_vi.length-1].forEach(function(vid, vi) {
+		var marker = make_vehicle_marker(vid, vi.heading, vi.lat, vi.lon, true);
+		g_vid_to_static_vehicle_marker[vid] = marker;
+		marker.setVisible(!g_hidden_vids.contains(vid));
+	});
+}
+
+function moving_vehicles_timer_func() {
+	g_cur_minute = (g_cur_minute + 1) % (g_times.length + 4);
+	if(!in_overtime()) {
+		update_time_display();
+	}
+	move_vehicles_forward_one_minute();
+
+	g_play_timer = setTimeout('moving_vehicles_timer_func()', 
+			((g_cur_minute >= g_times.length-1) ? MOVING_VEHICLES_OVERTIME_FLASH_INTERVAL_MS : MOVING_VEHICLES_ANIM_INTERVAL_MS));
+}
+
+function in_overtime() {
+	return (g_cur_minute >= g_times.length);
+}
+
+function in_overtime_flash_on() {
+	return ((g_cur_minute - g_times.length) % 2 == 1);
+}
+
+// Not 'all' really.  This function respects the hidden vid checkboxes. 
+function set_all_static_vehicle_markers_visible(visible_) {
+	for(var vid in g_vid_to_static_vehicle_marker) {
+		var marker = g_vid_to_static_vehicle_marker[vid];
+		marker.setVisible(visible_ && !g_hidden_vids.contains(vid));
+	}
+}
+
+function move_vehicles_forward_one_minute() {
+	if(g_cur_minute < g_times.length-1) {
+		move_vehicles_forward_one_minute_normal();
+	} else {
+		move_vehicles_forward_one_minute_overtime();
+	}
+}
+
+function move_vehicles_forward_one_minute_overtime() {
+	if(g_cur_minute == g_times.length-1) {
+		var prev_minute_vid_to_vi = g_minute_to_vid_to_vi[g_times.length-2];
+		prev_minute_vid_to_vi.forEach(function(vid, prev_minute_vi) {
+			var prev_heading = round_heading(prev_minute_vi.heading);
+			g_vid_to_heading_to_moving_vehicle_marker.get(vid).get(prev_heading).setVisible(false);
+		});
+	} else {
+		g_minute_to_vid_to_vi[g_times.length-1].forEach(function(vid, vi) {
+			var heading = round_heading(vi.heading);
+			var marker = g_vid_to_heading_to_moving_vehicle_marker.get(vid).get(heading);
+			if(g_cur_minute == g_times.length) {
+				marker.setPosition(new google.maps.LatLng(vi.lat, vi.lon));
+			}
+			marker.setVisible(!in_overtime_flash_on() && !g_hidden_vids.contains(vid));
+		});
+		set_all_static_vehicle_markers_visible(in_overtime_flash_on());
+	} 
+}
+
+function move_vehicles_forward_one_minute_normal() {
+	var prev_minute = g_cur_minute-1;
+	if(prev_minute < 0) {
+		prev_minute = g_times.length-1;
+	}
+	var prev_minute_vid_to_vi = g_minute_to_vid_to_vi[prev_minute];
+	var cur_minute_vid_to_vi = g_minute_to_vid_to_vi[g_cur_minute];
+	cur_minute_vid_to_vi.forEach(function(vid, cur_minute_vi) {
+		if(g_hidden_vids.contains(vid)) {
+			return;
+		}
+		var prev_minute_vi = prev_minute_vid_to_vi.get(vid);
+		var cur_heading = round_heading(cur_minute_vi.heading);
+		if(prev_minute_vi == undefined) {
+			var marker = g_vid_to_heading_to_moving_vehicle_marker.get(vid).get(cur_heading);
+			marker.setPosition(new google.maps.LatLng(cur_minute_vi.lat, cur_minute_vi.lon));
+			marker.setVisible(true);
+		} else {
+			var prev_heading = round_heading(prev_minute_vi.heading);
+			if(cur_heading == prev_heading) {
+				var marker = g_vid_to_heading_to_moving_vehicle_marker.get(vid).get(cur_heading);
+				marker.setPosition(new google.maps.LatLng(cur_minute_vi.lat, cur_minute_vi.lon));
+			} else {
+				var cur_marker = g_vid_to_heading_to_moving_vehicle_marker.get(vid).get(cur_heading);
+				cur_marker.setPosition(new google.maps.LatLng(cur_minute_vi.lat, cur_minute_vi.lon));
+				cur_marker.setVisible(true);
+				var prev_marker = g_vid_to_heading_to_moving_vehicle_marker.get(vid).get(prev_heading);
+				prev_marker.setVisible(false);
+			}
+		}
+	});
+	prev_minute_vid_to_vi.forEach(function(vid, prev_minute_vi) {
+		if(!cur_minute_vid_to_vi.containsKey(vid) || g_hidden_vids.contains(vid)) {
+			var prev_heading = round_heading(prev_minute_vi.heading);
+			g_vid_to_heading_to_moving_vehicle_marker.get(vid).get(prev_heading).setVisible(false);
+		}
+	});
+}
+
+function update_time_display() {
+	var cur_time_html = g_times[g_cur_minute];
+	if(g_cur_minute == g_times.length-1) {
+		cur_time_html = '<b>'+cur_time_html+'</b>';
+	}
+	set_contents('p_cur_time', cur_time_html);
+}
+
+function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
+	var color = vid_to_color(vid_);
+	var size = get_vehicle_size(g_map.getZoom());
+	var marker = new google.maps.Marker({
+			position: new google.maps.LatLng(lat_, lon_),
+			map: g_map,
+			draggable: false,
+			icon: new google.maps.MarkerImage(cgi_url('get_vehicle_svg.cgi', [size, heading_, color, (static_aot_moving_ ? 0.8 : 0.3)]), 
+					null, null, new google.maps.Point(size/2, size/2)),
+			visible: false
+		});
+	marker.setVisible(true);
+	if(static_aot_moving_) {
+		add_vid_mouseover_infowin(marker, size, vid_);
+		add_solo_vid_click_listener(marker, vid_);
+	}
+	return marker;
+}
+
+function add_solo_vid_click_listener(vehicle_marker_, vid_) {
+	google.maps.event.addListener(vehicle_marker_, 'click', function() { set_solo_vid(vid_); });
+}
+
+function set_solo_vid(vid_) {
+	if(is_solo_already()) {
+		var vids = all_vids();
+		for(var i in vids) {
+			var vid = vids[i];
+			if(!document.getElementById(vid_checkbox_id(vid)).checked) {
+				document.getElementById(vid_checkbox_id(vid)).checked = true;
+				on_vid_checkbox_clicked(vid);
+			}
+		}
+	} else {
+		var vids = all_vids();
+		for(var i in vids) {
+			var vid = vids[i];
+			if(vid == vid_) {
+				if(!document.getElementById(vid_checkbox_id(vid)).checked) {
+					document.getElementById(vid_checkbox_id(vid)).checked = true;
+					on_vid_checkbox_clicked(vid);
+				}
+			} else {
+				if(document.getElementById(vid_checkbox_id(vid)).checked) {
+					document.getElementById(vid_checkbox_id(vid)).checked = false;
+					on_vid_checkbox_clicked(vid);
+				}
+			}
+		}
+	}
+}
+
+function is_solo_already() {
+	return (all_vids().length == g_hidden_vids.size()+1);
+}
+
+function add_vid_mouseover_infowin(vehicle_marker_, vehicle_marker_size_, vid_) {
+	var infowin = new google.maps.InfoWindow({content: 'Vehicle ID: '+vid_, disableAutoPan: true, 
+		position: vehicle_marker_.getPosition(), 
+		pixelOffset: new google.maps.Size(vehicle_marker_size_/3, -vehicle_marker_size_/3)
+		});
+	google.maps.event.addListener(vehicle_marker_, 'mouseover', function() {
+		infowin.open(g_map);
+	});
+	google.maps.event.addListener(vehicle_marker_, 'mouseout', function() {
+		infowin.close();
+	});
+}
+
+function clear_vehicles() {
+	clear_moving_vehicles();
+	clear_static_vehicles();
+}
+
+function clear_moving_vehicles() {
+	if(g_vid_to_heading_to_moving_vehicle_marker!=null) {
+		g_vid_to_heading_to_moving_vehicle_marker.forEach(function(vid, heading_to_moving_vehicle_marker) {
+			clear_vehicle_list(heading_to_moving_vehicle_marker.values());
+		});
+		g_vid_to_heading_to_moving_vehicle_marker = null;
+	}
+}
+
+function clear_static_vehicles() {
+	clear_vehicle_list(g_vid_to_static_vehicle_marker);
+	g_vid_to_static_vehicle_marker = new Array();
+}
+
+function clear_vehicle_list(list_) {
+	for(var i in list_) {
+		var m = list_[i];
+		m.setMap(null);
+	}
+}
+
+function redraw_vehicle_markers() {
+	clear_vehicles();
+	draw_static_vehicles();
+	create_moving_vehicle_markers();
+}
+
+function draw_traffic_lines() {
+	remove_existing_traffic_lines();
+
+	for(var i in g_traffic_linedefs) {
+		var linedef = g_traffic_linedefs[i];
+		var traf = g_traffic_mofr2speed[linedef.mofr];
+		draw_traffic_line(linedef.start_latlon, linedef.end_latlon, (traf!=null ? traf.kmph : null), linedef.mofr);
+	}
+}
+
+function initialize() {
+
+	init_map();
+	google.maps.event.addListener(g_map, 'zoom_changed', function() {
+		draw_traffic_lines();
+		redraw_vehicle_markers();
+		set_contents("p_zoom_info", "zoom: "+g_map.getZoom());
+	});
+	var origlat, origlon, destlat, destlon;
+	if(true) { // dundas 
+		if(false) { // eastbound 
+			origlat=43.6492799; origlon=-79.42095; destlat=43.65085; destlon=-79.4128799;
+		} else {
+			destlat=43.6492799; destlon=-79.42095; origlat=43.65085; origlon=-79.4128799;
+		}
+	} else { // queen 
+		origlat=43.64457; origlon=-79.4165499; destlat=43.6471199; destlon=-79.4042;
+	}
+	g_origmark = new google.maps.Marker({
+		position: new google.maps.LatLng(origlat, origlon),
+		title: 'Starting point', 
+		map: g_map,
+		draggable: true
+		});
+	var origmark_infowin = new google.maps.InfoWindow({content: 'Start'});
+	//origmark_infowin.open(g_map, g_origmark);
+	google.maps.event.addListener(g_origmark, 'dragend', function() { on_trip_mark_moved(); });
+
+	g_destmark = new google.maps.Marker({
+		position: new google.maps.LatLng(destlat, destlon),
+		title: 'Destination', 
+		map: g_map,
+		draggable: true
+		});
+	var destmark_infowin = new google.maps.InfoWindow({content: 'End'});
+	//destmark_infowin.open(g_map, g_destmark);
+	google.maps.event.addListener(g_destmark, 'dragend', function() { on_trip_mark_moved(); });
+
+	draw_all_routes();
+	init_datetimepicker();
+
+	set_play_buttons_appropriately();
+
+	on_trip_mark_moved();
+}
+
+function set_play_buttons_appropriately() {
+	$('#playpause_button').prop('value', (g_playing ? 'Pause' : 'Play'));
+	$('#back_button').prop('disabled', g_playing);
+	$('#forward_button').prop('disabled', g_playing);
+}
+
+function on_playpause_clicked() {
+	g_playing = !g_playing;
+	set_play_buttons_appropriately();
+	if(g_playing) {
+		moving_vehicles_timer_func();
+	} else {
+		stop_play_timer();
+		if(g_cur_minute > g_times.length-1) {
+			g_cur_minute = g_times.length-1;
+		}
+		show_cur_minute_vehicles();
+	}
+}
+
+function show_cur_minute_vehicles() {
+	set_all_static_vehicle_markers_visible(true);
+	g_vid_to_heading_to_moving_vehicle_marker.forEach(function(vid, heading_to_marker) {
+		heading_to_marker.forEach(function(heading, marker) {
+			marker.setVisible(false);
+		});
+	});
+	g_minute_to_vid_to_vi[g_cur_minute].forEach(function(vid, vi) {
+		if(!g_hidden_vids.contains(vid)) {
+			var marker = g_vid_to_heading_to_moving_vehicle_marker.get(vid).get(round_heading(vi.heading));
+			marker.setPosition(google_LatLng([vi.lat, vi.lon]));
+			marker.setVisible(true);
+		}
+	});
+}
+
+function on_forward_clicked() {
+	g_cur_minute = Math.min(g_cur_minute+1, g_times.length-1);
+	update_time_display();
+	show_cur_minute_vehicles();
+}
+
+function on_back_clicked() {
+	g_cur_minute = Math.max(g_cur_minute-1, 0);
+	update_time_display();
+	show_cur_minute_vehicles();
+}
+
+function is_traffictype_current() {
+	return (radio_val('traffictype') == 'current');
+}
+
+function is_traffictype_historical() {
+	return !is_traffictype_current();
+}
+
+function init_datetimepicker() {
+	set_value('datetimepicker', get_sync('datetime.txt'));
+	$('#datetimepicker').datetimepicker({
+		dateFormat: 'yy-mm-dd', 
+		onSelect: function(dateText, inst) { 
+			on_datetime_changed();
+		}
+	});
+	update_datetimepicker_enabledness();
+}
+
+function on_traffictype_changed() {
+	update_datetimepicker_enabledness();
+	stop_refresh_data_from_server_timer();
+	if(is_traffictype_current()) {
+		schedule_refresh_data_from_server();
+	}
+	refresh_traffic_and_vehicles_from_server();
+}
+
+function schedule_refresh_data_from_server() {
+	g_refresh_data_from_server_timer = setTimeout('refresh_data_from_server_timer_func()', REFRESH_INTERVAL_MS);
+}
+
+function update_datetimepicker_enabledness() {
+	$('#datetimepicker').prop('disabled', is_traffictype_current());
+}
+
+function get_datetime_from_gui() {
+	return (is_traffictype_current() ? 0 : get_value('datetimepicker'));
+}
+
+function draw_all_routes() {
+	callpy('routes.get_all_routes_latlons', 
+			function(r_) {
+				draw_routes(r_);
+			});
+}
+
+function draw_routes(routes_) {
+	for(var i=0; i<routes_.length; i++) {
+		var latlngs = new Array();
+		for(var j=0; j<routes_[i].length; j++) {
+			var pt = routes_[i][j];
+			latlngs.push(new google.maps.LatLng(pt[0], pt[1]));
+		}
+		var polyline = new google.maps.Polyline({
+			path: latlngs, 
+			strokeWeight: 3, 
+			strokeOpacity: 0.3, 
+			strokeColor: 'rgb(50,50,50)', 
+			zIndex: -10, 
+			map: g_map
+		});
+	}
+}
+
+function stop_refresh_data_from_server_timer() {
+	if(g_refresh_data_from_server_timer != null) {
+		clearTimeout(g_refresh_data_from_server_timer);
+		g_refresh_data_from_server_timer = null;
+	}
+}
+
+function on_trip_mark_moved() {
+	var old_route = g_route, old_direction = g_direction;
+	callpy('routes.get_endpoint_info', 
+			g_origmark.getPosition().lat(), g_origmark.getPosition().lng(), g_destmark.getPosition().lat(), g_destmark.getPosition().lng(), 
+			function(r_) {
+				update_trip_endpoint_info(r_);
+				if(g_route!=old_route || g_direction!=old_direction) {
+					clear_traffic();
+					stop_refresh_data_from_server_timer();
+					stop_play_timer();
+					clear_vehicles();
+					if(g_route!=null) {
+						refresh_traffic_and_vehicles_from_server();
+						if(is_traffictype_current()) {
+							g_refresh_data_from_server_timer = setTimeout('refresh_data_from_server_timer_func()', REFRESH_INTERVAL_MS);
+						}
+					} else {
+						update_trip_time();
+					}
+				} else {
+					update_trip_time();
+				}
+			});
+}
+
+function on_datetime_changed() {
+	clear_traffic();
+	stop_play_timer();
+	clear_vehicles();
+	refresh_traffic_and_vehicles_from_server();
+}
+
+function update_trip_endpoint_info(info_) {
+	if(info_==null) {
+		g_route = g_direction = g_orig_stoptag = g_dest_stoptag = null;
+		set_contents('p_trip_endpoint_info', "Route and direction unknown");
+	} else {
+		g_route = info_["route"];
+		g_direction = info_["direction"];
+		g_orig_stoptag = info_["origstoptag"];
+		g_dest_stoptag = info_["deststoptag"];
+		g_orig_mofr = info_["origmofr"];
+		g_dest_mofr = info_["destmofr"];
+		var orig = info_["origlatlon"], dest = info_["destlatlon"];
+		set_contents('p_trip_endpoint_info', sprintf("Route: '%s', direction: %d.  Orig: stop %s, mofr=%d ( %f, %f )  Dest: stop %s, mofr=%d ( %f, %f ) ", 
+				g_route, g_direction, g_orig_stoptag, g_orig_mofr, orig[0], orig[1], g_dest_stoptag, g_dest_mofr, dest[0], dest[1]));
+		g_origmark.setPosition(google_LatLng(info_["origlatlon"]));
+		g_destmark.setPosition(google_LatLng(info_["destlatlon"]));
+	}
+}
+
+function get_est_trip_time() {
+	var startmofr, endmofr;
+	if(g_direction == 0) {
+		startmofr = g_orig_mofr;
+		endmofr = g_dest_mofr;
+	} else {
+		startmofr = g_dest_mofr;
+		endmofr = g_orig_mofr;
+	}
+	var r_secs = 0;
+	if(startmofr != round_up_off_step(startmofr, MOFR_STEP)) {
+		var dist_m = round_up_off_step(startmofr, MOFR_STEP) - startmofr;
+		var speed_kmph = get_traffic_kmph(round(startmofr, MOFR_STEP));
+		if(speed_kmph == -1) {
+			return -1;
+		}
+		var speed_mps = kmph_to_mps(speed_kmph);
+		//alert('adding distance '+dist_m+', speed '+speed_mps+', makes for '+(dist_m/speed_mps));
+		r_secs += dist_m/speed_mps;
+	}
+	var cur_offstep_mofr = round_up_off_step(startmofr, MOFR_STEP);
+	while(cur_offstep_mofr < round_down_off_step(endmofr, MOFR_STEP)) {
+		var mofr_with_ref_speed = round_up(cur_offstep_mofr, MOFR_STEP);
+		var speed_kmph = get_traffic_kmph(mofr_with_ref_speed);
+		if(speed_kmph == -1) {
+			return -1;
+		}
+		var speed_mps = kmph_to_mps(speed_kmph);
+		//alert('adding distance '+MOFR_STEP+', speed '+speed_mps+', makes for '+(MOFR_STEP/speed_mps));
+		r_secs += MOFR_STEP/speed_mps;
+		cur_offstep_mofr += MOFR_STEP;
+	}
+	if(endmofr != round_down_off_step(endmofr, MOFR_STEP)) {
+		dist_m = endmofr - round_down_off_step(endmofr, MOFR_STEP);
+		var speed_kmph = get_traffic_kmph(round(endmofr, MOFR_STEP));
+		if(speed_kmph == -1) {
+			return -1;
+		}
+		var speed_mps = kmph_to_mps(speed_kmph);
+		//alert('adding distance '+dist_m+', speed '+speed_mps+', makes for '+(dist_m/speed_mps));
+		r_secs += dist_m/speed_mps;
+	}
+	return Math.round(r_secs/60);
+}
+
+// returns -1 if we have no traffic data for that mofr step. 
+function get_traffic_kmph(mofr_) {
+	if(mofr_ % MOFR_STEP != 0 || mofr_ < 0) {
+		throw sprintf('Got %d.  We expect a multiple of %d.', mofr_, MOFR_STEP);
+	}
+	var traf = g_traffic_mofr2speed[mofr_];
+	if(traf == undefined) {
+		return -1;
+	} else {
+		return traf.kmph;
+	}
+}
+
+function kmph_to_mps(kmph_) {
+	return kmph_*1000.0/(60*60);
+}
+
+// 'off step' means 'steps shifted in phase by half the period, if you will'  
+function round_up_off_step(x_, step_) {
+	var r = round_down_off_step(x_, step_);
+	return (r == x_ ? r : r+step_);
+}
+
+function round_down_off_step(x_, step_) {
+	// assert type(x_) == int and type(step_) == int
+	return Math.floor((x_-step_/2)/step_)*step_ + step_/2;
+}
+
+function round_up(x_, step_) {
+	var r = round_down(x_, step_);
+	return (r == x_ ? r : r+step_);
+}
+
+function round_down(x_, step_) {
+	// assert type(x_) == int and type(step_) == int
+	return (Math.floor(x_/step_)*step_);
+}
+
+function round(x_, step_) {
+	var rd = round_down(x_, step_)
+	var ru = round_up(x_, step_)
+	return (x_ - rd < ru - x_ ? rd : ru);
+}
+
+function update_trip_time() {
+	var text = '';
+	if(g_route!=null) {
+		var time = get_est_trip_time();
+		if(time >= 0) {
+			text = sprintf('%d minutes.', time);
+		} else {
+			text = '(Could not estimate trip time.  No recent traffic for some parts of the trip.)';
+		}
+	} else {
+		text = '(Could not estimate trip time.  Start / end markers have not selected a route.)';
+	}
+	set_contents('p_trip_time_info', 'Estimated trip time: '+text);
+}
+
+// kmph_ == null ==> no data available. 
+function draw_traffic_line(start_latlon_, end_latlon_, kmph_, mofr_) {
+	var line_width = get_vehicle_size(g_map.getZoom())/9;
+	var line = new google.maps.Polyline({
+		path: [google_LatLng(start_latlon_), google_LatLng(end_latlon_)], 
+		map: g_map, 
+		strokeColor: kmph_to_color(kmph_), 
+		strokeWeight: line_width, 
+		zIndex: -5, 
+	});
+	g_traffic_lines.push(line);
+	if(kmph_==null) {  // draw additional grey line behind, to make the white stand out. 
+		var line_behind = new google.maps.Polyline({
+			path: [google_LatLng(start_latlon_), google_LatLng(end_latlon_)], 
+			map: g_map, 
+			strokeColor: 'rgb(150,150,150)', 
+			strokeWeight: line_width+1, 
+			zIndex: -6, 
+		});
+		g_traffic_lines.push(line_behind);
+	}
+
+	google.maps.event.addListener(line, 'mouseover', function() {
+		set_contents('p_marker_info', sprintf("KMPH: %s, mofr: %d", (kmph_==null ? 'not available' : sprintf('%.1f', kmph_)), mofr_));
+	});
+}
+
+var g_vehicle_colors = [
+	//'rgb(0,0,0)', 
+	'rgb(100,100,100)', 
+	//'rgb(0,255,0)', 
+	//'rgb(0,100,0)', 
+//	'rgb(50,50,255)', 
+//	'rgb(0,0,150)', 
+//	'rgb(100,100,0)', 
+//	'rgb(0,255,255)', 
+//	'rgb(0,100,100)', 
+//	'rgb(255,0,255)', 
+//	'rgb(100,0,100)', 
+];
+
+function vid_to_color(vid_) {
+	return g_vehicle_colors[hashCode(vid_) % g_vehicle_colors.length];
+}
+
+$(document).ready(initialize);
+
+    </script>
+  </head>
+  <body>
+		<div id="map_canvas" style="width:80%; height:100%"></div>
+		<div>
+			<p id="p_last_updated">...</p>
+			<img id="loading_img" src="loading.gif" style="visibility:hidden"/>&nbsp; &nbsp; &nbsp; &nbsp; <br/>
+			<input type="button" id="playpause_button" onclick="on_playpause_clicked()" value="" />
+			<input type="button" id="back_button" onclick="on_back_clicked()" value="<" />
+			<input type="button" id="forward_button" onclick="on_forward_clicked()" value=">" />
+			<span id="p_cur_time">...</span> 
+			<br/>
+			<p id="p_marker_info">...</p>
+			<p id="p_zoom_info"></p>
+			<p id="p_trip_time_info"></p>
+			<p id="p_trip_endpoint_info"></p>
+			<p id="p_vid_checkboxes"></p>
+			<p id="p_temp"></p>
+			<input type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"    />Now 
+			<input type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()" checked="checked"   />Past
+			<input type="text" name="datetimepicker" id="datetimepicker" value="" />
+		</div>
+  </body>
+</html>

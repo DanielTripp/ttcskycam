@@ -1,0 +1,3 @@
+#!/usr/bin/env bash
+
+vi /www/logs/dt.theorem.ca_access_log

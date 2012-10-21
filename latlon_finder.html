@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+  <head>
+		<title>test</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <style type="text/css">
+      html { height: 100% }
+      body { height: 70%; margin: 0; padding: 0 }
+    </style>
+    <script type="text/javascript"
+		      src="http://maps.googleapis.com/maps/api/js?sensor=false">
+					    </script>
+		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
+		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
+		<script type="text/javascript" src="common.js"></script>
+    <script type="text/javascript">
+
+
+function initialize() {
+
+	init_map();
+
+	var marker = new google.maps.Marker({
+		position: new google.maps.LatLng(43.650757399103135, -79.413822128378385),
+		map: g_map,
+		title:"",
+		draggable: true
+		});
+
+	google.maps.event.addListener(marker, 'dragend', function() {
+		set_contents('p1', sprintf("%f, %f", marker.getPosition().lat(), marker.getPosition().lng()));
+	});
+}
+
+
+
+    </script>
+  </head>
+  <body onload="initialize()" >
+		<div id="map_canvas" style="width:80%; height:100%"></div>
+		<p id="p1"/>
+  </body>
+</html>

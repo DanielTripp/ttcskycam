@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html>
+  <head>
+		<title>TTC</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <style type="text/css">
+      html { height: 100% }
+      body { height: 70%; margin: 0; padding: 0 }
+    </style>
+		<link type="text/css" href="css/ui-lightness/jquery-ui-1.8.17.custom.css" rel="stylesheet" />
+    <script type="text/javascript"
+      src="http://maps.googleapis.com/maps/api/js?sensor=false">
+    </script>
+		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
+		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
+		<script type="text/javascript" src="js/jquery-ui-1.8.17.custom.min.js"></script>
+		<script type="text/javascript" src="common.js"></script>
+    <script type="text/javascript">
+
+var g_map;
+var g_objects = new Array();
+var g_remofr_marker = null;
+
+function add_info_win(mark_, text_) {
+	(new google.maps.InfoWindow({content: text_, disableAutoPan: true})).open(g_map, mark_);
+}
+
+function draw_path_marker(lat_, lon_, color_) {
+	if(false) {
+		return new google.maps.Marker({
+			position: new google.maps.LatLng(lat_, lon_),
+			map: g_map,
+			title:"Starting point",
+			draggable: false
+			});
+	}
+	var radius = 5;
+	var marker1 = new RichMarker({
+		position: new google.maps.LatLng(lat_, lon_), 
+		map: g_map,
+		draggable: false,
+		flat: true, 
+		anchor: new google.maps.Size(-radius, -2*radius), 
+		content: sprintf('<svg width="%d" height="%d" version="1.1">' +
+				'<line x1="0" y1="0" x2="%d" y2="%d" style="stroke:'+color_+';stroke-width:1"/>' + 
+				'</svg>', 
+				radius*2, radius*2, radius*2, radius*2)
+		});
+	var marker2 = new RichMarker({
+		position: new google.maps.LatLng(lat_, lon_), 
+		map: g_map,
+		draggable: false,
+		flat: true, 
+		anchor: new google.maps.Size(-radius, -2*radius), 
+		content: sprintf('<svg width="%d" height="%d" version="1.1">' +
+				'<line x1="0" y1="%d" x2="%d" y2="0" style="stroke:'+color_+';stroke-width:1"/>' + 
+				'</svg>', 
+				radius*2, radius*2, radius*2, radius*2)
+		});
+	g_objects.push(marker1);
+	g_objects.push(marker2);
+}
+
+function int_to_rgbstr(int_) {
+	var n = int_ % 7;
+	var r = '(0,0,0)';
+	if(n == 0) {
+		r = '255,0,0';
+	} else if(n == 1) {
+		r = '0,255,0';
+	} else if(n == 2) {
+		r = '0,0,255';
+	} else if(n == 3) {
+		r = '255,100,0';
+	} else if(n == 4) {
+		r = '0,255,255';
+	} else if(n == 5) {
+		r = '255,0,255';
+	} else if(n == 6) {
+		r = '100,0,100';
+	}
+	return 'rgb('+r+')';
+}
+	
+function recreate_slider() {
+	$('#slider').slider({
+		value: 0, 
+		min: 0, max: g_times.length-1, 
+		slide: function(event, ui) {
+			on_slider_slide(ui.value);
+		}
+		});
+	$("#slider").css("background", "gray");
+	on_slider_slide(0);
+}
+
+function initialize() {
+	init_map();
+	init_mofr_marker();
+}
+
+function init_mofr_marker() {
+	var marker = new google.maps.Marker({
+		position: new google.maps.LatLng(43.655, -79.44), 
+		map: g_map,
+		title:'MOFR',
+		draggable: true 
+		});
+	google.maps.event.addListener(marker, 'dragend', function() {
+		var pos = marker.getPosition();
+		var mofr = latlon_to_mofr(pos, radio_val('fudgeroute'));
+		set_contents('results_mofr', sprintf("( %.6f, %.6f ) ==> %d ", pos.lat(), pos.lng(), mofr));
+		if(g_remofr_marker!=null) {
+			g_remofr_marker.setMap(null);
+			delete g_remofr_marker;
+			g_remofr_marker = null;
+		}
+		if(mofr>=0) {
+			var remofr_latlon = mofr_to_latlon(mofr, radio_val('fudgeroute'));
+			if(remofr_latlon!=null) {
+				g_remofr_marker = new google.maps.Marker({
+					position: remofr_latlon, 
+					map: g_map,
+					title:'RE-MOFR',
+					draggable: false
+					});
+			}
+		}
+	});
+}
+
+function latlon_to_mofr(glatlon_, fudgeroutename_) {
+	var r = parseInt(get_sync(sprintf('latlon-to-mofr.cgi?lat=%f&lon=%f&fudgeroute=%s', glatlon_.lat(), glatlon_.lng(), fudgeroutename_)));
+	return r;
+}
+
+function mofr_to_latlon(mofr_, fudgeroutename_) {
+	var latlon = $.parseJSON(get_sync(sprintf('mofr-to-latlon.cgi?mofr=%d&fudgeroute=%s', mofr_, fudgeroutename_)));
+	return (latlon==null ? null : new google.maps.LatLng(latlon[0], latlon[1]));
+}
+
+function make_vehicle_markers(vis_by_time_) {
+	delete_vehicle_markers();
+	for(var i=0; i<vis_by_time_.length; i++) {
+		var vis = vis_by_time_[i];
+		g_times.push(vis.length > 0 ? vis[0].timestr : null);
+		var timeslice = new Array();
+		g_vmarkers.push(timeslice);
+		for(j=0; j<vis.length; j++) {
+			vi = vis[j];
+			var marker = make_vi_marker(vi);
+			timeslice.push(marker);
+		}
+	}
+}
+
+function delete_vehicle_markers() {
+	for(var i=0; i<g_vmarkers.length; ++i) {
+		var timeslice = g_vmarkers[i];
+		for(j=0; j<timeslice.length; ++j) {
+			timeslice[j].setMap(null);
+			delete(timeslice[j]);
+		}
+		delete(timeslice);
+	}
+	delete(g_vmarkers);
+	g_vmarkers = new Array();
+
+	delete(g_times);
+	g_times = new Array();
+}
+
+function get_vi_marker_text(vi_) {
+	return vi_to_str_short(vi_);
+}
+
+function set_contents(id_, contents_) {
+	document.getElementById(id_).innerHTML = contents_;
+}
+
+function display_vis_html(vis_by_time_) {
+	r = "<pre>";
+	for(var i=0; i<vis_by_time_.length; i++) {
+		var vis = vis_by_time_[i];
+		for(j=0; j<vis.length; j++) {
+			vi = vis[j];
+			r += vi_to_str_long(vi)+"\n";
+		}
+	}
+	r += "</pre>";
+	set_contents("results", r);
+}
+
+function remove_existing_objects() {
+	for(var i=0; i<g_objects.length; i++) {
+		g_objects[i].setMap(null);
+		delete g_objects[i];
+	}
+	delete g_objects;
+	g_objects = new Array();
+}
+
+function refresh_config_route() {
+	remove_existing_objects();
+	set_config_route(radio_val('configroute'), radio_val('configdirection'));
+}
+
+function refresh_fudge_route() {
+	remove_existing_objects();
+	set_fudge_route_routepts(radio_val('fudgeroute'));
+	set_fudge_route_stops_bothdirs(radio_val('fudgeroute'));
+}
+
+function set_fudge_route_stops_bothdirs(route_) {
+	set_fudge_route_stops_singledir(route_, 0);
+	set_fudge_route_stops_singledir(route_, 1);
+}
+
+function set_fudge_route_stops_singledir(route_, dir_) {
+	var stops = $.parseJSON(get_sync(sprintf('stops_%s_dir%d.json', route_, dir_)));
+	for(var i in stops) {
+		var stop = stops[i];
+		var stoptag = stop["stoptag"], lat = stop["lat"], lon = stop["lon"];
+		draw_stop(lat, lon, dir_);
+	}
+}
+
+function draw_stop(lat_, lon_, dir_) {
+	var mark=null;
+	if(dir_==0) {
+		mark = new google.maps.Circle({
+			center: new google.maps.LatLng(lat_, lon_),
+			map: g_map,
+			radius: 15, 
+			//fillOpacity: 0.7, 
+			fillColor: 'rgb(0,255,0)', 
+			strokeWeight: 0
+		});
+	} else {
+		var latoff = 0.0001, lonoff = 0.00015;
+		mark = new google.maps.Rectangle({
+			bounds: new google.maps.LatLngBounds(new google.maps.LatLng(lat_-latoff, lon_-lonoff), new google.maps.LatLng(lat_+latoff, lon_+lonoff)),
+			map: g_map,
+			fillColor: 'rgb(0,0,255)', 
+			strokeWeight: 0
+		});
+	}
+	g_objects.push(mark);
+}
+
+function set_fudge_route_routepts(route_) {
+	var route_points = $.parseJSON(get_sync(sprintf('fudge_route_%s.json', route_)));
+	//draw_path_polyline(latlonfloatarrays_to_googlemaps(route_points), 'rgb(255,0,0)');
+	var glatlons = latlonfloatarrays_to_googlemaps(route_points);
+	for(var i=0; i<glatlons.length; i++) {
+		add_buildfudgeroute_marker(glatlons[i]);
+	}
+}
+
+function latlonfloatarrays_to_googlemaps(l_) {
+	var r = new Array();
+	for(var i=0; i<l_.length; i++) {
+		var pt = l_[i];
+		r.push(new google.maps.LatLng(pt[0], pt[1]));
+	}
+	return r;
+}
+
+function path_direction_matches(path_xmlelem_, dir_) {
+	var has_inbounds = false, has_outbounds = false;
+	$(path_xmlelem_).find('tag').each(function() {
+		if($(this).attr('id').indexOf('_0_') != -1) {
+			has_inbounds = true;
+		} else if($(this).attr('id').indexOf('_1_') != -1) {
+			has_outbounds = true;
+		}
+	});
+	if(dir_ == 'inbound') {
+		return has_inbounds;
+	} else if(dir_ == 'outbound') {
+		return has_outbounds;
+	} else {
+		return true;
+	}
+}
+
+function set_config_route(route_, direction_) {
+	var route_doc = $.parseXML(get_sync(sprintf('config_route_%s.xml', route_)));
+	var pathnum = 0;
+	$(route_doc).find('path').each(function() {
+		if(path_direction_matches(this, direction_)) {
+			var path_points = new Array();
+			$(this).find('point').each(function() {
+				var lat = $(this).attr('lat'), lon = $(this).attr('lon');
+				path_points.push(new google.maps.LatLng(lat, lon));
+			});
+			var color = int_to_rgbstr(pathnum);
+			draw_path_polyline(path_points, color);
+			//draw_path_markers(path_points, color);
+			pathnum += 1;
+		}
+	});
+	/*
+	$(route_doc).find('stop').each(function() {
+		var lat = $(this).attr('lat'), lon = $(this).attr('lon');
+		make_path_marker(lat, lon);
+	});
+	*/
+}
+
+function draw_path_markers(path_points_, color_) {
+	for(var i=0; i<path_points_.length; i++) {
+		var point = path_points_[i];
+		draw_path_marker(point.lat(), point.lng(), color_);
+	}
+}
+
+function draw_path_polyline(path_points_, color_) {
+	var line = new google.maps.Polyline({
+		clickable: false, 
+		map: g_map, 
+		path: path_points_, 
+		strokeColor: color_ 
+	});
+	g_objects.push(line);
+	return line;
+}
+
+function radio_val(groupname_) {
+	return $('input[name='+groupname_+']:checked').val();
+}
+
+var g_buildfudgeroute_markers = new Array();
+var g_buildfudgeroute_polyline = null;
+
+function add_buildfudgeroute_marker(glatlon_) {
+	var glatlon = glatlon_;
+	if(glatlon == null) {
+		if(g_buildfudgeroute_markers.length == 0) {
+			glatlon = new google.maps.LatLng(43.65, -79.44);
+		} else {
+			var lastmarkpos = g_buildfudgeroute_markers[g_buildfudgeroute_markers.length-1].getPosition();
+			glatlon = new google.maps.LatLng(lastmarkpos.lat(), lastmarkpos.lng()+0.002);
+		}
+	}
+	var marker = new google.maps.Marker({
+		position: glatlon, 
+		map: g_map,
+		title:''+(g_buildfudgeroute_markers.length),
+		draggable: true 
+		});
+	google.maps.event.addListener(marker, 'drag', function() {
+		redraw_buildfudgeroute_path();
+	});
+	g_buildfudgeroute_markers.push(marker);
+	g_objects.push(marker);
+
+	redraw_buildfudgeroute_path();
+}
+
+function redraw_buildfudgeroute_path() {
+	if(g_buildfudgeroute_polyline != null) {
+		g_buildfudgeroute_polyline.setMap(null);
+		delete g_buildfudgeroute_polyline;
+	}
+	var fudgeroute_points = new Array();
+	for(var i=0; i<g_buildfudgeroute_markers.length; i++) {
+		fudgeroute_points.push(g_buildfudgeroute_markers[i].getPosition());
+	}
+	g_buildfudgeroute_polyline = draw_path_polyline(fudgeroute_points, 'rgb(255,0,0)')
+
+	if(true) {
+		var str_repr = '[<br/>';
+		for(var i=0; i<g_buildfudgeroute_markers.length; i++) {
+			var m = g_buildfudgeroute_markers[i];
+			str_repr += sprintf('[%.6f, %.6f]%s <br/>', m.getPosition().lat(), m.getPosition().lng(), 
+				(i<g_buildfudgeroute_markers.length-1 ? ',' : ''));
+		}
+		str_repr += ']<br/>';
+		set_contents('results', str_repr);
+	}
+
+}
+
+    </script>
+  </head>
+  <body onload="initialize()">
+		<div id="map_canvas" style="width:80%; height:100%"></div>
+    <div style="position:absolute; top:0; right:0; height:100%;">
+			<form name="form2">
+      <table border="1">
+				<tr>
+					<td>
+						Config routes: 
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<input type="radio" name="configroute" value="504" />504<br/>
+						<input type="radio" name="configroute" value="501" />501<br/>
+						<input type="radio" name="configroute" value="301" />301<br/>
+						<input type="radio" name="configroute" value="505" checked="checked" />505<br/>
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<input type="radio" name="configdirection" id="directioninbound" value="inbound" checked="checked"  />Inbound (west)<br/>
+						<input type="radio" name="configdirection" id="directionoutbound" value="outbound"                  />Outbound (east)<br/>
+						<input type="radio" name="configdirection" id="directionboth" value="both"                          />Both<br/>
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<input type="button" onclick="refresh_config_route()" value="Submit" />
+					</td>
+				</tr>
+      </table>
+			</form>
+			<br/>
+			<form name="form3">
+      <table border="1">
+				<tr>
+					<td>
+						Fudge routes: 
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<input type="radio" name="fudgeroute" value="king" />King<br/>
+						<input type="radio" name="fudgeroute" value="queen" />Queen<br/>
+						<input type="radio" name="fudgeroute" value="dundas" checked="checked" />Dundas<br/>
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<input type="button" onclick="refresh_fudge_route()" value="Submit" />
+					</td>
+				</tr>
+      </table>
+			</form>
+			<br/>
+			<form name="form3">
+      <table border="1">
+				<tr>
+					<td>
+						Build fudge route:  <input type="button" onclick="add_buildfudgeroute_marker(null)" value="Add marker" />
+					</td>
+				</tr>
+      </table>
+			</form>
+    </div>
+		<br/>
+		<br/>
+		<div>
+			<p id="results_mofr">Results will go here</p>
+			<p id="results">Results will go here</p>
+		</div>
+  </body>
+</html>

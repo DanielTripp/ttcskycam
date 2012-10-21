@@ -1,0 +1,36 @@
+2012-10-10 dundas eastbound   23:37 and before.   pile-up around dundas & dufferin.  
+	apparent replacement buse w.b. showing up in eastbound vehicles. 
+	witnessed in db. 
+
+2012-09-01 20:00  501/301    some kind of pile-ups around lon > 54lon and lon < 58lon  (witnessed in db) 
+	- may be an interpolation artifact 
+
+2012-07-20   11:04 am   dundas eastbound at lansdowne    4014 - training car    (witnessed in person) 
+
+2012-10-04 00:44:32  dundas eastbound  vid 4069 goes down roncey and across on queen. 
+
+trouble timeframe begins: 2012-09-24 12:55 
+traffic for: 2012-09-24 13:45  dundas around gladstone   big holdup  (witnessed via db) 
+	- trouble seems to start with westbound vid 4104 .  comes to an abrupt halt at gladstone at 13:00. 
+	- 4050 slows to a stop behind him at 13:08.    then 4173 at 13:40. 
+	- then first wb v diverts north via ossington at 13:25.   many follow. 
+	- apparent replacement vid 7693 leaves college & church at 13:12, passes dufferin at 13:44. 
+	- no eastbound vehicles detour.   they are able to drive through the trouble spot.  
+		but eastbound traffic is affected, because I think those westbound vehicles were due to become 
+		eastbound but they got stuck.  
+	- trouble clears around 14:09. 
+
+then more trouble (no traffic) westbound report 2012-09-24 14:41 ?
+
+
+buggy gps:
+
+2012-06-15 13:02  - dundas eastbound - vehicles sporadically in odd places.
+	baldwin village: vehicle_id = '4094' and time < '2012-06-15 13:02'  and time > '2012-06-15 12:32'
+	mississauga: vehicle_id = '4116' and time < '2012-06-15 13:02'  and time > '2012-06-15 12:32'
+			^ interpolation shows up in swansea
+
+
+vehicle_id = '4047' and time >  '2012-09-18 21:34' and time < '2012-09-18 22:04'
+
+

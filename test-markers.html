@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+  <head>
+		<title>test</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <style type="text/css">
+      html { height: 100% }
+      body { height: 70%; margin: 0; padding: 0 }
+    </style>
+    <script type="text/javascript"
+		      src="http://maps.googleapis.com/maps/api/js?sensor=false">
+					    </script>
+		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
+		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
+		<script type="text/javascript" src="common.js"></script>
+    <script type="text/javascript">
+
+var NUM_VEHICLES = 30;
+var NUM_MINUTES = 30;
+var g_markers = new Array();
+var g_positions = new Array();
+var g_minute = 0;
+
+function animate_timer_func() {
+	g_minute = (g_minute + 1) % g_markers.length;
+	for(var vid=0; vid<g_markers.length; vid++) {
+		g_markers[vid].setPosition(g_positions[g_minute][vid]);
+	}
+	setTimeout('animate_timer_func()', 25);
+}
+
+function initialize() {
+
+	init_map();
+
+	for(var vid=0; vid<NUM_VEHICLES; vid++) {
+		var marker = new google.maps.Marker({
+				position: new google.maps.LatLng(43.655, -79.44),
+				map: g_map,
+				draggable: false,
+				icon: new google.maps.MarkerImage(cgi_url('get_vehicle_svg.cgi', [24, 80, 'rgb(0,255,255)']), 
+						null, null, new google.maps.Point(12, 12), new google.maps.Size(10,10)),
+				title: 'test title' 
+			});
+		marker.setVisible(true);
+		g_markers.push(marker);
+	}
+	for(var minute=0; minute<NUM_MINUTES; minute++) {
+		var timeslice = new Array();
+		g_positions.push(timeslice);
+		for(var vid=0; vid<NUM_VEHICLES; vid++) {
+			timeslice.push(new google.maps.LatLng(43.655+vid*0.002, -79.44+minute*0.002));
+		}
+	}
+
+	setTimeout('animate_timer_func()', 100);
+
+		/*
+		var marker = new RichMarker({
+			position: new google.maps.LatLng(43.655, -79.44),
+			map: g_map,
+			draggable: false,
+			flat: true,
+			anchor: RichMarkerPosition.BOTTOM_LEFT,
+			content: sprintf('<svg width="35" height="20" version="1.1">' +
+				'<text x="0" y="15" fill="rgb(0,0,255)">testing 1 2 </text>' +
+				'</svg>')
+			});
+		*/
+
+}
+
+    </script>
+  </head>
+  <body onload="initialize()" >
+		<div id="map_canvas" style="width:80%; height:100%"></div>
+		<p id="p1"/>
+  </body>
+</html>

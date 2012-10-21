@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+  <head>
+		<title>test</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <style type="text/css">
+      html { height: 100% }
+      body { height: 70%; margin: 0; padding: 0 }
+    </style>
+    <script type="text/javascript"
+		      src="http://maps.googleapis.com/maps/api/js?sensor=false">
+					    </script>
+		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
+		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
+		<script type="text/javascript" src="js/buckets-minified.js"></script>
+		<script type="text/javascript" src="common.js"></script>
+    <script type="text/javascript">
+
+function initialize() {
+
+	init_map();
+
+	var pairs = $.parseJSON(get_sync('pts'));
+	for(var i in pairs) {
+		var pair = pairs[i];
+		//new google.maps.Marker({map: g_map, position: new google.maps.LatLng(pt[0], pt[1])});
+		new google.maps.Polyline({map: g_map, path: [google_LatLng(pair[0]), google_LatLng(pair[1])]});
+	}
+
+
+}
+
+
+
+    </script>
+  </head>
+  <body onload="initialize()" >
+		<div id="map_canvas" style="width:80%; height:100%"></div>
+		<p id="p1">
+			<!--
+			<svg width="20" height="20" version="1.1">
+			<polygon points="0,0 19,0 19,19, 0,19" fill="rgb(255,200,0)" fill-opacity="1" stroke-width="0.5" />
+			</svg>
+			<svg width="20" height="20" version="1.1">
+			<polygon points="0,0 19,0 19,19, 0,19" fill="rgb(50,175,0)" fill-opacity="1" stroke-width="0.5" />
+			</svg>
+			-->
+		</p>
+  </body>
+</html>

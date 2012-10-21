@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html>
+  <head>
+		<title>debug-vehicle</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <style type="text/css">
+      html { height: 100% }
+      body { height: 70%; margin: 0; padding: 0 }
+    </style>
+		<link type="text/css" href="css/ui-lightness/jquery-ui-1.8.17.custom.css" rel="stylesheet" />
+    <script type="text/javascript"
+      src="http://maps.googleapis.com/maps/api/js?sensor=false">
+    </script>
+		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
+		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
+		<script type="text/javascript" src="js/jquery-ui-1.8.17.custom.min.js"></script>
+		<script type="text/javascript" src="common.js"></script>
+    <script type="text/javascript">
+
+var g_map, g_orig_marker, g_dest_marker;
+var g_vmarkers = new Array(), g_times = new Array(), g_curtimeidx = -1;
+var g_playtimer = null;
+var g_grid_objects = new Array();
+var g_grid_lons = eval(get_sync('debug-vehicle-lon-grid.json'));
+var g_grid_lats = eval(get_sync('debug-vehicle-lat-grid.json'));
+
+eval(get_sync("sprintf.js"));
+
+function add_info_win(mark_, text_) {
+	(new google.maps.InfoWindow({content: text_, disableAutoPan: false})).open(g_map, mark_);
+}
+
+function start_vehicle_markers_animation() {
+	setInterval("vehicle_markers_animate_single()", 250);
+}
+
+function vehicle_markers_animate_single() {
+	var last_timeslice = null;
+	if(g_curtimeidx == 0) {
+		if(g_vmarkers.length > 0) {
+			last_timeslice = g_vmarkers[g_vmarkers.length-1];
+		}
+	} else if(g_curtimeidx - 1 < g_vmarkers.length) {
+		last_timeslice = g_vmarkers[g_curtimeidx - 1];
+	}
+	(g_curtimeidx == 0 
+			? g_vmarkers[g_curtimeidx] 
+			: null);
+	if(g_curtimeidx >= g_vmarkers.length) {
+		g_curtimeidx = 0;
+	}
+	if(last_timeslice != null) {
+		for(var i=0; i<last_timeslice.length; i++) {
+			last_timeslice[i].setMap(null);
+		}
+	}
+	if(g_vmarkers.length > 0) {
+		var timeslice = g_vmarkers[g_curtimeidx];
+		for(var i=0; i<timeslice.length; i++) {
+			timeslice[i].setMap(g_map);
+		}
+	}
+	g_curtimeidx++;
+}
+
+function recreate_slider() {
+	$('#slider').slider({
+		value: 0, 
+		min: 0, max: g_times.length-1, 
+		slide: function(event, ui) {
+			on_slider_slide(ui.value);
+		}
+		});
+	$("#slider").css("background","gray");
+	if(g_times.length > 0) {
+		on_slider_slide(0);
+	}
+}
+
+function initialize() {
+	init_map();
+	recreate_slider();
+	google.maps.event.addListener(g_map, 'bounds_changed', function() {
+			erase_grid();
+			draw_grid();
+		});
+	$('#sqlstr_field').keydown(function (e){
+			if(e.keyCode == 13) {
+				$('#submit0_button').trigger('click');
+			}
+		});
+}
+
+function draw_grid() {
+	draw_grid_lons();
+	draw_grid_lats();
+}
+
+function draw_grid_lats() {
+	for(var i=0; i<g_grid_lats.length; i++) {
+		var lat = g_grid_lats[i];
+		if(!(lat > g_map.getBounds().getSouthWest().lat() && lat < g_map.getBounds().getNorthEast().lat())) {
+			continue;
+		}
+		var pts = new Array();
+		pts.push(new google.maps.LatLng(lat, g_map.getBounds().getSouthWest().lng()));
+		pts.push(new google.maps.LatLng(lat, g_map.getBounds().getNorthEast().lng()));
+		var line = new google.maps.Polyline({map: g_map, path: pts, strokeColor: 'rgb(0,0,255)', strokeWeight: "0.5"});
+		g_grid_objects.push(line);
+		var marker = new RichMarker({
+			position: new google.maps.LatLng(lat, g_map.getBounds().getSouthWest().lng()), 
+			map: g_map,
+			draggable: false,
+			flat: true, 
+			anchor: RichMarkerPosition.BOTTOM_LEFT, 
+			content: sprintf('<svg width="35" height="20" version="1.1">' +
+					'<text x="0" y="15" fill="rgb(0,0,255)">       %d</text>' +
+					'</svg>', 
+					i)
+			});
+		g_grid_objects.push(marker);
+	}
+}
+
+function draw_grid_lons() {
+	for(var i=0; i<g_grid_lons.length; i++) {
+		var lon = g_grid_lons[i];
+		if(!(lon > g_map.getBounds().getSouthWest().lng() && lon < g_map.getBounds().getNorthEast().lng())) {
+			continue;
+		}
+		var pts = new Array();
+		pts.push(new google.maps.LatLng(g_map.getBounds().getSouthWest().lat(), lon));
+		pts.push(new google.maps.LatLng(g_map.getBounds().getNorthEast().lat(), lon));
+		var line = new google.maps.Polyline({map: g_map, path: pts, strokeColor: 'rgb(0,0,255)', strokeWeight: "0.5"});
+		g_grid_objects.push(line);
+		var marker = new RichMarker({
+			position: new google.maps.LatLng(g_map.getBounds().getSouthWest().lat(), lon), 
+			map: g_map,
+			draggable: false,
+			flat: true, 
+			content: sprintf('<svg width="35" height="20" version="1.1">' +
+					'<text x="0" y="15" fill="rgb(0,0,255)">%d</text>' +
+					'</svg>', 
+					i)
+			});
+		g_grid_objects.push(marker);
+	}
+}
+
+function erase_grid() {
+	while(g_grid_objects.length > 0) {
+		g_grid_objects.pop().setMap(null);
+	}
+}
+
+function set_route(route_) {
+	alert("route was set: "+route_);
+}
+
+function vi_to_str_short(vi_) {
+	return sprintf('%s vid: %s, %s/%s (%2.5f, %2.5f) heading: %3d%s', 
+			vi_.timestr, vi_.vehicle_id, vi_.route_tag, vi_.dir_tag, vi_.lat, vi_.lon, vi_.heading, 
+				(vi_.predictable ? '' : ' UNPREDICTABLE'));
+}
+
+function vi_to_str_long(vi_) {
+	var dir_tag;
+	if(vi_.dir_tag == null) {
+		dir_tag = '(null)';
+	} else if(vi_.dir_tag.length == 0) {
+		dir_tag = '(blank)';
+	} else {
+		dir_tag = "'"+vi_.dir_tag+"'";
+	}
+	return sprintf('%s  route: %4s, vehicle: %s, dir: %-12s, (  %2.5f, %2.5f  ) , mofr: %d, heading: %3d %s', 
+			vi_.timestr, vi_.route_tag, vi_.vehicle_id, dir_tag, vi_.lat, vi_.lon, vi_.mofr, vi_.heading, 
+				(vi_.predictable ? '' : 'UNPREDICTABLE'));
+}
+
+function display_vis(vis_json_str_) {
+	var vis_by_time = eval(vis_json_str_);
+	display_vis_html(vis_by_time);
+	make_vehicle_markers(vis_by_time);
+}
+
+function make_vehicle_markers(vis_by_time_) {
+	delete_vehicle_markers();
+	for(var i=0; i<vis_by_time_.length; i++) {
+		var vis = vis_by_time_[i];
+		g_times.push(vis[0]);
+		var timeslice = new Array();
+		g_vmarkers.push(timeslice);
+		for(var j=1; j<vis.length; j++) {
+			var vi = vis[j];
+			var add_infowin = is_selected('infowindows_checkbox') && (vis.length < 5) && !is_selected('collapseanimation_checkbox');
+			var marker = make_vi_marker(vi, add_infowin);
+			timeslice.push(marker);
+		}
+	}
+}
+
+function delete_vehicle_markers() {
+	for(var i=0; i<g_vmarkers.length; ++i) {
+		var timeslice = g_vmarkers[i];
+		for(var j=0; j<timeslice.length; ++j) {
+			timeslice[j].setMap(null);
+			delete(timeslice[j]);
+		}
+		delete(timeslice);
+	}
+	delete(g_vmarkers);
+	g_vmarkers = new Array();
+
+	delete(g_times);
+	g_times = new Array();
+}
+
+function make_vi_marker(vi_, add_infowin_) {
+	var txt = get_vi_marker_text(vi_);
+	var marker = new google.maps.Marker({
+				position: new google.maps.LatLng(vi_.lat, vi_.lon),
+				//map: g_map,
+				draggable: false, 
+				icon: new google.maps.MarkerImage(vi_.iconfile, null, null, new google.maps.Point(12, 12)), 
+				title: txt 
+		});
+	if(add_infowin_) {
+		add_info_win(marker, txt);
+		marker.setMap(g_map); // This is a work-around for something, I forget what. 
+		marker.setMap(null); // I think it was all the infowindows (for markers not pertaining to the 
+			// currently-visible timeslice too) showing up at once.  Many without their corresponding markers, of course.  
+			// I believe this only happened on the second and subsequent query submitted after page load. 
+	}
+	google.maps.event.addListener(marker, 'click', function() {
+		(new google.maps.InfoWindow({content: txt, disableAutoPan: false})).open(g_map, marker);
+	});
+	return marker;
+
+	/*
+	var marker2 = new google.maps.Marker({
+				position: new google.maps.LatLng(vi_.lat, vi_.lon),
+				map: g_map,
+				draggable: false
+		});
+	g_vmarkers.push(marker2);
+	*/
+}
+
+function get_vi_marker_text(vi_) {
+	return vi_to_str_long(vi_);
+}
+
+function set_contents(id_, contents_) {
+	document.getElementById(id_).innerHTML = contents_;
+}
+
+function display_vis_html(vis_by_time_) {
+	r = "<pre>";
+	for(var i=0; i<vis_by_time_.length; i++) {
+		var vis = vis_by_time_[i];
+		for(var j=1; j<vis.length; j++) {
+			vi = vis[j];
+			r += vi_to_str_long(vi)+"\n";
+		}
+	}
+	r += "</pre>";
+	set_contents("results", r);
+}
+
+function clear_cur_displayed_vmarkers() {
+	if(g_curtimeidx >= -1 && g_curtimeidx < g_vmarkers.length) {
+		var adjustedidx = (g_curtimeidx == -1 ? g_times.length-1 : g_curtimeidx);
+		var timeslice = g_vmarkers[adjustedidx];
+		for(var i=0; i<timeslice.length; i++) {
+			var marker = timeslice[i];
+			marker.setMap(null);
+		}
+	}
+}
+
+function on_slider_slide(newval_) {
+	clear_cur_displayed_vmarkers();
+	g_curtimeidx = newval_;
+	var adjustedidx = (g_curtimeidx == -1 ? g_times.length-1 : g_curtimeidx);
+	if(adjustedidx >= g_vmarkers.length) {
+		return;
+	}
+	var newtimeslice = g_vmarkers[adjustedidx];
+	for(var i=0; i<newtimeslice.length; i++) {
+		newtimeslice[i].setMap(g_map);
+	}
+	set_contents("sliderpos", sprintf("timestep %d / %d - %s", adjustedidx, g_times.length-1, g_times[adjustedidx]));
+}
+
+function slider_float_to_timeidx(floatval_) {
+	if(g_vmarkers.length == 0) {
+		return -1;
+	} else {
+		return Math.round(floatval_*(g_vmarkers.length-1));
+	}
+}
+
+function encode_sql_str_1(str_) {
+	var r = '';
+	for(var i=0; i<str_.length; i++) {
+		r += chr(ord(str_.charAt(i)) + 2);
+	}
+	return r;
+}
+
+function encode_sql_str(str_) {
+	var r = '';
+	for(var i=0; i<str_.length; i++) {
+		var ordval = ord(str_.charAt(i));
+		var group = Math.floor(ordval / 10);
+		var sub = ordval - (group*10);
+		var groupchar = chr(ord('a') + group);
+		r += groupchar + sub;
+	}
+	return r;
+}
+
+function run_query1(whereclause_, maxrows_, interpbytime_) {
+	inc_loading_get_count();
+	try {
+		display_vis(get_sync("debug-vehicle-query1.cgi?whereclause="+encode_sql_str(whereclause_)+"&maxrows="+maxrows_+"&interpbytime="+interpbytime_));
+		if($('#collapseanimation_checkbox').is(":checked")) {
+			collapse_animation();
+		}
+		recreate_slider();
+	} finally {
+		dec_loading_get_count();
+	}
+}
+
+function collapse_animation() {
+	g_times = new Array();
+	g_times.push("...");
+
+	var super_timeslice = new Array();
+	for(var i=0; i<g_vmarkers.length; ++i) {
+		super_timeslice = super_timeslice.concat(g_vmarkers[i]);
+	}
+	delete(g_vmarkers);
+	g_vmarkers = new Array();
+	g_vmarkers.push(super_timeslice);
+}
+
+function play_timer_func() {
+	var newtimeidx = g_curtimeidx + 1;
+	if(newtimeidx >= g_times.length) {
+		newtimeidx = -1;
+		on_slider_slide(newtimeidx);
+		g_playtimer = setTimeout("play_timer_func()", 300);
+	} else {
+		on_slider_slide(newtimeidx);
+		$('#slider').slider("value", newtimeidx);
+		g_playtimer = setTimeout("play_timer_func()", 50);
+	}
+}
+
+function on_single_frame_forward_clicked() {
+	var newtimeidx = g_curtimeidx + 1;
+	if(newtimeidx < g_times.length) {
+		on_slider_slide(newtimeidx);
+		$('#slider').slider("value", newtimeidx);
+	}
+}
+
+function on_single_frame_back_clicked() {
+	var newtimeidx = g_curtimeidx - 1;
+	if(newtimeidx >= 0) {
+		on_slider_slide(newtimeidx);
+		$('#slider').slider("value", newtimeidx);
+	}
+}
+
+function on_play_checkbox_clicked(play_) {
+	if(play_ && g_playtimer==null) {
+		g_playtimer = setTimeout("play_timer_func()", 0);
+	} else if(!play_ && g_playtimer!=null) {
+		clearTimeout(g_playtimer);
+		g_playtimer = null;
+	}
+}
+
+    </script>
+  </head>
+  <body onload="initialize()">
+		<div id="map_canvas" style="width:80%; height:100%"></div>
+		<div>
+			<form name="form1">
+				<input type="text" size="130" name="sqlstr_field" id="sqlstr_field" />
+				Max rows: <input type="text" size="5" name="maxrows_field" value="1000" /> &nbsp;
+				Interp:<input type="checkbox" name="interpbytime_checkbox" />
+				Collapse:<input type="checkbox" id="collapseanimation_checkbox" />
+				InfoWindows:<input type="checkbox" id="infowindows_checkbox" />
+				<input type="button" onclick="run_query1(this.form.sqlstr_field.value, this.form.maxrows_field.value, this.form.interpbytime_checkbox.checked)" value="Submit" id="submit0_button" />
+			</form>
+			<br/>
+			<br/>
+			Play: <input type="checkbox" name="play_checkbox" onclick="on_play_checkbox_clicked(this.checked)"/>
+			&nbsp;&nbsp;&nbsp;<input type="button" onclick="on_single_frame_back_clicked()" value="<" />
+			<input type="button" onclick="on_single_frame_forward_clicked()" value=">" />
+			<img id="loading_img" src="loading.gif" style="visibility:hidden"/>
+		</div>
+		<!--
+		<div style="position:absolute; top:0; right:0; height:100%;">
+			<table border="1">
+			<tr>
+				<td>
+					<input type="radio" name="route" value="504" onclick="set_route('504')"/>504<br/>
+					<input type="radio" name="route" value="501" onclick="set_route('501')"/>501<br/>
+					<input type="radio" name="route" value="301" onclick="set_route('301')"/>301<br/>
+					<input type="radio" name="route" value="505" onclick="set_route('505')"/>505<br/>
+				</td>
+			</tr>
+			<tr>
+				<td>
+					<p id="vartarget">Results:</p>
+				</td>
+			</tr>
+			</table> 
+		</div>
+		-->
+		<br/>
+		<div id="slider" style="margin-left:1%; width:80%; background-color:red"/>
+		<br/>
+		<div>
+			<p id="sliderpos">...</p>
+			<p id="results">Results will go here</p>
+		</div>
+  </body>
+</html>
