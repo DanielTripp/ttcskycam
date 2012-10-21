@@ -1,18 +1,27 @@
 #!/usr/bin/python2.6
 
-import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json
+import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket 
 from collections import defaultdict
 import vinfo, geom, traffic, routes, yards
 from misc import *
 
+ON_PRODUCTION_BOX = socket.gethostname().endswith('theorem.ca')
+
 DATABASE_DRIVER_MODULE_NAME = 'psycopg2'
-DATABASE_CONNECT_POSITIONAL_ARGS = ("dbname='postgres' user='postgres' host='24.52.231.206' password='doingthis'",)
+db_host = ('24.52.231.206' if ON_PRODUCTION_BOX else 'localhost')
+DATABASE_CONNECT_POSITIONAL_ARGS = ("dbname='postgres' user='postgres' host='%s' password='doingthis'" % (db_host),)
 DATABASE_CONNECT_KEYWORD_ARGS = {}
 
 VI_COLS = ' dir_tag, heading, vehicle_id, lat, lon, predictable, route_tag, secs_since_report, time_epoch, time '
 
 def get_db_conn():
-	driver_module = __import__(DATABASE_DRIVER_MODULE_NAME)
+	if ON_PRODUCTION_BOX:
+		driver_module = __import__(DATABASE_DRIVER_MODULE_NAME)
+	else:
+		saved_syspath = sys.path
+		sys.path.remove(os.getcwd())
+		driver_module = __import__(DATABASE_DRIVER_MODULE_NAME)
+		sys.path = saved_syspath
 	return getattr(driver_module, 'connect')(*DATABASE_CONNECT_POSITIONAL_ARGS, **DATABASE_CONNECT_KEYWORD_ARGS)
 
 g_conn = get_db_conn()
