@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+
+rsync -avz . dt@theorem.ca:~/web/ttc-traffic-reports/dev2039462378923789
+
