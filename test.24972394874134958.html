@@ -19,13 +19,33 @@
 function initialize() {
 
 	init_map();
+	
+	var origin = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.64603733174995, -79.43261904915471), draggable: true});
+	var arm1 = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.657960997309054, -79.41262049873967), draggable: true});
+	var arm2 = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.64007461123713, -79.41416545113225), draggable: true});
 
-	var pairs = $.parseJSON(get_sync('pts'));
-	for(var i in pairs) {
-		var pair = pairs[i];
-		//new google.maps.Marker({map: g_map, position: new google.maps.LatLng(pt[0], pt[1])});
-		new google.maps.Polyline({map: g_map, path: [google_LatLng(pair[0]), google_LatLng(pair[1])]});
+	var on_moved = function() {
+		var angle1 = callpy_sync('geom.angle1', arm1.getPosition().lat(), arm1.getPosition().lng(), 
+				origin.getPosition().lat(), origin.getPosition().lng(), 
+				arm2.getPosition().lat(), arm2.getPosition().lng());
+		set_contents('p1', angle1);
+
+		var angle2 = callpy_sync('geom.angle2', arm1.getPosition().lat(), arm1.getPosition().lng(), 
+				origin.getPosition().lat(), origin.getPosition().lng(), 
+				arm2.getPosition().lat(), arm2.getPosition().lng());
+		set_contents('p2', angle2);
+
+
+	};
+
+	on_moved();
+
+	var markers = [origin, arm1, arm2];
+	for(var i in markers) {
+		var marker = markers[i];
+		google.maps.event.addListener(marker, 'dragend', on_moved);
 	}
+
 
 
 }
@@ -37,6 +57,7 @@ function initialize() {
   <body onload="initialize()" >
 		<div id="map_canvas" style="width:80%; height:100%"></div>
 		<p id="p1">
+		<p id="p2">
 			<!--
 			<svg width="20" height="20" version="1.1">
 			<polygon points="0,0 19,0 19,19, 0,19" fill="rgb(255,200,0)" fill-opacity="1" stroke-width="0.5" />
