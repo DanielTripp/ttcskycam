@@ -238,6 +238,36 @@ def angle(arm1_, origin_, arm2_):
 		r = r + 2*math.pi
 	return r
 
+def angle1(arm1lat_, arm1lon_, originlat_, originlon_, arm2lat_, arm2lon_):
+	return math.degrees(angle(*(XY.from_latlon(x) for x in ((arm1lat_, arm1lon_), (originlat_, originlon_), (arm2lat_, arm2lon_)))))
+
+def angle2(arm1lat_, arm1lon_, originlat_, originlon_, arm2lat_, arm2lon_):
+	#printerr(math.degrees(angle2_half(originlat_, originlon_, arm1lat_, arm1lon_)), \
+	#		math.degrees(angle2_half(originlat_, originlon_, arm2lat_, arm2lon_)))
+	abs_ang1 = angle2_half(originlat_, originlon_, arm1lat_, arm1lon_)
+	abs_ang2 = angle2_half(originlat_, originlon_, arm2lat_, arm2lon_)
+	r = abs(abs_ang2 - abs_ang1)
+	if r > math.pi:
+		r = abs(r - 2*math.pi)
+	elif r < -math.pi:
+		r = r + 2*math.pi
+	return r
+
+def angle2_half(originlat_, originlon_, armlat_, armlon_):
+	opposite = dist_latlon(LatLon(originlat_, armlon_), LatLon(armlat_, armlon_))
+	adjacent = dist_latlon(LatLon(originlat_, armlon_), LatLon(originlat_, originlon_))
+	r = math.atan2(opposite, adjacent)
+	latdiff = armlat_ - originlat_; londiff = armlon_ - originlon_
+	if londiff > 0 and latdiff > 0: # first quadrant 
+		pass
+	elif londiff <= 0 and latdiff > 0: # second quadrant 
+		r = math.pi - r
+	elif londiff <= 0 and latdiff <= 0: # third quadrant 
+		r = -math.pi + r
+	else: # fourth quadrant 
+		r = -r
+	return r
+
 def passes(standpt_, forept_, post_, tolerance_=0):
 	assert all(isinstance(x, XY) for x in (standpt_, forept_, post_))
 
