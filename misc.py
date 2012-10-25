@@ -1,7 +1,7 @@
 #!/usr/bin/python2.6
 
-import sys, os, subprocess, re, time, xml.dom, xml.dom.minidom
-from collections import defaultdict, MutableSequence
+import sys, os, time
+from collections import MutableSequence
 
 def em_to_str(t_):
 	return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t_/1000))

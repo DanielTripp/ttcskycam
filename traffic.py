@@ -1,8 +1,6 @@
 #!/usr/bin/python2.6
 
-import sys, subprocess, re, time, xml.dom, xml.dom.minidom, threading, bisect, datetime, calendar, math, json
 from collections import defaultdict
-from itertools import ifilter
 import vinfo, db, routes, geom, mc, yards, c
 from misc import *
 
@@ -109,7 +107,7 @@ def get_traffics__mofr2speed(mofr_to_avgspeedandweight_):
 def get_traffics_visuals(mofr_to_avgspeedandweight_, fudgeroute_name_):
 	r = []
 	routept1_mofr = 0
-	for routept1, routept2 in hopscotch(routes.get_routeinfo(fudgeroute_name_).get_xys()):
+	for routept1, routept2 in hopscotch(routes.get_routeinfo(fudgeroute_name_).routepts):
 		route_seg_len = routept1.dist_m(routept2)
 		routept2_mofr = routept1_mofr + route_seg_len
 		routept1_mofr_ref = round(routept1_mofr, MOFR_STEP); routept2_mofr_ref = round(routept2_mofr, MOFR_STEP)
@@ -117,9 +115,9 @@ def get_traffics_visuals(mofr_to_avgspeedandweight_, fudgeroute_name_):
 			if mofr_ref not in mofr_to_avgspeedandweight_: continue
 			seg_start_mofr = max(mofr_ref - MOFR_STEP/2, routept1_mofr)
 			seg_end_mofr = min(mofr_ref + MOFR_STEP/2, routept2_mofr)
-			seg_start_xy = geom.add(routept1, geom.scale((seg_start_mofr-routept1_mofr)/float(route_seg_len), geom.diff(routept2, routept1)))
-			seg_end_xy   = geom.add(routept1, geom.scale((seg_end_mofr-routept1_mofr)  /float(route_seg_len), geom.diff(routept2, routept1)))
-			r.append({'start_latlon': seg_start_xy.latlon(), 'end_latlon': seg_end_xy.latlon(), 'mofr': mofr_ref})
+			seg_start_latlng = routept1.add(routept2.subtract(routept1).scale((seg_start_mofr-routept1_mofr)/float(route_seg_len)))
+			seg_end_latlng   = routept1.add(routept2.subtract(routept1).scale((seg_end_mofr  -routept1_mofr)/float(route_seg_len)))
+			r.append({'start_latlon': seg_start_latlng, 'end_latlon': seg_end_latlng, 'mofr': mofr_ref})
 		routept1_mofr += route_seg_len
 	return r
 
@@ -251,8 +249,8 @@ def round_up(x_, step_):
 	return r if r == x_ else r+step_
 
 def round_down(x_, step_):
-	assert type(x_) in (int, long) and type(step_) in (int, long)
-	return (x_/step_)*step_
+	assert type(x_) in (int, long, float) and type(step_) in (int, long)
+	return (long(x_)/step_)*step_
 
 def round(x_, step_):
 	rd = round_down(x_, step_)

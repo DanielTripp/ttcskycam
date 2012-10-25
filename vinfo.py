@@ -1,7 +1,5 @@
 #!/usr/bin/python2.6
 
-import sys, subprocess, re, time, xml.dom, xml.dom.minidom, threading, bisect, datetime, calendar, math
-from collections import defaultdict
 import db, geom, routes
 from misc import *
 
@@ -28,7 +26,7 @@ class VehicleInfo:
 		self.dir_tag = dir_tag_
 		self.heading = heading_
 		self.vehicle_id = vehicle_id_
-		self.xy = geom.XY.from_latlon((lat_, lon_))
+		self.latlng = geom.LatLng(lat_, lon_)
 		self.predictable = predictable_
 		self.route_tag = route_tag_
 		self.secs_since_report = secs_since_report_
@@ -41,14 +39,14 @@ class VehicleInfo:
 
 	def get_pass_time_interp(self, forevi_, post_):
 		assert self.time < forevi_.time
-		assert geom.passes(self.xy, forevi_.xy, post_)
-		ratio = geom.get_pass_ratio(self.xy, forevi_.xy, post_)
+		assert geom.passes(self.latlng, forevi_.latlng, post_)
+		ratio = geom.get_pass_ratio(self.latlng, forevi_.latlng, post_)
 		r = long(self.time + ratio*(forevi_.time - self.time))
 		return r
 
 	def __str__(self):
 		return 'route: %s, vehicle: %s, dir: %-12s, (  %f, %f  )  , mofr: %5d, heading: %3d, time: %s %s' \
-			% (self.route_tag, self.vehicle_id, self.dir_tag, self.xy.latlon()[0], self.xy.latlon()[1], self.mofr, self.heading, \
+			% (self.route_tag, self.vehicle_id, self.dir_tag, self.latlng.lat, self.latlng.lng, self.mofr, self.heading, \
 				em_to_str(self.time), ('' if self.predictable else 'UNPREDICTABLE'))
 
 	def __repr__(self):
@@ -59,8 +57,8 @@ class VehicleInfo:
 				'dir_tag': self.dir_tag, 
 				'heading': self.heading, 
 				'vehicle_id': self.vehicle_id, 
-				'lat': self.xy.latlon()[0], 
-				'lon': self.xy.latlon()[1], 
+				'lat': self.latlng.lat,
+				'lon': self.latlng.lng,
 				'predictable': self.predictable, 
 				'route_tag': self.route_tag, 
 				'time': self.time, 
@@ -75,7 +73,7 @@ class VehicleInfo:
 	@property
 	def mofr(self):
 		if self._mofr == None:
-			self._mofr = routes.latlon_to_mofr(self.xy.latlon(), self.route_tag)
+			self._mofr = routes.latlon_to_mofr(self.latlng, self.route_tag)
 		return self._mofr
 
 	# Returns None if we don't seem to have one.  
@@ -98,16 +96,11 @@ class VehicleInfo:
 
 	@property 
 	def lat(self):
-		return self.xy.latlon()[0]
+		return self.latlng.lat
 
 	@property 
-	def lon(self):
-		return self.xy.latlon()[1]
-
-	@property 
-	def latlon(self):
-		return self.xy.latlon()
-
+	def lng(self):
+		return self.latlng.lng
 
 if __name__ == '__main__':
 	pass
