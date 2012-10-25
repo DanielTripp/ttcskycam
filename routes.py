@@ -1,8 +1,6 @@
 #!/usr/bin/python2.6
 
-import sys, subprocess, re, time, xml.dom, xml.dom.minidom, threading, bisect, datetime, calendar, math, threading, json, os.path 
-from math import *
-from collections import defaultdict
+import sys, json, os.path
 import vinfo, db, geom, mc, c
 from misc import *
 
@@ -18,6 +16,7 @@ CONFIGROUTES = reduce(lambda x, y: x + y, FUDGEROUTE_TO_CONFIGROUTES.values(), [
 
 class Stop:
 	def __init__(self, latlon_, stoptag_, mofr_):
+		assert isinstance(latlon_, geom.LatLng) and isinstance(stoptag_, basestring) and isinstance(mofr_, int)
 		self.latlon = latlon_
 		self.stoptag = stoptag_
 		self.mofr = mofr_
@@ -32,7 +31,9 @@ class RouteInfo:
 
 	def init_routepts(self, routename_):
 		with open('fudge_route_%s.json' % (routename_)) as fin:
-			self.routepts = json.load(fin)
+			self.routepts = []
+			for raw_routept in json.load(fin):
+				self.routepts.append(geom.LatLng(raw_routept[0], raw_routept[1]))
 
 	def init_stops_bothdirs(self, routename_):
 		self.stops = {}
@@ -45,51 +46,45 @@ class RouteInfo:
 		if not os.path.exists('stops_%s_dir%d.json' % (routename_, dir_)):
 			return
 		with open('stops_%s_dir%d.json' % (routename_, dir_)) as fin:
-			stopdictlist = json.load(fin)
-		for stopdict in stopdictlist:
-			assert set(stopdict.keys()) == set(['lat', 'lon', 'stoptag'])
-			lat = stopdict['lat']; lon = stopdict['lon']; stoptag = stopdict['stoptag']
-			self.stops[dir_].append(Stop((lat, lon), stoptag, self.latlon_to_mofr((lat, lon))))
+			for stopdict in json.load(fin):
+				assert set(stopdict.keys()) == set(['lat', 'lon', 'stoptag'])
+				latlng = geom.LatLng(stopdict['lat'], stopdict['lon']); stoptag = stopdict['stoptag']
+				self.stops[dir_].append(Stop(latlng, stoptag, self.latlon_to_mofr(latlng)))
 
-	def latlon_to_mofr(self, latlon_, tolerance_=0):
-		assert tolerance_ in (0, 1, 2)
-		post_xy = geom.XY.from_latlon(latlon_)
-		route_xys = self.get_xys()
+	def latlon_to_mofr(self, post_, tolerance_=0):
+		assert isinstance(post_, geom.LatLng) and (tolerance_ in (0, 1, 2))
 		r = 0.0
 		success = False
-		for route_pt1, route_pt2 in hopscotch(route_xys):
-			if geom.passes(route_pt1, route_pt2, post_xy, tolerance_):
-				pass_pt = geom.get_pass_point(route_pt1, route_pt2, post_xy)
-				r += geom.dist_latlon(geom.LatLon(route_pt1), geom.LatLon(pass_pt))
+		for routept1, routept2 in hopscotch(self.routepts):
+			if geom.passes(routept1, routept2, post_, tolerance_):
+				pass_pt = geom.get_pass_point(routept1, routept2, post_)
+				r += routept1.dist_m(pass_pt)
 				success = True
 				break
 			else:
-				r += geom.dist_latlon(geom.LatLon(route_pt1), geom.LatLon(route_pt2))
+				r += routept1.dist_m(routept2)
 		if success:
 			return int(r)
 		else: # cover cases eg. off the outside of a right angle in the route: 
 			best_bet_dist_from_route_pt = sys.maxint; best_bet_mofr = -1
 			running_mofr = 0.0
-			for i, route_pt in enumerate(route_xys):
+			for i, route_pt in enumerate(self.routepts):
 				if i > 0:
-					running_mofr += geom.dist_latlon(geom.LatLon(route_xys[i]), geom.LatLon(route_xys[i-1]))
-				cur_dist_from_route_pt = geom.dist_latlon(geom.LatLon(route_pt), geom.LatLon(*latlon_))
+					running_mofr += self.routepts[i].dist_m(self.routepts[i-1])
+				cur_dist_from_route_pt = route_pt.dist_m(post_)
 				if best_bet_dist_from_route_pt > cur_dist_from_route_pt:
 					best_bet_dist_from_route_pt = cur_dist_from_route_pt
 					best_bet_mofr = running_mofr
 			return (int(best_bet_mofr) if (best_bet_dist_from_route_pt < {0:50, 1:300, 2:750}[tolerance_]) else -1)
 
-	def get_xys(self):
-		return [geom.XY.from_latlon(latlon) for latlon in self.routepts]
-
 	def max_mofr(self):
 		r = 0.0
-		for route_pt1, route_pt2 in hopscotch(self.get_xys()):
-			r += geom.dist_latlon(geom.LatLon(route_pt1), geom.LatLon(route_pt2))
+		for routept1, routept2 in hopscotch(self.routepts):
+			r += routept1.dist_m(routept2)
 		return int(r)
 
 	def mofr_to_latlon(self, mofr_):
-		r = mofr_to_latlonnheading(self, mofr_, 0)
+		r = self.mofr_to_latlonnheading(mofr_, 0)
 		return (r[0] if r != None else None)
 
 	def mofr_to_heading(self, mofr_, dir_):
@@ -99,11 +94,11 @@ class RouteInfo:
 	def mofr_to_latlonnheading(self, mofr_, dir_):
 		assert dir_ in (0, 1)
 		mofr_remaining = mofr_
-		for route_pt1, route_pt2 in hopscotch(self.get_xys()):
-			mofr_on_cur_segment = geom.dist_latlon(geom.LatLon(route_pt1), geom.LatLon(route_pt2))
+		for routept1, routept2 in hopscotch(self.routepts):
+			mofr_on_cur_segment = routept1.dist_m(routept2)
 			if mofr_on_cur_segment > mofr_remaining:
-				r_latlon = geom.add(route_pt1, geom.scale(float(mofr_remaining)/mofr_on_cur_segment, geom.diff(route_pt2, route_pt1))).latlon()
-				r_heading = geom.heading(route_pt1, route_pt2)
+				r_latlon = routept1.add(routept2.subtract(routept1).scale(float(mofr_remaining)/mofr_on_cur_segment))
+				r_heading = routept1.heading(routept2)
 				if dir_:
 					r_heading = (r_heading + 180) % 360
 				return (r_latlon, r_heading)
@@ -119,7 +114,7 @@ class RouteInfo:
 		startpt, endpt = self.routepts[0], self.routepts[-1]
 		if dir_:
 			startpt, endpt = endpt, startpt
-		return geom.heading_from_latlons(geom.LatLon(startpt[0], startpt[1]), geom.LatLon(endpt[0], endpt[1]))
+		return startpt.heading(endpt)
 
 g_routename_to_info = {}
 
@@ -150,10 +145,14 @@ def massage_to_fudgeroute(route_):
 def get_all_routes_latlons():
 	r = []
 	for fudgeroute in FUDGEROUTES:
-		r.append(get_routeinfo(fudgeroute).routepts)
+		r_l = []
+		r.append(r_l)
+		for routept in get_routeinfo(fudgeroute).routepts:
+			r_l.append([routept.lat, routept.lng])
 	return r
 
 def latlon_to_mofr(latlon_, route_, tolerance_=0):
+	assert isinstance(latlon_, geom.LatLng)
 	if route_ not in CONFIGROUTES and route_ not in FUDGEROUTES:
 		return -1
 	else:
@@ -176,10 +175,9 @@ def configroute_to_fudgeroute(configroute_):
 			return fudgeroute
 	raise Exception('configroute %s is unknown' % (configroute_))
 
-#@accepts 
 def get_endpoint_info(origlat_, origlon_, destlat_, destlon_):
-	orig_route_to_mofr = get_route_to_mofr((origlat_, origlon_))
-	dest_route_to_mofr = get_route_to_mofr((destlat_, destlon_))
+	orig_route_to_mofr = get_route_to_mofr(geom.LatLng(origlat_, origlon_))
+	dest_route_to_mofr = get_route_to_mofr(geom.LatLng(destlat_, destlon_))
 	common_routes = set(orig_route_to_mofr.keys()).intersection(set(dest_route_to_mofr))
 	if not common_routes:
 		return None
@@ -200,27 +198,9 @@ def get_route_to_mofr(latlon_):
 			r[route] = mofr
 	return r
 
-def snap_to_line(pt_, line_):
-	assert all(isinstance(x, XY) for x in (pt_, line_[0], line_[1]))
-	ang1 = angle(line_[1], line_[0], pt_)
-	ang2 = angle(line_[0], line_[1], pt_)
-	if (ang1 < math.pi/2) and (ang2 < math.pi/2):
-		return get_pass_point(line_[0], line_[1], pt_)
-	else:
-		dist0 = dist(pt_, line_[0]); dist1 = dist(pt_, line_[1])
-		return (line_[0] if dist0 < dist1 else line_[1])
-
-def make_snap_db():
-	get_routeinfo('queen').get_xys()
-
 if __name__ == '__main__':
 
-	for route in get_all_routes_latlons():
-		for pt in route:
-			print pt
-
-
-
+	pass
 
 
 

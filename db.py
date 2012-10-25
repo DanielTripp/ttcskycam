@@ -47,7 +47,7 @@ def trans(f):
 @trans
 def insert_vehicle_info(vi_):
 	curs = g_conn.cursor()
-	cols = [vi_.vehicle_id, vi_.route_tag, vi_.dir_tag, vi_.xy.latlon()[0], vi_.xy.latlon()[1], vi_.secs_since_report, vi_.time_epoch, \
+	cols = [vi_.vehicle_id, vi_.route_tag, vi_.dir_tag, vi_.lat, vi_.lng, vi_.secs_since_report, vi_.time_epoch, \
 		vi_.predictable, vi_.heading, vi_.time]
 	curs.execute('INSERT INTO ttc_vehicle_locations VALUES (%s)' % ', '.join(['%s']*len(cols)), cols)
 	curs.close()
@@ -102,24 +102,24 @@ def get_recent_passing_vehicles(route_, post_, max_, end_time_em_=now_em(), dir_
 		vid = curvi.vehicle_id
 		if vid in vid_to_lastvi:
 			lastvi = vid_to_lastvi[vid]
-			if geom.passes(curvi.xy, lastvi.xy, post_):
+			if geom.passes(curvi.latlng, lastvi.latlng, post_):
 				r.append((curvi, lastvi))
 		vid_to_lastvi[vid] = curvi
 	return r
 
 def find_passing(route_, vid_, dir_, t_, post_):
-	assert type(route_) == str and type(vid_) == str and type(t_) == long and isinstance(post_, geom.XY)
+	assert isinstance(route_, str) and isinstance(vid_, basestring) and isinstance(t_, long) and isinstance(post_, geom.LatLng)
 	lastvi = None
 	gen = vi_select_generator(route_, t_, 0, dir_=dir_, include_unpredictables_=True, vid_=vid_)
 	for curvi in gen:
-		if lastvi and geom.passes(curvi.xy, lastvi.xy, post_):
+		if lastvi and geom.passes(curvi.latlng, lastvi.latlng, post_):
 			return (curvi, lastvi)
 		lastvi = curvi
 
 def get_latest_vehicle_info_dict(route_, num_minutes_, end_time_em_=now_em(), dir_=None, include_unpredictables_=False):
 	r = defaultdict(lambda: {}) # {vehicle_id: {time_em: (lat, lon)}}
 	for vi in get_latest_vehicle_info_list(route_, num_minutes_, end_time_em_, dir_):
-		r[vi.vehicle_id][vi.time] = vi.xy.latlon()
+		r[vi.vehicle_id][vi.time] = vi.latlng
 	return r
 
 def massage_whereclause_time_args(whereclause_):
@@ -292,9 +292,9 @@ def remove_unwanted_detours(r_vis_, fudgeroute_, direction_, log_=False):
 		unwanted = False
 		# Keep detours with a length of 1. This might not be right but they probably won't do much harm either.  
 		# Also making an attempt here to not throw out vehicles stopped dead.  
-		if (len(detour) >= 2) and (detour[-1].xy.dist_m(detour[0].xy) > 15): 
+		if (len(detour) >= 2) and (detour[-1].latlng.dist_m(detour[0].latlng) > 15):
 			assert all(e1.time > e2.time for e1, e2 in hopscotch(detour))
-			detours_heading = geom.heading_from_latlons(geom.LatLon(*(detour[-1].latlon)), geom.LatLon(*(detour[0].latlon)))
+			detours_heading = detour[-1].latlng.heading(detour[0].latlng)
 			heading_diff = geom.diff_headings(routes_general_heading, detours_heading)
 			if heading_diff > 80:
 				unwanted = True
