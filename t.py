@@ -6,13 +6,9 @@ import traffic, db, vinfo, routes, geom, mc
 
 if __name__ == '__main__':
 
-	l = [1, 2, 3]
-	mc.client.set('skl1', l)
-	l_fetched = mc.client.get('skl1')
-	l_fetched[0] = 42
-	print l_fetched
-	print mc.client.get('skl1')
-
+	print routes.latlon_to_mofr(geom.LatLng(43.63726, -79.41623), 'king', 2)
+	print routes.latlon_to_mofr(geom.LatLng(43.63731, -79.41623), 'king', 2)
+	#pprint.pprint(geom.LatLng(43.0, -75.0))
 
 	#for t in traffic.get_recent_vehicle_locations('dundas', 1, False, str_to_em('2012-09-24 13:20'), log_=True):
 	#t = traffic.get_recent_vehicle_locations('dundas', 1, True, '2012-09-24 13:20', log_=False)
