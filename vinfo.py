@@ -1,6 +1,6 @@
 #!/usr/bin/python2.6
 
-import db, geom, routes
+import geom, routes
 from misc import *
 
 class VehicleInfo:

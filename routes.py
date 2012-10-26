@@ -1,7 +1,7 @@
 #!/usr/bin/python2.6
 
 import sys, json, os.path
-import vinfo, db, geom, mc, c
+import vinfo, geom, mc, c
 from misc import *
 
 FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301'], 'king': ['504']}
