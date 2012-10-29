@@ -83,6 +83,9 @@ class LatLng:
 	def __str__(self):
 		return '(%.6f, %.6f)' % (self.lat, self.lng)
 
+	def __repr__(self):
+		return self.__str__()
+
 
 def get_range_val(p1_, p2_, domain_val_):
 	x1 = float(p1_[0]); y1 = float(p1_[1])
@@ -378,16 +381,6 @@ def remove_bad_gps_readings_single_vid(vis_):
 		else:
 			vigroups.append([cur_vi])
 	vis_[:] = max(vigroups, key=len)
-
-def snap_to_line(pt_, line_):
-	assert isinstance(pt_, LatLng) and isinstance(line_[0], LatLng) and isinstance(line_[1], LatLng)
-	ang1 = angle(line_[1], line_[0], pt_)
-	ang2 = angle(line_[0], line_[1], pt_)
-	if (ang1 < math.pi/2) and (ang2 < math.pi/2):
-		return get_pass_point(line_[0], line_[1], pt_)
-	else:
-		dist0 = pt_.dist_m(line_[0]); dist1 = pt_.dist_m(line_[1])
-		return (line_[0] if dist0 < dist1 else line_[1])
 
 if __name__ == '__main__':
 

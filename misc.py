@@ -1,6 +1,6 @@
 #!/usr/bin/python2.6
 
-import sys, os, time
+import sys, os, time, math
 from collections import MutableSequence
 
 def em_to_str(t_):
@@ -102,10 +102,23 @@ def none(iterable_):
 def implies(a_, b_):
 	return not (a_ and not b_)
 
+def fdiv(x_, y_):
+	return int((x_ - math.fmod(x_, y_))/y_)
+
+# 'i' is for 'inclusive'
+def intervalii(a_, b_):
+	assert (isinstance(a_, int) or isinstance(a_, long)) and (isinstance(b_, int) or isinstance(b_, long))
+	if a_ < b_:
+		start = a_
+		end = b_
+	else:
+		start = b_
+		end = a_
+	return range(start, end+1)
+
 if __name__ == '__main__':
 
-
-	pass
+	print intervalii(1, -1)
 
 
 
