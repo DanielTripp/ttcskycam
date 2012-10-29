@@ -1,7 +1,7 @@
 #!/usr/bin/python2.6
 
 import sys, json, os.path
-import vinfo, geom, mc, c
+import vinfo, geom, mc, c, snaptogrid
 from misc import *
 
 FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301'], 'king': ['504']}
@@ -31,9 +31,17 @@ class RouteInfo:
 
 	def init_routepts(self, routename_):
 		with open('fudge_route_%s.json' % (routename_)) as fin:
-			self.routepts = []
+			routepts = []
 			for raw_routept in json.load(fin):
-				self.routepts.append(geom.LatLng(raw_routept[0], raw_routept[1]))
+				routepts.append(geom.LatLng(raw_routept[0], raw_routept[1]))
+		self.snaptogridcache = snaptogrid.SnapToGridCache([routepts])
+		self.routeptidx_to_mofr = []
+		for i in range(len(self.routepts)):
+			if i==0:
+				self.routeptidx_to_mofr.append(0)
+			else:
+				self.routeptidx_to_mofr.append(self.routeptidx_to_mofr[i-1] + self.routepts[i].dist_m(self.routepts[i-1]))
+		assert len(self.routeptidx_to_mofr) == len(self.routepts)
 
 	def init_stops_bothdirs(self, routename_):
 		self.stops = {}
@@ -53,35 +61,17 @@ class RouteInfo:
 
 	def latlon_to_mofr(self, post_, tolerance_=0):
 		assert isinstance(post_, geom.LatLng) and (tolerance_ in (0, 1, 2))
-		r = 0.0
-		success = False
-		for routept1, routept2 in hopscotch(self.routepts):
-			if geom.passes(routept1, routept2, post_, tolerance_):
-				pass_pt = geom.get_pass_point(routept1, routept2, post_)
-				r += routept1.dist_m(pass_pt)
-				success = True
-				break
-			else:
-				r += routept1.dist_m(routept2)
-		if success:
-			return int(r)
-		else: # cover cases eg. off the outside of a right angle in the route: 
-			best_bet_dist_from_route_pt = sys.maxint; best_bet_mofr = -1
-			running_mofr = 0.0
-			for i, route_pt in enumerate(self.routepts):
-				if i > 0:
-					running_mofr += self.routepts[i].dist_m(self.routepts[i-1])
-				cur_dist_from_route_pt = route_pt.dist_m(post_)
-				if best_bet_dist_from_route_pt > cur_dist_from_route_pt:
-					best_bet_dist_from_route_pt = cur_dist_from_route_pt
-					best_bet_mofr = running_mofr
-			return (int(best_bet_mofr) if (best_bet_dist_from_route_pt < {0:50, 1:300, 2:750}[tolerance_]) else -1)
+		snap_result = self.snaptogridcache.snap(post_, {0:50, 1:300, 2:750}[tolerance_])
+		if snap_result == None:
+			return -1
+		routeptidx = snap_result[0].startptidx
+		r = self.routeptidx_to_mofr[routeptidx]
+		if snap_result[1] != None:
+			r += snap_result[1].dist_m(self.routepts[routeptidx])
+		return int(r)
 
 	def max_mofr(self):
-		r = 0.0
-		for routept1, routept2 in hopscotch(self.routepts):
-			r += routept1.dist_m(routept2)
-		return int(r)
+		return int(math.ceil(self.routeptidx_to_mofr[-1]))
 
 	def mofr_to_latlon(self, mofr_):
 		r = self.mofr_to_latlonnheading(mofr_, 0)
@@ -93,17 +83,14 @@ class RouteInfo:
 
 	def mofr_to_latlonnheading(self, mofr_, dir_):
 		assert dir_ in (0, 1)
-		mofr_remaining = mofr_
-		for routept1, routept2 in hopscotch(self.routepts):
-			mofr_on_cur_segment = routept1.dist_m(routept2)
-			if mofr_on_cur_segment > mofr_remaining:
-				r_latlon = routept1.add(routept2.subtract(routept1).scale(float(mofr_remaining)/mofr_on_cur_segment))
-				r_heading = routept1.heading(routept2)
-				if dir_:
-					r_heading = (r_heading + 180) % 360
-				return (r_latlon, r_heading)
-			else:
-				mofr_remaining -= mofr_on_cur_segment
+		if mofr_ < 0:
+			return None
+		for i in range(1, len(self.routeptidx_to_mofr)):
+			if self.routeptidx_to_mofr[i] >= mofr_:
+				prevpt = self.routepts[i-1]; curpt = self.routepts[i]
+				prevmofr = self.routeptidx_to_mofr[i-1]; curmofr = self.routeptidx_to_mofr[i]
+				pt = curpt.subtract(prevpt).scale((mofr_-prevmofr)/float(curmofr-prevmofr)).add(prevpt)
+				return (pt, prevpt.heading(curpt))
 		return None
 
 	def mofr_to_stop(self, mofr_, dir_):
@@ -115,6 +102,10 @@ class RouteInfo:
 		if dir_:
 			startpt, endpt = endpt, startpt
 		return startpt.heading(endpt)
+
+	@property
+	def routepts(self):
+		return self.snaptogridcache.polylines[0]
 
 g_routename_to_info = {}
 
@@ -200,7 +191,16 @@ def get_route_to_mofr(latlon_):
 
 if __name__ == '__main__':
 
-	pass
+	mofr_to_latlonnheading(0, 'dundas', 0)
+
+	t0 = time.time()
+	for mofr in [0] + range(-333, 20007, 13):
+		#print '%d => %s' % (mofr, repr(mofr_to_latlonnheading(mofr, 'dundas', 0)))
+		mofr_to_latlonnheading(mofr, 'dundas', 0)
+	t1 = time.time()
+	print (t1 - t0)
+
+
 
 
 
