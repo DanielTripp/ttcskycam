@@ -19,7 +19,8 @@ def get_db_conn():
 		driver_module = __import__(DATABASE_DRIVER_MODULE_NAME)
 	else:
 		saved_syspath = sys.path
-		sys.path.remove(os.getcwd())
+		while os.getcwd() in sys.path:
+			sys.path.remove(os.getcwd())
 		driver_module = __import__(DATABASE_DRIVER_MODULE_NAME)
 		sys.path = saved_syspath
 	return getattr(driver_module, 'connect')(*DATABASE_CONNECT_POSITIONAL_ARGS, **DATABASE_CONNECT_KEYWORD_ARGS)
