@@ -2,6 +2,6 @@
 
 import memcache
 
-client = memcache.Client(['127.0.0.1:112029'], debug=0)
+client = memcache.Client(['127.0.0.1:2029'], debug=0)
 
 
