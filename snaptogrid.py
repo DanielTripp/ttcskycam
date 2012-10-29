@@ -128,7 +128,8 @@ class SnapToGridCache(object):
 		for gridlat in intervalii(target_gridsquare.gridlat-1, target_gridsquare.gridlat+1):
 			for gridlng in intervalii(target_gridsquare.gridlng-1, target_gridsquare.gridlng+1):
 				searching_gridsquare = GridSquare((gridlat, gridlng))
-				r |= self.gridsquare_to_linesegaddrs[searching_gridsquare]
+				if searching_gridsquare in self.gridsquare_to_linesegaddrs:
+					r |= self.gridsquare_to_linesegaddrs[searching_gridsquare]
 		return r
 
 def steps_satisfy_searchradius(target_, searchradius_):
