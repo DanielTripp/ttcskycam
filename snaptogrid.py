@@ -78,6 +78,7 @@ class SnapToGridCache(object):
 
 	def __init__(self, polylines_):
 		assert isinstance(polylines_[0][0], geom.LatLng)
+		self.latstep = LATSTEP; self.lngstep = LNGSTEP
 		self.polylines = polylines_
 		self.gridsquare_to_linesegaddrs = defaultdict(lambda: set())
 		for polylineidx, polyline in enumerate(self.polylines):
@@ -90,6 +91,7 @@ class SnapToGridCache(object):
 					for gridlng in intervalii(linesegstartgridsquare.gridlng, linesegendgridsquare.gridlng):
 						gridsquare = GridSquare((gridlat, gridlng))
 						self.gridsquare_to_linesegaddrs[gridsquare].add(linesegaddr)
+		self.gridsquare_to_linesegaddrs = dict(self.gridsquare_to_linesegaddrs) # b/c a defaultdict can't be pickled i.e. memcached
 
 	def get_lineseg(self, linesegaddr_):
 		polyline = self.polylines[linesegaddr_.polylineidx]
@@ -100,6 +102,8 @@ class SnapToGridCache(object):
 	def snap(self, target_, searchradius_):
 		assert isinstance(target_, geom.LatLng) and isinstance(searchradius_, int)
 		assert steps_satisfy_searchradius(target_, searchradius_)
+		# Guarding against changes in steps while a SnapToGridCache object was cached in memcached:
+		assert self.latstep == LATSTEP and self.lngstep == LNGSTEP
 		best_yet_snapresult = None; best_yet_linesegaddr = None
 		for linesegaddr in self.get_nearby_linesegaddrs(target_):
 			lineseg = self.get_lineseg(linesegaddr)
