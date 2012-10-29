@@ -90,7 +90,7 @@ class RouteInfo:
 				prevpt = self.routepts[i-1]; curpt = self.routepts[i]
 				prevmofr = self.routeptidx_to_mofr[i-1]; curmofr = self.routeptidx_to_mofr[i]
 				pt = curpt.subtract(prevpt).scale((mofr_-prevmofr)/float(curmofr-prevmofr)).add(prevpt)
-				return (pt, prevpt.heading(curpt))
+				return (pt, prevpt.heading(curpt) if dir_==0 else curpt.heading(prevpt))
 		return None
 
 	def mofr_to_stop(self, mofr_, dir_):
