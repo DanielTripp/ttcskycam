@@ -73,7 +73,7 @@ class VehicleInfo:
 	@property
 	def mofr(self):
 		if self._mofr == None:
-			self._mofr = routes.latlon_to_mofr(self.latlng, self.route_tag)
+			self._mofr = routes.latlon_to_mofr(self.route_tag, self.latlng)
 		return self._mofr
 
 	# Returns None if we don't seem to have one.  

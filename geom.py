@@ -227,8 +227,8 @@ def interp_latlonnheading(vi1_, vi2_, ratio_, try_for_mofr_based_loc_interp_):
 	if try_for_mofr_based_loc_interp_ and vi1_.dir_tag and vi2_.dir_tag:
 		if routes.CONFIGROUTE_TO_FUDGEROUTE[vi1_.route_tag] == routes.CONFIGROUTE_TO_FUDGEROUTE[vi2_.route_tag]:
 			config_route = vi1_.route_tag
-			vi1mofr = routes.latlon_to_mofr(vi1_.latlng, config_route)
-			vi2mofr = routes.latlon_to_mofr(vi2_.latlng, config_route)
+			vi1mofr = routes.latlon_to_mofr(config_route, vi1_.latlng)
+			vi2mofr = routes.latlon_to_mofr(config_route, vi2_.latlng)
 			if vi1mofr!=-1 and vi2mofr!=-1:
 				interp_mofr = avg(vi1mofr, vi2mofr, ratio_)
 				dir_tag_int = vi2_.dir_tag_int

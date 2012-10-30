@@ -142,7 +142,7 @@ def get_all_routes_latlons():
 			r_l.append([routept.lat, routept.lng])
 	return r
 
-def latlon_to_mofr(latlon_, route_, tolerance_=0):
+def latlon_to_mofr(route_, latlon_, tolerance_=0):
 	assert isinstance(latlon_, geom.LatLng)
 	if route_ not in CONFIGROUTES and route_ not in FUDGEROUTES:
 		return -1
@@ -184,7 +184,7 @@ def get_endpoint_info(origlat_, origlon_, destlat_, destlon_):
 def get_route_to_mofr(latlon_):
 	r = {}
 	for route in FUDGEROUTES:
-		mofr = latlon_to_mofr(latlon_, route, tolerance_=1)
+		mofr = latlon_to_mofr(route, latlon_, tolerance_=1)
 		if mofr != -1:
 			r[route] = mofr
 	return r
