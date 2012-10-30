@@ -116,6 +116,25 @@ def intervalii(a_, b_):
 		end = a_
 	return range(start, end+1)
 
+
+def get_range_val(p1_, p2_, domain_val_):
+	x1 = float(p1_[0]); y1 = float(p1_[1])
+	x2 = float(p2_[0]); y2 = float(p2_[1])
+	r = (y2 - y1)*(domain_val_ - x1)/(x2 - x1) + y1
+	if any(type(x) == float for x in p1_ + p2_ + (domain_val_,)):
+		return r
+	else:
+		return int(r)
+
+def avg(lo_, hi_, ratio_):
+	r = lo_ + (hi_ - lo_)*ratio_
+	if type(lo_) == int and type(hi_) == int:
+		return int(r)
+	elif type(lo_) == long or type(hi_) == long:
+		return long(r)
+	else:
+		return r
+
 if __name__ == '__main__':
 
 	print intervalii(1, -1)
