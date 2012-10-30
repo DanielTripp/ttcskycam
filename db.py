@@ -1,6 +1,6 @@
 #!/usr/bin/python2.6
 
-import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket 
+import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket, datetime, calendar
 from collections import defaultdict
 import vinfo, geom, traffic, routes, yards
 from misc import *
@@ -207,7 +207,7 @@ def query1(whereclause_, maxrows_, interp_by_time_):
 		r.append(vinfo.VehicleInfo(*row))
 	curs.close()
 	if interp_by_time_:
-		r = geom.interp_by_time(r, False, False)
+		r = interp_by_time(r, False, False)
 	else:
 		r = group_by_time(r)
 	return r
@@ -239,7 +239,7 @@ def query2(fudgeroute_, num_minutes_, direction_, current_conditions_, time_wind
 		r = get_outside_overshots(r, time_window_end_, True, log_=log_) + r
 	geom.remove_bad_gps_readings(r)
 	yards.remove_vehicles_in_yards(r)
-	r = geom.interp_by_time(r, True, current_conditions_, direction_, time_window_end_)
+	r = interp_by_time(r, True, current_conditions_, direction_, time_window_end_)
 	r = filter(lambda vilist: str_to_em(vilist[0]) >= starttime, r) # first elem is a date/time string. 
 	return r
 
@@ -389,6 +389,179 @@ def vis_bridge_detour(lo_, hi_):
 		return True
 	finally:
 		curs.close()
+
+# Takes a flat list of VehicleInfo objects.  Returns a list of lists of Vehicleinfo objects, interpolated.
+# Also, with a date/time string as element 0 in each list.
+def interp_by_time(vilist_, try_for_mofr_based_loc_interp_, current_conditions_, dir_=None, end_time_=None):
+	if len(vilist_) == 0:
+		return []
+	starttime = round_down_by_minute(min(vi.time for vi in vilist_))
+	endtime = end_time_ if end_time_!=None else max(vi.time for vi in vilist_)
+	vids = set(vi.vehicle_id for vi in vilist_)
+	time_to_vis = {}
+	for interptime in lrange(starttime, endtime+1, 60*1000):
+		interped_timeslice = []
+		for vid in vids:
+			lo_vi, hi_vi = get_nearest_time_vis(vilist_, vid, interptime)
+			i_vi = None
+			if lo_vi and hi_vi:
+				if (min(interptime - lo_vi.time, hi_vi.time - interptime) > 3*60*1000) or dirs_disagree(dir_, hi_vi.dir_tag_int)\
+				or (lo_vi.route_tag != hi_vi.route_tag):
+					continue
+				ratio = (interptime - lo_vi.time)/float(hi_vi.time - lo_vi.time)
+				i_latlon, i_heading = interp_latlonnheading(lo_vi, hi_vi, ratio, try_for_mofr_based_loc_interp_)
+				i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, i_heading, vid, i_latlon.lat, i_latlon.lng,
+										 lo_vi.predictable and hi_vi.predictable,
+										 lo_vi.route_tag, 0, interptime, interptime)
+			elif lo_vi and not hi_vi:
+				if current_conditions_:
+					if (interptime - lo_vi.time > 3*60*1000) or dirs_disagree(dir_, lo_vi.dir_tag_int):
+						continue
+					i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, lo_vi.heading, vid, lo_vi.lat, lo_vi.lng,
+											 lo_vi.predictable, lo_vi.route_tag, 0, interptime, interptime)
+
+			if i_vi:
+				interped_timeslice.append(i_vi)
+
+		time_to_vis[interptime] = interped_timeslice
+	infer_headings(time_to_vis)
+	return massage_to_list(time_to_vis)
+
+# Either arg could be None (i.e. blank dir_tag).  For this we consider None to 'agree' with 0 or 1.
+def dirs_disagree(dir1_, dir2_):
+	return (dir1_ == 0 and dir2_ == 1) or (dir1_ == 1 and dir2_ == 0)
+
+def interp_latlonnheading(vi1_, vi2_, ratio_, try_for_mofr_based_loc_interp_):
+	r = None
+	if try_for_mofr_based_loc_interp_ and vi1_.dir_tag and vi2_.dir_tag:
+		if routes.CONFIGROUTE_TO_FUDGEROUTE[vi1_.route_tag] == routes.CONFIGROUTE_TO_FUDGEROUTE[vi2_.route_tag]:
+			config_route = vi1_.route_tag
+			vi1mofr = routes.latlon_to_mofr(config_route, vi1_.latlng)
+			vi2mofr = routes.latlon_to_mofr(config_route, vi2_.latlng)
+			if vi1mofr!=-1 and vi2mofr!=-1:
+				interp_mofr = geom.avg(vi1mofr, vi2mofr, ratio_)
+				dir_tag_int = vi2_.dir_tag_int
+				if dir_tag_int == None:
+					raise Exception('Could not determine dir_tag_int of %s' % (str(vi2_)))
+				r = routes.mofr_to_latlonnheading(config_route, interp_mofr, dir_tag_int)
+	if r==None:
+		r = (geom.LatLng(*(geom.avg(vi1_.latlng.lat, vi2_.latlng.lat, ratio_), avg(vi1_.latlng.lng, vi2_.latlng.lng, ratio_))),
+			 avg_headings(vi1_.heading, vi2_.heading, ratio_))
+	return r
+
+def avg_headings(heading1_, heading2_, ratio_):
+	if heading1_==-4 or heading2_==-4:
+		return -4
+	else:
+		return avg(heading1_, heading2_, ratio_)
+
+def round_down_by_minute(t_em_):
+	dt = datetime.datetime.utcfromtimestamp(t_em_/1000.0)
+	dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute)
+	r = long(calendar.timegm(dt.timetuple())*1000)
+	return r
+
+def infer_headings(r_time_to_vis_):
+	times = sorted(r_time_to_vis_.keys())
+	for timei, time in enumerate(times):
+		if timei==0:
+			continue
+		for target_vi in r_time_to_vis_[time]:
+			# -4 means blank, or at least that's what nextbus seems to mean by it.
+			if target_vi.heading == -4:
+				infer_headings_technique1(target_vi, r_time_to_vis_, times, timei)
+			if target_vi.heading == -4:
+				infer_headings_technique2(target_vi, r_time_to_vis_, times, timei)
+	infer_headings_technique3(r_time_to_vis_)
+
+# As a last resort, use the database to look further back in time.
+def infer_headings_technique3(r_time_to_vis_):
+	times = sorted(r_time_to_vis_.keys())
+	vid_to_heading = {} # Whatever we've seen so far.  Will contain -4 if our searching of the db yielded no heading.
+	for tyme in times: # Taking care to iterate in ascending order of time.
+		for vi in (vi for vi in r_time_to_vis_[tyme] if vi.heading == -4):
+			if vi.vehicle_id in vid_to_heading:
+				vi.heading = vid_to_heading[vi.vehicle_id]
+			else:
+				curs = g_conn.cursor('cursor_%d' % (int(time.time()*1000)))
+				curs.execute('select lat, lon from ttc_vehicle_locations where vehicle_id = %s and time > %s and time < %s order by time desc', \
+						[vi.vehicle_id, vi.time - 1000*60*60*12, vi.time])
+				for row in curs:
+					past_latlng = geom.LatLng(row[0], row[1])
+					if past_latlng.dist_m(vi.latlng) > 20:
+						heading = past_latlng.heading(vi.latlng)
+						vid_to_heading[vi.vehicle_id] = heading
+						vi.heading = heading
+						break
+				else:
+					vid_to_heading[vi.vehicle_id] = -4
+				curs.close()
+
+# Look back in time (amongst our in-memory list here) for a previous appearance of this vid which indicates
+# a direction by change of mofr, then get a heading from our route info based on that direction.
+def infer_headings_technique1(r_target_vi_, time_to_vis_, times_, timei_):
+	if r_target_vi_.mofr != -1:
+		prev_vi = None
+		for timej in range(timei_-1, -1, -1):
+			if prev_vi != None:
+				break
+			for older_vi in time_to_vis_[times_[timej]]:
+				if (older_vi.vehicle_id == r_target_vi_.vehicle_id) and (older_vi.mofr != -1)\
+				   and (older_vi.fudgeroute == r_target_vi_.fudgeroute)\
+				and (abs(r_target_vi_.mofr - older_vi.mofr) >= 5):
+					prev_vi = older_vi
+					break
+		if prev_vi != None:
+			dir = (0 if prev_vi.mofr < r_target_vi_.mofr else 1)
+			r_target_vi_.heading = routes.get_routeinfo(r_target_vi_.route_tag).mofr_to_heading(r_target_vi_.mofr, dir)
+
+# If the above didn't work out then try again using lat/lons instead of mofrs.
+def infer_headings_technique2(r_target_vi_, time_to_vis_, times_, timei_):
+	prev_vi = None
+	for timej in range(timei_-1, -1, -1):
+		if prev_vi != None:
+			break
+		for older_vi in time_to_vis_[times_[timej]]:
+			if (older_vi.vehicle_id == r_target_vi_.vehicle_id) and (older_vi.latlng.dist_m(r_target_vi_.latlng) >= 20):
+				prev_vi = older_vi
+				break
+	if prev_vi != None:
+		r_target_vi_.heading = prev_vi.latlng.heading(r_target_vi_.latlng)
+
+def massage_to_list(time_to_vis_):
+	time_to_vis = time_to_vis_.copy()
+
+	# Deleting all empty timeslices at the end of the time frame.
+	# doing this because the last timeslice is the current vehicle locations of course, and that is an important
+	# timeslice and will be rendered differently in the GUI.
+	for time in sorted(time_to_vis.keys(), reverse=True):
+		if len(time_to_vis[time]) == 0:
+			del time_to_vis[time]
+		else:
+			break
+
+	r = []
+	for time in sorted(time_to_vis.keys()):
+		vis = time_to_vis[time]
+		r.append([em_to_str(time)] + vis)
+	for i in range(len(r)-1, -1, -1):
+		if len(r[i]) == 1: # Delete all empty (empty except for the date/time string) timeslices at the end.
+			del r[i] # doing this because the last timeslice is the current vehicle locations of course, and that is an important
+		else: # timeslice and will be rendered differently in the GUI.
+			break
+	return r
+
+def get_nearest_time_vis(vilist_, vid_, t_):
+	assert type(t_) == long
+	lo_vi = None; hi_vi = None
+	for vi in (vi for vi in vilist_ if vi.vehicle_id == vid_):
+		if vi.time < t_:
+			if lo_vi==None or lo_vi.time < vi.time:
+				lo_vi = vi
+		elif vi.time > t_:
+			if hi_vi==None or hi_vi.time > vi.time:
+				hi_vi = vi
+	return (lo_vi, hi_vi)
 
 def t():
 	#curs = g_conn.cursor('cursor_%d' % (int(time.time()*1000)))
