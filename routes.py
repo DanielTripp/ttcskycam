@@ -149,10 +149,10 @@ def latlon_to_mofr(route_, latlon_, tolerance_=0):
 	else:
 		return get_routeinfo(route_).latlon_to_mofr(latlon_, tolerance_)
 
-def mofr_to_latlon(mofr_, route_):
+def mofr_to_latlon(route_, mofr_):
 	return get_routeinfo(route_).mofr_to_latlon(mofr_)
 
-def mofr_to_latlonnheading(mofr_, route_, dir_):
+def mofr_to_latlonnheading(route_, mofr_, dir_):
 	return get_routeinfo(route_).mofr_to_latlonnheading(mofr_, dir_)
 
 def fudgeroute_to_configroutes(fudgeroute_name_):
@@ -191,12 +191,12 @@ def get_route_to_mofr(latlon_):
 
 if __name__ == '__main__':
 
-	mofr_to_latlonnheading(0, 'dundas', 0)
+	mofr_to_latlonnheading('dundas', 0, 0)
 
 	t0 = time.time()
 	for mofr in [0] + range(-333, 20007, 13):
 		#print '%d => %s' % (mofr, repr(mofr_to_latlonnheading(mofr, 'dundas', 0)))
-		mofr_to_latlonnheading(mofr, 'dundas', 0)
+		mofr_to_latlonnheading('dundas', mofr, 0)
 	t1 = time.time()
 	print (t1 - t0)
 

@@ -129,7 +129,7 @@ def get_traffics_impl_old_for_directional_arrows(fudgeroute_name_, dir_, time_, 
 		if not traf:
 			r.append(None)
 		else:
-			latlon, heading = routes.mofr_to_latlonnheading(mofr, fudgeroute_name_, dir_)
+			latlon, heading = routes.mofr_to_latlonnheading(fudgeroute_name_, mofr, dir_)
 			r.append({'latlon': latlon, 'heading': heading, 'kmph': traf['kmph'], 'weight': traf['weight']})
 	return r
 
