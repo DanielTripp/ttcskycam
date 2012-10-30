@@ -234,7 +234,7 @@ def interp_latlonnheading(vi1_, vi2_, ratio_, try_for_mofr_based_loc_interp_):
 				dir_tag_int = vi2_.dir_tag_int
 				if dir_tag_int == None:
 					raise Exception('Could not determine dir_tag_int of %s' % (str(vi2_)))
-				r = routes.mofr_to_latlonnheading(interp_mofr, config_route, dir_tag_int)
+				r = routes.mofr_to_latlonnheading(config_route, interp_mofr, dir_tag_int)
 	if r==None:
 		r = (LatLng(*(avg(vi1_.latlng.lat, vi2_.latlng.lat, ratio_), avg(vi1_.latlng.lng, vi2_.latlng.lng, ratio_))),
 				avg_headings(vi1_.heading, vi2_.heading, ratio_))
