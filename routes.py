@@ -62,12 +62,12 @@ class RouteInfo:
 	def latlon_to_mofr(self, post_, tolerance_=0):
 		assert isinstance(post_, geom.LatLng) and (tolerance_ in (0, 1, 2))
 		snap_result = self.snaptogridcache.snap(post_, {0:50, 1:300, 2:750}[tolerance_])
-		if snap_result == None:
+		if snap_result is None:
 			return -1
-		routeptidx = snap_result[0].startptidx
+		routeptidx = snap_result[1].startptidx
 		r = self.routeptidx_to_mofr[routeptidx]
-		if snap_result[1] != None:
-			r += snap_result[1].dist_m(self.routepts[routeptidx])
+		if snap_result[2] is not None:
+			r += snap_result[2].dist_m(self.routepts[routeptidx])
 		return int(r)
 
 	def max_mofr(self):
