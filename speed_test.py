@@ -6,6 +6,7 @@ import traffic, db, vinfo, routes, geom, mc
 
 if __name__ == '__main__':
 
+	assert mc.client.set('290486246234', 'a') == 0
 	routes.get_routeinfo('queen')
 	t0 = time.time()
 	traffic.get_recent_vehicle_locations('queen', 1, False, str_to_em('2012-09-24 13:20'), log_=False)
