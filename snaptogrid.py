@@ -6,7 +6,7 @@ import math
 import geom
 from misc import *
 
-LATSTEP = 0.007; LNGSTEP = 0.01
+LATSTEP = 0.0035; LNGSTEP = 0.005
 
 # Grid squares are offset from a point that has no large importance, it just makes for more easily
 # readable values during debugging:
@@ -101,11 +101,10 @@ class SnapToGridCache(object):
 	# arg searchradius_ is in metres.
 	def snap(self, target_, searchradius_):
 		assert isinstance(target_, geom.LatLng) and isinstance(searchradius_, int)
-		assert steps_satisfy_searchradius(target_, searchradius_)
 		# Guarding against changes in steps while a SnapToGridCache object was cached in memcached:
 		assert self.latstep == LATSTEP and self.lngstep == LNGSTEP
 		best_yet_snapresult = None; best_yet_linesegaddr = None
-		for linesegaddr in self.get_nearby_linesegaddrs(target_):
+		for linesegaddr in self.get_nearby_linesegaddrs(target_, searchradius_):
 			lineseg = self.get_lineseg(linesegaddr)
 			cur_snapresult = snap_to_line(target_, lineseg)
 			if best_yet_snapresult==None or cur_snapresult[2]<best_yet_snapresult[2]:
@@ -121,16 +120,38 @@ class SnapToGridCache(object):
 			else:
 				return (LineSegAddr(best_yet_linesegaddr.polylineidx, best_yet_linesegaddr.startptidx+1), None)
 
-	def get_nearby_linesegaddrs(self, target_):
-		isinstance(target_, geom.LatLng)
+	def get_nearby_linesegaddrs(self, target_, searchradius_):
+		assert isinstance(target_, geom.LatLng)
 		target_gridsquare = GridSquare(target_)
 		r = set()
-		for gridlat in intervalii(target_gridsquare.gridlat-1, target_gridsquare.gridlat+1):
-			for gridlng in intervalii(target_gridsquare.gridlng-1, target_gridsquare.gridlng+1):
+		reach = get_reach(target_, searchradius_)
+		for gridlat in intervalii(target_gridsquare.gridlat-reach[0], target_gridsquare.gridlat+reach[0]):
+			for gridlng in intervalii(target_gridsquare.gridlng-reach[1], target_gridsquare.gridlng+reach[1]):
 				searching_gridsquare = GridSquare((gridlat, gridlng))
 				if searching_gridsquare in self.gridsquare_to_linesegaddrs:
 					r |= self.gridsquare_to_linesegaddrs[searching_gridsquare]
 		return r
+
+def get_reach(target_, searchradius_):
+	assert isinstance(target_, geom.LatLng) and isinstance(searchradius_, int)
+	target_gridsquare = GridSquare(target_)
+	lat_reach = get_reach_single(target_gridsquare, searchradius_, True)
+	lon_reach_top = get_reach_single(GridSquare((target_gridsquare.gridlat+lat_reach+1, target_gridsquare.gridlng)), searchradius_, False)
+	lon_reach_bottom = get_reach_single(GridSquare((target_gridsquare.gridlat-lat_reach, target_gridsquare.gridlng)), searchradius_, False)
+	return (lat_reach, max(lon_reach_top, lon_reach_bottom))
+
+def get_reach_single(reference_gridsquare_, searchradius_, lat_aot_lng_):
+	assert isinstance(reference_gridsquare_, GridSquare) and isinstance(searchradius_, int) and isinstance(lat_aot_lng_, bool)
+	reference_gridsquare_latlng = reference_gridsquare_.latlng()
+	r = 1
+	while True:
+		if lat_aot_lng_:
+			cur_latlng = geom.LatLng(reference_gridsquare_latlng.lat + r*LATSTEP, reference_gridsquare_latlng.lng)
+		else:
+			cur_latlng = geom.LatLng(reference_gridsquare_latlng.lat, reference_gridsquare_latlng.lng + r*LNGSTEP)
+		if cur_latlng.dist_m(reference_gridsquare_latlng) >= searchradius_:
+			return r
+		r += 1
 
 def steps_satisfy_searchradius(target_, searchradius_):
 	assert isinstance(target_, geom.LatLng) and isinstance(searchradius_, int)
@@ -160,10 +181,8 @@ def snap_to_line(target_, lineseg_):
 
 if __name__ == '__main__':
 
-	#print GridSquare(geom.LatLng(43.66187293424293, -79.3975142975678)).latlng()
-	#sys.exit(1)
-
-
 	pass
+
+
 
 
