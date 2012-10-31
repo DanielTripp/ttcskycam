@@ -117,12 +117,6 @@ def find_passing(route_, vid_, dir_, t_, post_):
 			return (curvi, lastvi)
 		lastvi = curvi
 
-def get_latest_vehicle_info_dict(route_, num_minutes_, end_time_em_=now_em(), dir_=None, include_unpredictables_=False):
-	r = defaultdict(lambda: {}) # {vehicle_id: {time_em: (lat, lon)}}
-	for vi in get_latest_vehicle_info_list(route_, num_minutes_, end_time_em_, dir_):
-		r[vi.vehicle_id][vi.time] = vi.latlng
-	return r
-
 def massage_whereclause_time_args(whereclause_):
 	if not whereclause_:
 		return whereclause_
@@ -244,6 +238,9 @@ def query2(fudgeroute_, num_minutes_, direction_, current_conditions_, time_wind
 	r = filter(lambda vilist: str_to_em(vilist[0]) >= starttime, r) # first elem is a date/time string. 
 	return r
 
+# The idea here is, for each vid, to get one more vi from the db, greater in time than the pre-existing
+# max time vi.  This new vi may be on a different route or direction, but it will help us show that vehicle
+# a little longer on the screen, which I think is desirable.
 def add_inside_overshots_for_locations(r_vis_, direction_, time_window_end_, log_=False):
 	new_vis = []
 	for vid in set([vi.vehicle_id for vi in r_vis_]):
@@ -264,6 +261,8 @@ def add_inside_overshots_for_locations(r_vis_, direction_, time_window_end_, log
 	r_vis_ += new_vis
 	r_vis_.sort(key=lambda vi: vi.time, reverse=True)
 
+# The idea here is mostly to get from the db those vis which got a blank dirtag because they are stuck in traffic
+# very badly.  eg. dundas westbound 2012-09-24 13:00.  I want these stuck vehicles to contribute to the traffic report.
 def add_inside_overshots_for_traffic(r_vis_, direction_, time_window_end_, log_=False):
 	assert all(vi1.route_tag == vi2.route_tag for vi1, vi2 in hopscotch(r_vis_))
 	new_vis = []
@@ -462,7 +461,8 @@ def round_down_by_minute(t_em_):
 	r = long(calendar.timegm(dt.timetuple())*1000)
 	return r
 
-def infer_headings(r_time_to_vis_):
+def infer_headings(r_time_to_vis_, use_db_for_heading_inference_):
+	assert isinstance(use_db_for_heading_inference_, bool)
 	times = sorted(r_time_to_vis_.keys())
 	for timei, time in enumerate(times):
 		if timei==0:
@@ -473,7 +473,8 @@ def infer_headings(r_time_to_vis_):
 				infer_headings_technique1(target_vi, r_time_to_vis_, times, timei)
 			if target_vi.heading == -4:
 				infer_headings_technique2(target_vi, r_time_to_vis_, times, timei)
-	infer_headings_technique3(r_time_to_vis_)
+	if use_db_for_heading_inference_:
+		infer_headings_technique3(r_time_to_vis_)
 
 # As a last resort, use the database to look further back in time.
 def infer_headings_technique3(r_time_to_vis_):
@@ -576,9 +577,8 @@ def t():
 		#print row[0]
 
 if __name__ == '__main__':
-	for vehicle_id, time_to_latlon in get_latest_vehicle_info_dict('501', 15).iteritems():
-		print vehicle_id
-		for time, latlon in time_to_latlon.iteritems():
-			print time, latlon
+
+	pass
+
 
 
