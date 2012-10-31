@@ -5,16 +5,28 @@ from collections import defaultdict
 import vinfo, geom, traffic, routes, yards
 from misc import *
 
-ON_PRODUCTION_BOX = socket.gethostname().endswith('theorem.ca')
-
-DATABASE_DRIVER_MODULE_NAME = 'psycopg2'
-db_host = ('24.52.231.206' if ON_PRODUCTION_BOX else 'localhost')
-DATABASE_CONNECT_POSITIONAL_ARGS = ("dbname='postgres' user='postgres' host='%s' password='doingthis'" % (db_host),)
-DATABASE_CONNECT_KEYWORD_ARGS = {}
-
 VI_COLS = ' dir_tag, heading, vehicle_id, lat, lon, predictable, route_tag, secs_since_report, time_epoch, time '
 
-def get_db_conn():
+g_conn = None
+g_use_localhost = False
+
+def use_localhost(yes_):
+	global g_use_localhost
+	g_use_localhost = yes_
+
+def connect():
+	global g_conn
+	ON_PRODUCTION_BOX = socket.gethostname().endswith('theorem.ca')
+	DATABASE_DRIVER_MODULE_NAME = 'psycopg2'
+	if ON_PRODUCTION_BOX:
+		if g_use_localhost:
+			db_host = 'localhost'
+		else:
+			db_host = '24.52.231.206'
+	else:
+		db_host = 'localhost'
+	DATABASE_CONNECT_POSITIONAL_ARGS = ("dbname='postgres' user='postgres' host='%s' password='doingthis'" % (db_host),)
+	DATABASE_CONNECT_KEYWORD_ARGS = {}
 	if ON_PRODUCTION_BOX:
 		driver_module = __import__(DATABASE_DRIVER_MODULE_NAME)
 	else:
@@ -23,9 +35,23 @@ def get_db_conn():
 			sys.path.remove(os.getcwd())
 		driver_module = __import__(DATABASE_DRIVER_MODULE_NAME)
 		sys.path = saved_syspath
-	return getattr(driver_module, 'connect')(*DATABASE_CONNECT_POSITIONAL_ARGS, **DATABASE_CONNECT_KEYWORD_ARGS)
+	g_conn = getattr(driver_module, 'connect')(*DATABASE_CONNECT_POSITIONAL_ARGS, **DATABASE_CONNECT_KEYWORD_ARGS)
 
-g_conn = get_db_conn()
+def conn():
+	if g_conn is None:
+		connect()
+	return g_conn
+
+def reconnect():
+	global g_conn
+	# Not sure if this try/except is necessary.  Doing it because I would hate for a close() throwing 
+	# something to ruin my day here. 
+	try:
+		g_conn.close()
+	except:
+		pass
+	g_conn = None
+	connect()
 
 def trans(f):
 	"""Decorator that calls commit() after the method finishes normally, or rollback() if an
@@ -38,18 +64,18 @@ def trans(f):
 		self = args[0]
 		try:
 			returnval = f(*args, **kwds)
-			g_conn.commit()
+			conn().commit()
 			return returnval
 		except:
-			g_conn.rollback()
+			conn().rollback()
 			raise
 	return new_f
 
 @trans
 def insert_vehicle_info(vi_):
-	curs = g_conn.cursor()
+	curs = conn().cursor()
 	cols = [vi_.vehicle_id, vi_.route_tag, vi_.dir_tag, vi_.lat, vi_.lng, vi_.secs_since_report, vi_.time_epoch, \
-		vi_.predictable, vi_.heading, vi_.time]
+		vi_.predictable, vi_.heading, vi_.time, em_to_str(vi_.time)]
 	curs.execute('INSERT INTO ttc_vehicle_locations VALUES (%s)' % ', '.join(['%s']*len(cols)), cols)
 	curs.close()
 
@@ -64,7 +90,7 @@ def massage_dir_arg(in_):
 		return in_
 
 def vi_select_generator(route_, end_time_em_, start_time_em_, dir_=None, include_unpredictables_=False, vid_=None):
-	curs = (g_conn.cursor('cursor_%d' % (int(time.time()*1000))) if start_time_em_ == 0 else g_conn.cursor())
+	curs = (conn().cursor('cursor_%d' % (int(time.time()*1000))) if start_time_em_ == 0 else conn().cursor())
 	dir = massage_dir_arg(dir_)
 	dir_clause = ('and dir_tag like \'%%%%\\\\_%s\\\\_%%%%\' ' % (str(dir)) if dir != None else ' ')
 	sql = 'select '+VI_COLS+' from ttc_vehicle_locations where route_tag = %s '\
@@ -196,7 +222,7 @@ def query1(whereclause_, maxrows_, interp_by_time_):
 	r = []
 	sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations where ' \
 		+ (whereclause if whereclause else 'true')+' order by route_tag, time desc limit %d' % (maxrows_)
-	curs = g_conn.cursor()
+	curs = conn().cursor()
 	curs.execute(sqlstr)
 	for row in curs:
 		r.append(vinfo.VehicleInfo(*row))
@@ -218,7 +244,7 @@ def query2(fudgeroute_, num_minutes_, direction_, current_conditions_, time_wind
 		+ ' where route_tag in ('+(','.join(['%s']*len(configroutes)))+')' \
 		+' and time <= %s and time >= %s ' + ('and (dir_tag = \'\' or dir_tag like \'%%%%\\\\_%d\\\\_%%%%\') ' % (direction_)) \
 		+ ' order by time desc' 
-	curs = g_conn.cursor()
+	curs = conn().cursor()
 	starttime = time_window_end_ - num_minutes_*60*1000
 	curs.execute(sqlstr, configroutes + [time_window_end_, starttime])
 	for row in curs:
@@ -247,7 +273,7 @@ def add_inside_overshots_for_locations(r_vis_, direction_, time_window_end_, log
 		time_to_beat = max(vi.time for vi in r_vis_ if vi.vehicle_id == vid)
 		sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations ' \
 			+ ' where vehicle_id = %s and time > %s and time <= %s order by time limit 1' 
-		curs = g_conn.cursor()
+		curs = conn().cursor()
 		curs.execute(sqlstr, [vid, time_to_beat, time_window_end_])
 		row = curs.fetchone()
 		vi = None
@@ -272,7 +298,7 @@ def add_inside_overshots_for_traffic(r_vis_, direction_, time_window_end_, log_=
 		if log_: printerr('Looking for inside overshots for %s.  Time to beat: %s / %d.' % (vid, em_to_str(time_to_beat), time_to_beat))
 		sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations ' \
 			+ ' where vehicle_id = %s and time > %s and time <= %s and route_tag = %s and dir_tag = \'\' order by time' 
-		curs = g_conn.cursor()
+		curs = conn().cursor()
 		curs.execute(sqlstr, [vid, time_to_beat, time_window_end_, old_vis[0].route_tag])
 		for row in curs:
 			vi = vinfo.VehicleInfo(*row)
@@ -354,7 +380,7 @@ def get_outside_overshots(vilist_, time_window_boundary_, forward_in_time_, log_
 		sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations ' \
 			+ ' where vehicle_id = %s ' + ' and route_tag in ('+(','.join(['%s']*len(routes)))+')' + ' and time < %s and time > %s '\
 			+ ' order by time '+('' if forward_in_time_ else 'desc')+' limit 1' 
-		curs = g_conn.cursor()
+		curs = conn().cursor()
 		curs.execute(sqlstr, [vid] + routes \
 			+ ([time_window_boundary_+20*60*1000, vid_extreme_time] if forward_in_time_ else [vid_extreme_time, time_window_boundary_-20*60*1000]))
 		row = curs.fetchone()
@@ -378,7 +404,7 @@ def group_by_time(vilist_):
 def vis_bridge_detour(lo_, hi_):
 	assert (lo_.vehicle_id == hi_.vehicle_id) and (lo_.time != hi_.time)
 	lo, hi = ((lo_, hi_) if lo_.time < hi_.time else (hi_, lo_))
-	curs = g_conn.cursor()
+	curs = conn().cursor()
 	try:
 		curs.execute('select '+VI_COLS+' from ttc_vehicle_locations where vehicle_id = %s and time > %s and time < %s ', \
 			[lo.vehicle_id, lo.time, hi.time])
@@ -485,7 +511,7 @@ def infer_headings_technique3(r_time_to_vis_):
 				if vi.latlng.dist_m(latlng) < 5:
 					vi.heading = heading
 			if vi.heading == -4:
-				curs = g_conn.cursor('cursor_%d' % (int(time.time()*1000)))
+				curs = conn().cursor('cursor_%d' % (int(time.time()*1000)))
 				curs.execute('select lat, lon from ttc_vehicle_locations where vehicle_id = %s and time > %s and time < %s order by time desc', \
 						[vi.vehicle_id, vi.time - 1000*60*60*12, vi.time])
 				for row in curs:
@@ -566,8 +592,8 @@ def get_nearest_time_vis(vilist_, vid_, t_):
 	return (lo_vi, hi_vi)
 
 def t():
-	#curs = g_conn.cursor('cursor_%d' % (int(time.time()*1000)))
-	curs = g_conn.cursor()
+	#curs = conn().cursor('cursor_%d' % (int(time.time()*1000)))
+	curs = conn().cursor()
 	sql = "select * from ttc_vehicle_locations where route_tag = '505' and time <= 1330492156395 and time >= 1330491481877 and dir_tag like '%%%%\\_0\\_%%%%' and predictable = true order by time desc"
 	curs.execute(sql, [])
 	while True:
