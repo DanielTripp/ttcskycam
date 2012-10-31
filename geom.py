@@ -80,6 +80,9 @@ class LatLng:
 		assert isinstance(other_, LatLng)
 		return self.lat == other_.lat and self.lng == other_.lng
 
+	def __hash__(self):
+		return int(self.lat*1000 + self.lng*1000)
+
 	def __str__(self):
 		return '(%.6f, %.6f)' % (self.lat, self.lng)
 

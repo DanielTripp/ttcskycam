@@ -131,13 +131,14 @@ def massage_whereclause_time_args(whereclause_):
 		def repl1(mo_):
 			return str(str_to_em(mo_.group(0).strip('\'"')))
 		r = re.sub(r'[\'"]\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?[\'"]', repl1, r)
+
+		r = re.sub(r'\bnow\b', str(now_em()), r)
+
 		def repl2(mo_):
 			t = int(mo_.group(1))
 			range = 15*60*1000
 			return 'time > %d and time < %d' % (t - range, t + range)
 		r = re.sub(r'time around (\d+)', repl2, r)
-
-		r = re.sub(r'time around now', 'time around(45,10) %d' % (now_em()), r)
 
 		def repl3(mo_):
 			t = int(mo_.group(3))
@@ -207,7 +208,7 @@ def query1(whereclause_, maxrows_, interp_by_time_):
 		r.append(vinfo.VehicleInfo(*row))
 	curs.close()
 	if interp_by_time_:
-		r = interp_by_time(r, False, False)
+		r = interp_by_time(r, False, False, False)
 	else:
 		r = group_by_time(r)
 	return r
@@ -239,7 +240,7 @@ def query2(fudgeroute_, num_minutes_, direction_, current_conditions_, time_wind
 		r = get_outside_overshots(r, time_window_end_, True, log_=log_) + r
 	geom.remove_bad_gps_readings(r)
 	yards.remove_vehicles_in_yards(r)
-	r = interp_by_time(r, True, current_conditions_, direction_, time_window_end_)
+	r = interp_by_time(r, True, True, current_conditions_, direction_, time_window_end_)
 	r = filter(lambda vilist: str_to_em(vilist[0]) >= starttime, r) # first elem is a date/time string. 
 	return r
 
@@ -392,7 +393,7 @@ def vis_bridge_detour(lo_, hi_):
 
 # Takes a flat list of VehicleInfo objects.  Returns a list of lists of Vehicleinfo objects, interpolated.
 # Also, with a date/time string as element 0 in each list.
-def interp_by_time(vilist_, try_for_mofr_based_loc_interp_, current_conditions_, dir_=None, end_time_=None):
+def interp_by_time(vilist_, try_for_mofr_based_loc_interp_, use_db_for_heading_inference_, current_conditions_, dir_=None, end_time_=None):
 	if len(vilist_) == 0:
 		return []
 	starttime = round_down_by_minute(min(vi.time for vi in vilist_))
@@ -424,7 +425,7 @@ def interp_by_time(vilist_, try_for_mofr_based_loc_interp_, current_conditions_,
 				interped_timeslice.append(i_vi)
 
 		time_to_vis[interptime] = interped_timeslice
-	infer_headings(time_to_vis)
+	infer_headings(time_to_vis, use_db_for_heading_inference_)
 	return massage_to_list(time_to_vis)
 
 # Either arg could be None (i.e. blank dir_tag).  For this we consider None to 'agree' with 0 or 1.
@@ -476,13 +477,13 @@ def infer_headings(r_time_to_vis_):
 
 # As a last resort, use the database to look further back in time.
 def infer_headings_technique3(r_time_to_vis_):
-	times = sorted(r_time_to_vis_.keys())
-	vid_to_heading = {} # Whatever we've seen so far.  Will contain -4 if our searching of the db yielded no heading.
-	for tyme in times: # Taking care to iterate in ascending order of time.
+	vid_to_latlng_to_heading = defaultdict(lambda: {}) # Whatever we've seen so far.  Will contain -4 if our searching of the db yielded no heading.
+	for tyme in sorted(r_time_to_vis_.keys()):
 		for vi in (vi for vi in r_time_to_vis_[tyme] if vi.heading == -4):
-			if vi.vehicle_id in vid_to_heading:
-				vi.heading = vid_to_heading[vi.vehicle_id]
-			else:
+			for latlng, heading in vid_to_latlng_to_heading[vi.vehicle_id].items():
+				if vi.latlng.dist_m(latlng) < 5:
+					vi.heading = heading
+			if vi.heading == -4:
 				curs = g_conn.cursor('cursor_%d' % (int(time.time()*1000)))
 				curs.execute('select lat, lon from ttc_vehicle_locations where vehicle_id = %s and time > %s and time < %s order by time desc', \
 						[vi.vehicle_id, vi.time - 1000*60*60*12, vi.time])
@@ -490,11 +491,11 @@ def infer_headings_technique3(r_time_to_vis_):
 					past_latlng = geom.LatLng(row[0], row[1])
 					if past_latlng.dist_m(vi.latlng) > 20:
 						heading = past_latlng.heading(vi.latlng)
-						vid_to_heading[vi.vehicle_id] = heading
+						vid_to_latlng_to_heading[vi.vehicle_id][vi.latlng.clone()] = heading
 						vi.heading = heading
 						break
 				else:
-					vid_to_heading[vi.vehicle_id] = -4
+					vid_to_latlng_to_heading[vi.vehicle_id][vi.latlng.clone()] = -4
 				curs.close()
 
 # Look back in time (amongst our in-memory list here) for a previous appearance of this vid which indicates
