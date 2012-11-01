@@ -61,7 +61,6 @@ def trans(f):
 	'auto-commit mode' that we can count on.
 	""" 
 	def new_f(*args, **kwds):
-		self = args[0]
 		try:
 			returnval = f(*args, **kwds)
 			conn().commit()
@@ -590,6 +589,19 @@ def get_nearest_time_vis(vilist_, vid_, t_):
 			if hi_vi==None or hi_vi.time > vi.time:
 				hi_vi = vi
 	return (lo_vi, hi_vi)
+
+@trans
+def purge():
+	if not socket.gethostname().endswith('theorem.ca'):
+		raise Exception('Not running on theorem.ca?')
+
+	use_localhost(True)
+
+	curs = conn().cursor()
+	# Delete all rows older than 12 hours:
+	curs.execute('delete from ttc_vehicle_locations where time < round(extract(epoch from clock_timestamp())*1000) - 1000*60*60*12;')
+	curs.close()
+
 
 def t():
 	#curs = conn().cursor('cursor_%d' % (int(time.time()*1000)))
