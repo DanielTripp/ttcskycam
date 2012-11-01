@@ -94,9 +94,24 @@ function recreate_slider() {
 	on_slider_slide(0);
 }
 
+function keypress_handler(e) {
+	var pK = e? e.which : window.event.keyCode;
+	if(pK == 32) {
+		$('#add_marker_button').trigger('click');
+		return false;
+	} else {
+		return true;
+	}
+}
+
 function initialize() {
 	init_map();
 	init_mofr_marker();
+
+	document.onkeypress = keypress_handler;
+	if (document.layers) {
+		document.captureEvents(Event.KEYPRESS); 
+	}
 }
 
 function init_mofr_marker() {
@@ -339,8 +354,14 @@ function add_buildfudgeroute_marker(glatlon_) {
 		if(g_buildfudgeroute_markers.length == 0) {
 			glatlon = new google.maps.LatLng(43.65, -79.44);
 		} else {
-			var lastmarkpos = g_buildfudgeroute_markers[g_buildfudgeroute_markers.length-1].getPosition();
-			glatlon = new google.maps.LatLng(lastmarkpos.lat(), lastmarkpos.lng()+0.002);
+			if(g_buildfudgeroute_markers.length >= 2) {
+				var pos1 = g_buildfudgeroute_markers[g_buildfudgeroute_markers.length-2].getPosition();
+				var pos2 = g_buildfudgeroute_markers[g_buildfudgeroute_markers.length-1].getPosition();
+				glatlon = new google.maps.LatLng(pos2.lat() + (pos2.lat() - pos1.lat()), pos2.lng() + (pos2.lng() - pos1.lng()));
+			} else {
+				var lastmarkpos = g_buildfudgeroute_markers[g_buildfudgeroute_markers.length-1].getPosition();
+				glatlon = new google.maps.LatLng(lastmarkpos.lat(), lastmarkpos.lng()+0.002);
+			}
 		}
 	}
 	var marker = new google.maps.Marker({
@@ -443,7 +464,8 @@ function redraw_buildfudgeroute_path() {
       <table border="1">
 				<tr>
 					<td>
-						Build fudge route:  <input type="button" onclick="add_buildfudgeroute_marker(null)" value="Add marker" />
+						Build fudge route:  <input id="add_marker_button" type="button" onclick="add_buildfudgeroute_marker(null)" value="Add marker" /><br/>
+						(Or press the spacebar.)
 					</td>
 				</tr>
       </table>
