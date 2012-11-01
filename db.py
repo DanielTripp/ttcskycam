@@ -5,29 +5,32 @@ from collections import defaultdict
 import vinfo, geom, traffic, routes, yards
 from misc import *
 
+HOSTMONIKER_TO_IP = {'theorem': '72.2.4.176', 'black': '24.52.231.206'}
+
 VI_COLS = ' dir_tag, heading, vehicle_id, lat, lon, predictable, route_tag, secs_since_report, time_epoch, time '
 
 g_conn = None
-g_use_localhost = False
+g_forced_hostmoniker = None
 
-def use_localhost(yes_):
-	global g_use_localhost
-	g_use_localhost = yes_
+def force_host(hostmoniker_):
+	global g_forced_hostmoniker
+	g_forced_hostmoniker = hostmoniker_
 
 def connect():
 	global g_conn
-	ON_PRODUCTION_BOX = socket.gethostname().endswith('theorem.ca')
-	DATABASE_DRIVER_MODULE_NAME = 'psycopg2'
-	if ON_PRODUCTION_BOX:
-		if g_use_localhost:
-			db_host = 'localhost'
-		else:
-			db_host = '24.52.231.206'
+	if g_forced_hostmoniker is not None:
+		hostmoniker = g_forced_hostmoniker
 	else:
-		db_host = 'localhost'
-	DATABASE_CONNECT_POSITIONAL_ARGS = ("dbname='postgres' user='postgres' host='%s' password='doingthis'" % (db_host),)
+		with open('HOST') as fin:
+			hostmoniker = fin.read().strip()
+	if hostmoniker not in HOSTMONIKER_TO_IP:
+		raise Exception('Unknown host moniker: "%s"' % hostmoniker)
+	host_ip = HOSTMONIKER_TO_IP[hostmoniker]
+	DATABASE_CONNECT_POSITIONAL_ARGS = ("dbname='postgres' user='postgres' host='%s' password='doingthis'" % (host_ip),)
 	DATABASE_CONNECT_KEYWORD_ARGS = {}
-	if ON_PRODUCTION_BOX:
+	DATABASE_DRIVER_MODULE_NAME = 'psycopg2'
+	USE_DB_DRIVER_IN_CURRENT_DIRECTORY = socket.gethostname().endswith('theorem.ca')
+	if USE_DB_DRIVER_IN_CURRENT_DIRECTORY:
 		driver_module = __import__(DATABASE_DRIVER_MODULE_NAME)
 	else:
 		saved_syspath = sys.path
@@ -595,7 +598,7 @@ def purge():
 	if not socket.gethostname().endswith('theorem.ca'):
 		raise Exception('Not running on theorem.ca?')
 
-	use_localhost(True)
+	force_host('theorem')
 
 	curs = conn().cursor()
 	# Delete all rows older than 12 hours:
@@ -616,7 +619,8 @@ def t():
 
 if __name__ == '__main__':
 
-	pass
+	conn()
+
 
 
 

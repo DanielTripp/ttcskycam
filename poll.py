@@ -77,7 +77,6 @@ def poll_once():
 
 if __name__ == '__main__':
 	if len(sys.argv) > 1 and sys.argv[1] == '--once':
-		db.use_localhost(True)
 		poll_once()
 	else:
 		poll_all_routes_forever()
