@@ -4,7 +4,7 @@ import sys, json, os.path
 import vinfo, geom, mc, c, snaptogrid
 from misc import *
 
-FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301'], 'king': ['504']}
+FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301'], 'king': ['504'], 'spadina': ['510']}
 
 CONFIGROUTE_TO_FUDGEROUTE = {}
 for fudgeroute, configroutes in FUDGEROUTE_TO_CONFIGROUTES.items():
@@ -30,18 +30,31 @@ class RouteInfo:
 		self.init_stops_bothdirs(routename_)
 
 	def init_routepts(self, routename_):
-		with open('fudge_route_%s.json' % (routename_)) as fin:
-			routepts = []
-			for raw_routept in json.load(fin):
-				routepts.append(geom.LatLng(raw_routept[0], raw_routept[1]))
-		self.snaptogridcache = snaptogrid.SnapToGridCache([routepts])
+		def read(filename_):
+			with open(filename_) as fin:
+				r = []
+				for raw_routept in json.load(fin):
+					r.append(geom.LatLng(raw_routept[0], raw_routept[1]))
+				return r
+
+		routepts_both_dirs_filename = 'fudge_route_%s.json' % (routename_)
+		if os.path.exists(routepts_both_dirs_filename):
+			routepts = [read(routepts_both_dirs_filename)]
+			self.is_split_by_dir = False
+		else:
+			routepts = [read('fudge_route_%s_dir0.json' % (routename_)), read('fudge_route_%s_dir1.json' % (routename_))]
+			self.is_split_by_dir = True
+		self.snaptogridcache = snaptogrid.SnapToGridCache(routepts)
 		self.routeptidx_to_mofr = []
-		for i in range(len(self.routepts)):
+		for i in range(len(self.routepts(0))):
 			if i==0:
 				self.routeptidx_to_mofr.append(0)
 			else:
-				self.routeptidx_to_mofr.append(self.routeptidx_to_mofr[i-1] + self.routepts[i].dist_m(self.routepts[i-1]))
-		assert len(self.routeptidx_to_mofr) == len(self.routepts)
+				self.routeptidx_to_mofr.append(self.routeptidx_to_mofr[i-1] + self.routepts(0)[i].dist_m(self.routepts(0)[i-1]))
+		assert len(self.routeptidx_to_mofr) == len(self.routepts(0))
+		if self.is_split_by_dir:
+			assert (sum(pt1.dist_m(pt2) for pt1, pt2 in hopscotch(self.routepts(0))) - \
+					sum(pt1.dist_m(pt2) for pt1, pt2 in hopscotch(self.routepts(1)))) < 0.01
 
 	def init_stops_bothdirs(self, routename_):
 		self.stops = {}
@@ -64,17 +77,25 @@ class RouteInfo:
 		snap_result = self.snaptogridcache.snap(post_, {0:50, 1:300, 2:750}[tolerance_])
 		if snap_result is None:
 			return -1
-		routeptidx = snap_result[1].startptidx
+		dir = snap_result[1].polylineidx; routeptidx = snap_result[1].startptidx
 		r = self.routeptidx_to_mofr[routeptidx]
 		if snap_result[2] is not None:
-			r += snap_result[2].dist_m(self.routepts[routeptidx])
+			r += snap_result[2].dist_m(self.routepts(dir)[routeptidx])
 		return int(r)
+
+	def snaptest(self, pt_, tolerance_=0):
+		assert isinstance(pt_, geom.LatLng) and (tolerance_ in (0, 1, 2))
+		snap_result = self.snaptogridcache.snap(pt_, {0:50, 1:300, 2:750}[tolerance_])
+		snapped_pt = (snap_result[0] if snap_result is not None else None)
+		mofr = self.latlon_to_mofr(pt_, tolerance_)
+		resnapped_pts = [self.mofr_to_latlon(mofr, 0), self.mofr_to_latlon(mofr, 1)]
+		return (snapped_pt, mofr, resnapped_pts)
 
 	def max_mofr(self):
 		return int(math.ceil(self.routeptidx_to_mofr[-1]))
 
-	def mofr_to_latlon(self, mofr_):
-		r = self.mofr_to_latlonnheading(mofr_, 0)
+	def mofr_to_latlon(self, mofr_, dir_):
+		r = self.mofr_to_latlonnheading(mofr_, dir_)
 		return (r[0] if r != None else None)
 
 	def mofr_to_heading(self, mofr_, dir_):
@@ -87,7 +108,7 @@ class RouteInfo:
 			return None
 		for i in range(1, len(self.routeptidx_to_mofr)):
 			if self.routeptidx_to_mofr[i] >= mofr_:
-				prevpt = self.routepts[i-1]; curpt = self.routepts[i]
+				prevpt = self.routepts(dir_)[i-1]; curpt = self.routepts(dir_)[i]
 				prevmofr = self.routeptidx_to_mofr[i-1]; curmofr = self.routeptidx_to_mofr[i]
 				pt = curpt.subtract(prevpt).scale((mofr_-prevmofr)/float(curmofr-prevmofr)).add(prevpt)
 				return (pt, prevpt.heading(curpt) if dir_==0 else curpt.heading(prevpt))
@@ -98,14 +119,17 @@ class RouteInfo:
 
 	def general_heading(self, dir_):
 		assert dir_ in (0, 1)
-		startpt, endpt = self.routepts[0], self.routepts[-1]
+		startpt, endpt = self.routepts(0)[0], self.routepts(0)[-1]
 		if dir_:
 			startpt, endpt = endpt, startpt
 		return startpt.heading(endpt)
 
-	@property
-	def routepts(self):
-		return self.snaptogridcache.polylines[0]
+	def routepts(self, dir_):
+		assert dir_ in (0, 1)
+		if self.is_split_by_dir:
+			return self.snaptogridcache.polylines[dir_]
+		else:
+			return self.snaptogridcache.polylines[0]
 
 g_routename_to_info = {}
 
@@ -119,7 +143,7 @@ def get_routeinfo(routename_):
 	if routename in g_routename_to_info:
 		r = g_routename_to_info[routename]
 	else:
-		mckey = '%s-RouteInfo(%s)' % (c.SITE_VERSION, routename)
+		mckey = mc.make_key('RouteInfo', routename)
 		r = mc.client.get(mckey)
 		if not r:
 			r = RouteInfo(routename)
@@ -138,7 +162,7 @@ def get_all_routes_latlons():
 	for fudgeroute in FUDGEROUTES:
 		r_l = []
 		r.append(r_l)
-		for routept in get_routeinfo(fudgeroute).routepts:
+		for routept in get_routeinfo(fudgeroute).routepts(0):
 			r_l.append([routept.lat, routept.lng])
 	return r
 
@@ -189,18 +213,11 @@ def get_route_to_mofr(latlon_):
 			r[route] = mofr
 	return r
 
+def snaptest(fudgeroutename_, pt_, tolerance_=0):
+	return get_routeinfo(fudgeroutename_).snaptest(pt_, tolerance_)
+
+
 if __name__ == '__main__':
 
-	mofr_to_latlonnheading('dundas', 0, 0)
-
-	t0 = time.time()
-	for mofr in [0] + range(-333, 20007, 13):
-		#print '%d => %s' % (mofr, repr(mofr_to_latlonnheading(mofr, 'dundas', 0)))
-		mofr_to_latlonnheading('dundas', mofr, 0)
-	t1 = time.time()
-	print (t1 - t0)
-
-
-
-
+	get_routeinfo('spadina')
 

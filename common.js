@@ -156,17 +156,9 @@ function callpy_sync(module_and_funcname_) {
 function callpy_url(module_and_funcname_, func_args_) {
 	var paramstr = "module_and_funcname="+module_and_funcname_;
 	for(var i=0; i<func_args_.length; i++) {
-		paramstr += "&arg"+i+"="+func_args_[i];
+		paramstr += "&arg"+i+"="+encode_url_paramval(window.JSON.stringify(func_args_[i]));
 	}
 	return "callpy.cgi?"+paramstr;
-}
-
-function cgi_url(cgi_path_, func_args_) {
-	var paramstr = "";
-	for(var i=0; i<func_args_.length; i++) {
-		paramstr += (i==0 ? "?" : "&") + "arg"+i+"="+func_args_[i];
-	}
-	return cgi_path_+paramstr;
 }
 
 function AssertException(message) { this.message = message; }
@@ -178,5 +170,19 @@ function assert(exp, message) {
   if (!exp) {
     throw new AssertException(message);
   }
+}
+
+// For scrambling strings so that they don't look to apache ModSecurity like SQL injection attacks.  
+// See counterpart at misc.py - decode_sql_str().  
+function encode_url_paramval(str_) {
+  var r = '';
+  for(var i=0; i<str_.length; i++) {
+    var ordval = ord(str_.charAt(i));
+    var group = Math.floor(ordval / 10);
+    var sub = ordval - (group*10);
+    var groupchar = chr(ord('a') + group);
+    r += groupchar + sub;
+  }
+  return r;
 }
 

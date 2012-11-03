@@ -11,7 +11,7 @@ TIME_WINDOW_MINUTES = 30
 
 def get_recent_vehicle_locations(fudgeroute_, dir_, current_, time_, log_=False):
 	time_ = massage_time_arg(time_, 15*1000)
-	mckey = '%s-get_recent_vehicle_locations(%s,%d,%d,%d)' % (c.SITE_VERSION, fudgeroute_, dir_, current_, time_)
+	mckey = mc.make_key('get_recent_vehicle_locations', fudgeroute_, dir_, current_, time_)
 	r = mc.client.get(mckey)
 	if r:
 		if log_: printerr('Found in memcache.')
@@ -80,7 +80,7 @@ def between(bound1_, value_, bound2_):
 #         elem 1: speed map - {mofr1: {'kmph': kmph, 'weight': weight}, ...} 
 def get_traffics(fudgeroute_name_, dir_, current_, time_, log_=False):
 	time_ = massage_time_arg(time_, 60*1000)
-	mckey = '%s-get_traffics(%s,%d,%d)' % (c.SITE_VERSION, fudgeroute_name_, dir_, time_)
+	mckey = mc.make_key('get_traffics', fudgeroute_name_, dir_, time_)
 	r = mc.client.get(mckey)
 	if r:
 		if log_: printerr('Found in memcache.')
@@ -92,7 +92,7 @@ def get_traffics(fudgeroute_name_, dir_, current_, time_, log_=False):
 
 def get_traffics_impl(fudgeroute_name_, dir_, time_, current_, log_=False):
 	mofr_to_avgspeedandweight = get_traffic_avgspeedsandweights(fudgeroute_name_, dir_, time_, current_, log_=log_)
-	return [get_traffics_visuals(mofr_to_avgspeedandweight, fudgeroute_name_), \
+	return [get_traffics_visuals(mofr_to_avgspeedandweight, fudgeroute_name_, dir_), \
 			get_traffics__mofr2speed(mofr_to_avgspeedandweight)]
 
 def get_traffics__mofr2speed(mofr_to_avgspeedandweight_):
@@ -104,10 +104,10 @@ def get_traffics__mofr2speed(mofr_to_avgspeedandweight_):
 			r[mofr] = None
 	return r
 
-def get_traffics_visuals(mofr_to_avgspeedandweight_, fudgeroute_name_):
+def get_traffics_visuals(mofr_to_avgspeedandweight_, fudgeroute_name_, dir_):
 	r = []
 	routept1_mofr = 0
-	for routept1, routept2 in hopscotch(routes.get_routeinfo(fudgeroute_name_).routepts):
+	for routept1, routept2 in hopscotch(routes.get_routeinfo(fudgeroute_name_).routepts(dir_)):
 		route_seg_len = routept1.dist_m(routept2)
 		routept2_mofr = routept1_mofr + route_seg_len
 		routept1_mofr_ref = round(routept1_mofr, MOFR_STEP); routept2_mofr_ref = round(routept2_mofr, MOFR_STEP)
