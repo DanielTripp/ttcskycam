@@ -161,6 +161,14 @@ function callpy_url(module_and_funcname_, func_args_) {
 	return "callpy.cgi?"+paramstr;
 }
 
+function cgi_url(cgi_path_, func_args_) {
+	var paramstr = "";
+	for(var i=0; i<func_args_.length; i++) {
+		paramstr += (i==0 ? "?" : "&") + "arg"+i+"="+func_args_[i];
+	}
+	return cgi_path_+paramstr;
+}
+
 function AssertException(message) { this.message = message; }
 AssertException.prototype.toString = function () {
   return 'AssertException: ' + this.message;

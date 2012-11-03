@@ -25,7 +25,9 @@ def get_arg_objvals(vardict_):
 	r = []
 	for arg_strval in get_arg_strvals(vardict_):
 		arg_objval = json.loads(decode_url_paramval(arg_strval))
-		if wants_to_be_a_LatLng(arg_objval):
+		if isinstance(arg_objval, unicode):
+			arg_objval = str(arg_objval)
+		elif wants_to_be_a_LatLng(arg_objval):
 			arg_objval = geom.LatLng(arg_objval[0], arg_objval[1])
 		r.append(arg_objval)
 	return r
