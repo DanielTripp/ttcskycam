@@ -19,7 +19,7 @@
 
 var g_map;
 var g_objects = new Array();
-var g_remofr_marker = null;
+var g_resnapped_markers = [null, null];
 
 function add_info_win(mark_, text_) {
 	(new google.maps.InfoWindow({content: text_, disableAutoPan: true})).open(g_map, mark_);
@@ -106,7 +106,7 @@ function keypress_handler(e) {
 
 function initialize() {
 	init_map();
-	init_mofr_marker();
+	init_snaptest_marker();
 
 	document.onkeypress = keypress_handler;
 	if (document.layers) {
@@ -114,7 +114,7 @@ function initialize() {
 	}
 }
 
-function init_mofr_marker() {
+function init_snaptest_marker() {
 	var marker = new google.maps.Marker({
 		position: new google.maps.LatLng(43.655, -79.44), 
 		map: g_map,
@@ -123,30 +123,40 @@ function init_mofr_marker() {
 		});
 	google.maps.event.addListener(marker, 'dragend', function() {
 		var pos = marker.getPosition();
-		var mofr = latlon_to_mofr(pos, radio_val('fudgeroute'));
-		set_contents('results_mofr', sprintf("( %.6f, %.6f ) ==> %d ", pos.lat(), pos.lng(), mofr));
-		if(g_remofr_marker!=null) {
-			g_remofr_marker.setMap(null);
-			delete g_remofr_marker;
-			g_remofr_marker = null;
+		var route = radio_val('fudgeroute');
+		var snaptest_result = snaptest(pos, (route.substr(0,7) == 'spadina' ? 'spadina' : route));
+		set_contents('snaptest_arg_pt', sprintf("Arg pt: ( %.6f, %.6f )", pos.lat(), pos.lng()));
+
+		if(snaptest_result[0] != null) {
+			set_contents('snaptest_result_snappedpt', sprintf("Snapped: (%.6f, %.6f)", snaptest_result[0][0], snaptest_result[0][1]));
+		} else {
+			set_contents('snaptest_result_snappedpt', 'no snapped point');
 		}
-		if(mofr>=0) {
-			var remofr_latlon = mofr_to_latlon(mofr, radio_val('fudgeroute'));
-			if(remofr_latlon!=null) {
-				g_remofr_marker = new google.maps.Marker({
-					position: remofr_latlon, 
+
+		set_contents('snaptest_result_mofr', sprintf("mofr = %d", snaptest_result[1]));
+
+		for(var i=0; i<2; i++) {
+			if(g_resnapped_markers[i] != null) {
+				g_resnapped_markers[i].setMap(null);
+				delete g_resnapped_markers[i];
+				g_resnapped_markers[i] = null;
+			}
+			if(snaptest_result[2][i] != null) {
+				//alert(snaptest_result[2][0] + 1);
+				var newmarker = new google.maps.Marker({
+					position: new google.maps.LatLng(snaptest_result[2][i][0], snaptest_result[2][i][1]),
 					map: g_map,
-					title:'RE-MOFR',
 					draggable: false
 					});
+				g_resnapped_markers[i] = newmarker;
 			}
 		}
+		set_contents('snaptest_result_resnappedpts', snaptest_result[2]);
 	});
 }
 
-function latlon_to_mofr(glatlon_, fudgeroutename_) {
-	var r = parseInt(get_sync(sprintf('latlon-to-mofr.cgi?lat=%f&lon=%f&fudgeroute=%s', glatlon_.lat(), glatlon_.lng(), fudgeroutename_)));
-	return r;
+function snaptest(glatlon_, fudgeroutename_) {
+	return callpy_sync('routes.snaptest', fudgeroutename_, [glatlon_.lat(), glatlon_.lng()], 1);
 }
 
 function mofr_to_latlon(mofr_, fudgeroutename_) {
@@ -232,7 +242,7 @@ function set_fudge_route_stops_bothdirs(route_) {
 }
 
 function set_fudge_route_stops_singledir(route_, dir_) {
-	var stops = $.parseJSON(get_sync(sprintf('stops_%s_dir%d.json', route_, dir_)));
+	var stops = $.parseJSON(get_sync(sprintf('stops_%s_dir%d.json', (route_.substr(0, 7) == 'spadina' ? 'spadina' : route_), dir_)));
 	for(var i in stops) {
 		var stop = stops[i];
 		var stoptag = stop["stoptag"], lat = stop["lat"], lon = stop["lon"];
@@ -264,11 +274,21 @@ function draw_stop(lat_, lon_, dir_) {
 }
 
 function set_fudge_route_routepts(route_) {
-	var route_points = $.parseJSON(get_sync(sprintf('fudge_route_%s.json', route_)));
-	//draw_path_polyline(latlonfloatarrays_to_googlemaps(route_points), 'rgb(255,0,0)');
-	var glatlons = latlonfloatarrays_to_googlemaps(route_points);
-	for(var i=0; i<glatlons.length; i++) {
-		add_buildfudgeroute_marker(glatlons[i]);
+	if(route_ == 'spadinadir0' || route_ == 'spadinadir1') {
+		var filename = (route_ == 'spadinadir0' ? 'fudge_route_spadina_dir0.json' : 'fudge_route_spadina_dir1.json');
+		var route_points = $.parseJSON(get_sync(filename));
+		//draw_path_polyline(latlonfloatarrays_to_googlemaps(route_points), 'rgb(255,0,0)');
+		var glatlons = latlonfloatarrays_to_googlemaps(route_points);
+		for(var i=0; i<glatlons.length; i++) {
+			add_buildfudgeroute_marker(glatlons[i]);
+		}
+	} else {
+		var route_points = $.parseJSON(get_sync(sprintf('fudge_route_%s.json', route_)));
+		//draw_path_polyline(latlonfloatarrays_to_googlemaps(route_points), 'rgb(255,0,0)');
+		var glatlons = latlonfloatarrays_to_googlemaps(route_points);
+		for(var i=0; i<glatlons.length; i++) {
+			add_buildfudgeroute_marker(glatlons[i]);
+		}
 	}
 }
 
@@ -447,6 +467,8 @@ function redraw_buildfudgeroute_path() {
 				</tr>
 				<tr>
 					<td>
+						<input type="radio" name="fudgeroute" value="spadinadir0" />Spadina dir 0<br/>
+						<input type="radio" name="fudgeroute" value="spadinadir1" />Spadina dir 1<br/>
 						<input type="radio" name="fudgeroute" value="king" />King<br/>
 						<input type="radio" name="fudgeroute" value="queen" />Queen<br/>
 						<input type="radio" name="fudgeroute" value="dundas" checked="checked" />Dundas<br/>
@@ -474,7 +496,10 @@ function redraw_buildfudgeroute_path() {
 		<br/>
 		<br/>
 		<div>
-			<p id="results_mofr">Results will go here</p>
+			<p id="snaptest_arg_pt">...</p>
+			<p id="snaptest_result_snappedpt">...</p>
+			<p id="snaptest_result_mofr">...</p>
+			<p id="snaptest_result_resnappedpts">...</p>
 			<p id="results">Results will go here</p>
 		</div>
   </body>

@@ -300,30 +300,10 @@ function slider_float_to_timeidx(floatval_) {
 	}
 }
 
-function encode_sql_str_1(str_) {
-	var r = '';
-	for(var i=0; i<str_.length; i++) {
-		r += chr(ord(str_.charAt(i)) + 2);
-	}
-	return r;
-}
-
-function encode_sql_str(str_) {
-	var r = '';
-	for(var i=0; i<str_.length; i++) {
-		var ordval = ord(str_.charAt(i));
-		var group = Math.floor(ordval / 10);
-		var sub = ordval - (group*10);
-		var groupchar = chr(ord('a') + group);
-		r += groupchar + sub;
-	}
-	return r;
-}
-
 function run_query1(whereclause_, maxrows_, interpbytime_) {
 	inc_loading_get_count();
 	try {
-		display_vis(get_sync("debug-vehicle-query1.cgi?whereclause="+encode_sql_str(whereclause_)+"&maxrows="+maxrows_+"&interpbytime="+interpbytime_));
+		display_vis(get_sync("debug-vehicle-query1.cgi?whereclause="+encode_url_paramval(whereclause_)+"&maxrows="+maxrows_+"&interpbytime="+interpbytime_));
 		if($('#collapseanimation_checkbox').is(":checked")) {
 			collapse_animation();
 		}

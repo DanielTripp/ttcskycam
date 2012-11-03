@@ -60,7 +60,8 @@ def windowiter(iterable_, n_):
  	except StopIteration:
 		pass
 
-def decode_sql_str(str_):
+# This is the counterpart to common.js - encode_url_paramval(). 
+def decode_url_paramval(str_):
 	r = ''
 	for i in range(0, len(str_), 2):
 		group = ord(str_[i]) - ord('a')

@@ -17,13 +17,16 @@ def get_arg_strvals(vardict_):
 		argi+=1
 	return r
 
+def wants_to_be_a_LatLng(obj_):
+	return isinstance(obj_, MutableSequence) and len(obj_) == 2 and isinstance(obj_[0], float) and isinstance(obj_[1], float) \
+			and (43.0 < obj_[0] < 44.0) and (-80 < obj_[1] < -79)
+
 def get_arg_objvals(vardict_):
 	r = []
 	for arg_strval in get_arg_strvals(vardict_):
-		try:
-			arg_objval = json.loads(arg_strval)
-		except ValueError:
-			arg_objval = arg_strval
+		arg_objval = json.loads(decode_url_paramval(arg_strval))
+		if wants_to_be_a_LatLng(arg_objval):
+			arg_objval = geom.LatLng(arg_objval[0], arg_objval[1])
 		r.append(arg_objval)
 	return r
 
@@ -45,7 +48,7 @@ class OurJSONEncoder(json.JSONEncoder):
 
 vars = urlparse.parse_qs(os.getenv('QUERY_STRING'))
 module_and_funcname = vars['module_and_funcname'][0]
-allowables = ['web.get_vehicle_svg', 'traffic.get_traffics', 'traffic.get_recent_vehicle_locations', 'routes.get_all_routes_latlons', 'routes.get_endpoint_info']
+allowables = ['web.get_vehicle_svg', 'traffic.get_traffics', 'traffic.get_recent_vehicle_locations', 'routes.get_all_routes_latlons', 'routes.get_endpoint_info', 'routes.snaptest']
 if (module_and_funcname in allowables) or (os.getenv('HTTP_REFERER').endswith('test.24972394874134958.html')):
 	modulename = module_and_funcname.split('.')[0]
 	funcname = module_and_funcname.split('.')[1]
