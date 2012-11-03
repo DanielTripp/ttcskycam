@@ -37,6 +37,8 @@ def get_stoptag_and_latlon_list(dom_, direction_):
 	r.sort(key=lambda x: x['stoptag'])
 	return r
 
+if len(sys.argv) < 3:
+	sys.exit('Need two arguments: 1) a filename containing routeConfig output from NextBus, and 2) a direction (eg. "0" or "1").')
 routeconfig_filename = sys.argv[1]
 direction = sys.argv[2]
 if direction in ('0', '1'):
