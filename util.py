@@ -1,47 +1,115 @@
 #!/usr/bin/python2.6
 
-import sys, subprocess, re, time, xml.dom, xml.dom.minidom, threading, bisect, datetime, calendar, math, json
-from collections import defaultdict
-from itertools import ifilter
+import pprint
 import vinfo, db, routes, geom, mc, yards, c
 from misc import *
 
-MILLIS_IN_A_DAY = 1000*60*60*24
-
-def get_vids(route_, day_start_time_):
-	sql = 'select distinct(vehicle_id) from ttc_vehicle_locations where route_tag = %s and time >  %s and time < %s + '+str(MILLIS_IN_A_DAY)
-	curs = db.g_conn.cursor()
-	curs.execute(sql, [route_, day_start_time_, day_start_time_])
+def get_vids(route_, start_time_, end_time_):
+	assert isinstance(start_time_, (int,long)) and isinstance(end_time_, (int,long))
+	sql = 'select distinct(vehicle_id) from ttc_vehicle_locations where route_tag = %s and time >  %s and time < %s'
+	curs = db.conn().cursor()
+	curs.execute(sql, [route_, start_time_, end_time_])
 	r = []
 	for row in curs:
 		r.append(row[0])
 	curs.close()
 	return r
 
-def find_wrong_dirs(route_, day_start_time_):
-	vids = get_vids(route_, day_start_time_)
-	print len(vids)
+def get_maximal_sublists2(list_, predicate_):
+	cur_sublist = None
+	r = []
+	for e1, e2 in hopscotch(list_):
+		if predicate_(e1, e2):
+			if cur_sublist == None:
+				cur_sublist = [e1]
+				r.append(cur_sublist)
+			cur_sublist.append(e2)
+		else:
+			cur_sublist = None
+	return r
+
+def is_at_end_of_route(vi_):
+	return vi_.mofr < 100 or vi_.mofr > routes.max_mofr(vi_.route_tag) - 100
+
+def is_going_wrong_way(vi1_, vi2_):
+	if (vi1_.dir_tag_int == vi2_.dir_tag_int) and (vi1_.mofr!=-1 and vi2_.mofr!=-1) and (vi1_.dir_tag_int in (0, 1)) \
+			and not is_at_end_of_route(vi1_) and not is_at_end_of_route(vi2_):
+		dir = vi1_.dir_tag_int
+		if dir==0:
+			return vi1_.mofr > vi2_.mofr
+		else:
+			return vi2_.mofr > vi1_.mofr
+	else:
+		return False
+
+
+def print_old_wrong_dirs(route_, day_start_time_):
+	for vid, stretches in get_old_wrong_dirs(route_, day_start_time_, day_start_time_ + 1000*60*60*24).items():
+		for stretch in stretches:
+			print 'vid %s going wrong way for %d readings - from %s to %s.'\
+				  % (vid, len(stretch), em_to_str_hms(stretch[0].time), em_to_str_hms(stretch[-1].time))
+
+def get_old_wrong_dirs(route_, start_time_, end_time_):
+	vids = get_vids(route_, start_time_, end_time_)
+	r = {}
 	for vid in vids:
-		print vid
-		curs = db.g_conn.cursor()
-		sql = 'select dir_tag, heading, vehicle_id, lat, lon, predictable, route_tag, secs_since_report, time_epoch, time from ttc_vehicle_locations where vehicle_id = %s and time >  %s and time < %s + '+str(MILLIS_IN_A_DAY)+' order by time' 
-		curs.execute(sql, [vid, day_start_time_, day_start_time_])
-		for vis in windowiter((vinfo.VehicleInfo(*row) for row in curs), 5):
-			if all(vi0.dir_tag_int == vi1.dir_tag_int for vi0, vi1 in hopscotch(vis)) \
-					and none(vi.mofr == -1 or vi.mofr < 100 or vi.mofr > routes.max_mofr(vi.route_tag) - 100 for vi in vis):
-				dir_tag_int = vis[0].dir_tag_int
-				if dir_tag_int in (0, 1):
-					if dir_tag_int == 0:
-						going_the_right_way = all(vi1.mofr >= vi0.mofr for vi0, vi1 in hopscotch(vis))
-					else:
-						going_the_right_way = all(vi1.mofr <= vi0.mofr for vi0, vi1 in hopscotch(vis))
-					if not going_the_right_way:
-						print 'not going the right way: vid %s from %s to %s'  % (vid, vis[0].timestr, vis[-1].timestr)
-						
+		curs = db.conn().cursor()
+		sql = 'select '+db.VI_COLS+' from ttc_vehicle_locations where vehicle_id = %s and route_tag = %s and time >  %s and time < %s order by time'
+		curs.execute(sql, [vid, route_, start_time_, end_time_])
+		vis = []
+		for row in curs:
+			vis.append(vinfo.VehicleInfo(*row))
 		curs.close()
+
+		wrong_dir_stretches = get_maximal_sublists2(vis, is_going_wrong_way)
+		wrong_dir_stretches = filter(lambda l: len(l) >= 5, wrong_dir_stretches)
+		r[vid] = wrong_dir_stretches
+	return r
+
+def get_current_wrong_dirs(start_time_ = now_em()-1000*60*30):
+	mckey = mc.make_key('get_current_wrong_dirs', start_time_)
+	r = mc.client.get(mckey)
+	if not r:
+		r = get_current_wrong_dirs_impl(start_time_)
+		mc.client.set(mckey, r)
+	return r
+
+def get_current_wrong_dirs_impl(start_time_ = now_em()-1000*60*30):
+	end_time = start_time_ + 1000*60*30
+	r = {}
+	for configroute in routes.CONFIGROUTES:
+		vids = get_vids(configroute, start_time_, end_time)
+		for vid in vids:
+			curs = db.conn().cursor()
+			sql = 'select '+db.VI_COLS+' from ttc_vehicle_locations where vehicle_id = %s and route_tag = %s and time >  %s and time < %s order by time'
+			curs.execute(sql, [vid, configroute, start_time_, end_time])
+			vis = []
+			for row in curs:
+				vis.append(vinfo.VehicleInfo(*row))
+			curs.close()
+
+			num_recent_vis_to_scutinize = 5
+			if len(vis) >= num_recent_vis_to_scutinize:
+				vis_under_scutiny = vis[-num_recent_vis_to_scutinize:]
+				if all(is_going_wrong_way(vi1, vi2) for vi1, vi2 in hopscotch(vis_under_scutiny)):
+					for prev_vi, vi in hopscotch(vis_under_scutiny):
+						vi.heading = prev_vi.latlng.heading(vi.latlng)
+					vis_under_scutiny[0].heading = vis_under_scutiny[1].heading
+					r[vid] = vis_under_scutiny
+	return r
+
+def print_current_wrong_dirs(start_time_ = now_em()-1000*60*30):
+	for vid, vis in get_current_wrong_dirs(start_time_).items():
+		print 'vid %s is going the wrong way.' % vid
+		for vi in vis:
+			print vi
+
 
 if __name__ == '__main__':
 
-	find_wrong_dirs('505', str_to_em('2012-10-01 00:00'))
+	#print_old_wrong_dirs('301', str_to_em('2012-11-02 00:00'))
+	#print_current_wrong_dirs(str_to_em('2012-10-02 01:00'))
+	print_current_wrong_dirs()
+
 
 

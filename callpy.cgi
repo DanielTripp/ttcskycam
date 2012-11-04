@@ -3,7 +3,7 @@
 print 'Content-type: text/plain\n'
 
 import sys, os, urlparse, json
-import geom
+import geom, vinfo
 from misc import *
 
 def get_arg_strvals(vardict_):
@@ -45,15 +45,18 @@ class OurJSONEncoder(json.JSONEncoder):
 	def default(self, o):
 		if isinstance(o, geom.LatLng):
 			return (o.lat, o.lng)
+		elif isinstance(o, vinfo.VehicleInfo):
+			return o.to_json_dict()
 		else:
 			return json.JSONEncoder.default(self, o)
 
 vars = urlparse.parse_qs(os.getenv('QUERY_STRING'))
 module_and_funcname = vars['module_and_funcname'][0]
-allowables = ['web.get_vehicle_svg', 'traffic.get_traffics', 'traffic.get_recent_vehicle_locations', 'routes.get_all_routes_latlons', 'routes.get_endpoint_info', 'routes.snaptest']
+allowables = ['web.get_vehicle_svg', 'traffic.get_traffics', 'traffic.get_recent_vehicle_locations', 'routes.get_all_routes_latlons', 'routes.get_endpoint_info', 'routes.snaptest', 'util.get_current_wrong_dirs']
 if (module_and_funcname in allowables) or (os.getenv('HTTP_REFERER').endswith('test.24972394874134958.html')):
 	modulename = module_and_funcname.split('.')[0]
 	funcname = module_and_funcname.split('.')[1]
 	args = get_arg_objvals(vars)
-	print json.dumps(getattr(__import__(modulename), funcname)(*args), cls=OurJSONEncoder)
+	r = getattr(__import__(modulename), funcname)(*args)
+	print json.dumps(r, cls=OurJSONEncoder)
 

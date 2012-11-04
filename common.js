@@ -194,3 +194,17 @@ function encode_url_paramval(str_) {
   return r;
 }
 
+function vi_to_str(vi_) {
+	var dir_tag;
+	if(vi_.dir_tag == null) {
+		dir_tag = '(null)';
+	} else if(vi_.dir_tag.length == 0) {
+		dir_tag = '(blank)';
+	} else {
+		dir_tag = "'"+vi_.dir_tag+"'";
+	}
+	return sprintf('%s  route: %4s, vehicle: %s, dir: %-12s, (  %2.5f, %2.5f  ) , mofr: %d, heading: %3d %s', 
+			vi_.timestr, vi_.route_tag, vi_.vehicle_id, dir_tag, vi_.lat, vi_.lon, vi_.mofr, vi_.heading, 
+				(vi_.predictable ? '' : 'UNPREDICTABLE'));
+}
+
