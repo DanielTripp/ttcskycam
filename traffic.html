@@ -777,7 +777,7 @@ function get_est_trip_time() {
 		//alert('adding distance '+dist_m+', speed '+speed_mps+', makes for '+(dist_m/speed_mps));
 		r_secs += dist_m/speed_mps;
 	}
-	return Math.round(r_secs/60);
+	return r_secs/60;
 }
 
 // returns -1 if we have no traffic data for that mofr step. 
@@ -827,16 +827,19 @@ function round(x_, step_) {
 function update_trip_time() {
 	var text = '';
 	if(g_route!=null) {
-		var time = get_est_trip_time();
-		if(time >= 0) {
-			text = sprintf('%d minutes.', time);
+		var trip_time_minutes = get_est_trip_time();
+		if(trip_time_minutes >= 0) {
+			var km_to_travel = Math.abs(g_orig_mofr - g_dest_mofr)/1000.0;
+			var avg_speed_kmph = km_to_travel/(trip_time_minutes/60.0);
+			text = sprintf('Estimated trip time: %d minutes.  (%.1f kilometres - %.1f km/hour on average.)', 
+					Math.round(trip_time_minutes), km_to_travel, avg_speed_kmph);
 		} else {
-			text = '(Could not estimate trip time.  No recent traffic for some parts of the trip.)';
+			text = 'Could not estimate trip time.  No recent traffic for some parts of the trip.';
 		}
 	} else {
-		text = '(Could not estimate trip time.  Start / end markers have not selected a route.)';
+		text = 'Could not estimate trip time.  Start / end markers have not selected a route.';
 	}
-	set_contents('p_trip_time_info', 'Estimated trip time: '+text);
+	set_contents('p_trip_time_info', text);
 }
 
 // kmph_ == null ==> no data available. 
