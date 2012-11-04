@@ -208,3 +208,5 @@ function vi_to_str(vi_) {
 				(vi_.predictable ? '' : 'UNPREDICTABLE'));
 }
 
+eval(get_sync("js/json2.js"));
+
