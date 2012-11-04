@@ -30,7 +30,7 @@ var g_play_timer = null;
 var g_minute_to_vid_to_vi = null;
 /* current time location (index into g_minute_to_vid_to_vi and g_times) of the animation. */
 var g_cur_minute = 0;
-/* contains date/time strings.  same size as g_minute_to_vid_to_vi.  */
+/* Contains date/time strings.  same size as g_minute_to_vid_to_vi.  Each element is a minute. */
 var g_times = null;
 var g_vid_to_static_vehicle_marker = new Array();
 var g_vid_to_heading_to_moving_vehicle_marker = null;
@@ -140,7 +140,11 @@ function refresh_vehicles_from_server() {
 				draw_static_vehicles();
 				create_moving_vehicle_markers();
 				create_vid_checkboxes();
-				g_cur_minute = 0;
+				if(g_cur_minute >= g_times.length) { // want to keep animation going smoothly if possible - but if eg. route is shutting 
+						// down for the night, then this set of vehicle locations might have fewer than the previous one.  
+						// Not worth it to fuss about overtime here. 
+					g_cur_minute = 0;
+				}
 				show_cur_minute_vehicles();
 				if(g_playing) {
 					g_play_timer = setTimeout('moving_vehicles_timer_func()', MOVING_VEHICLES_ANIM_INTERVAL_MS);
