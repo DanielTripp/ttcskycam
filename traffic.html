@@ -566,9 +566,11 @@ function set_play_buttons_appropriately() {
 function on_playpause_clicked() {
 	g_playing = !g_playing;
 	set_play_buttons_appropriately();
-	if(g_playing) {
+	if(g_playing) { // go from paused to playing: 
+		schedule_refresh_data_from_server();
 		moving_vehicles_timer_func();
-	} else {
+	} else { // go from playing to paused: 
+		stop_refresh_data_from_server_timer();
 		stop_play_timer();
 		if(g_cur_minute > g_times.length-1) {
 			g_cur_minute = g_times.length-1;
@@ -692,7 +694,7 @@ function on_trip_mark_moved() {
 					if(g_route!=null) {
 						refresh_traffic_and_vehicles_from_server();
 						if(is_traffictype_current()) {
-							g_refresh_data_from_server_timer = setTimeout('refresh_data_from_server_timer_func()', REFRESH_INTERVAL_MS);
+							schedule_refresh_data_from_server();
 						}
 					} else {
 						update_trip_time();
