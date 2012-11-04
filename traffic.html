@@ -850,7 +850,7 @@ function draw_traffic_line(start_latlon_, end_latlon_, kmph_, mofr_) {
 		map: g_map, 
 		strokeColor: kmph_to_color(kmph_), 
 		strokeWeight: line_width, 
-		zIndex: -5, 
+		zIndex: -5
 	});
 	g_traffic_lines.push(line);
 	if(kmph_==null) {  // draw additional grey line behind, to make the white stand out. 
@@ -859,7 +859,7 @@ function draw_traffic_line(start_latlon_, end_latlon_, kmph_, mofr_) {
 			map: g_map, 
 			strokeColor: 'rgb(150,150,150)', 
 			strokeWeight: line_width+1, 
-			zIndex: -6, 
+			zIndex: -6
 		});
 		g_traffic_lines.push(line_behind);
 	}
