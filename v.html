@@ -157,26 +157,6 @@ function set_route(route_) {
 	alert("route was set: "+route_);
 }
 
-function vi_to_str_short(vi_) {
-	return sprintf('%s vid: %s, %s/%s (%2.5f, %2.5f) heading: %3d%s', 
-			vi_.timestr, vi_.vehicle_id, vi_.route_tag, vi_.dir_tag, vi_.lat, vi_.lon, vi_.heading, 
-				(vi_.predictable ? '' : ' UNPREDICTABLE'));
-}
-
-function vi_to_str_long(vi_) {
-	var dir_tag;
-	if(vi_.dir_tag == null) {
-		dir_tag = '(null)';
-	} else if(vi_.dir_tag.length == 0) {
-		dir_tag = '(blank)';
-	} else {
-		dir_tag = "'"+vi_.dir_tag+"'";
-	}
-	return sprintf('%s  route: %4s, vehicle: %s, dir: %-12s, (  %2.5f, %2.5f  ) , mofr: %d, heading: %3d %s', 
-			vi_.timestr, vi_.route_tag, vi_.vehicle_id, dir_tag, vi_.lat, vi_.lon, vi_.mofr, vi_.heading, 
-				(vi_.predictable ? '' : 'UNPREDICTABLE'));
-}
-
 function display_vis(vis_json_str_) {
 	var vis_by_time = eval(vis_json_str_);
 	display_vis_html(vis_by_time);
@@ -247,7 +227,7 @@ function make_vi_marker(vi_, add_infowin_) {
 }
 
 function get_vi_marker_text(vi_) {
-	return vi_to_str_long(vi_);
+	return vi_to_str(vi_);
 }
 
 function set_contents(id_, contents_) {
@@ -260,7 +240,7 @@ function display_vis_html(vis_by_time_) {
 		var vis = vis_by_time_[i];
 		for(var j=1; j<vis.length; j++) {
 			vi = vis[j];
-			r += vi_to_str_long(vi)+"\n";
+			r += vi_to_str(vi)+"\n";
 		}
 	}
 	r += "</pre>";

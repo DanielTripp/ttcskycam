@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html>
+  <head>
+		<title>wrongdirs</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <style type="text/css">
+      html { height: 100% }
+      body { height: 70%; margin: 0; padding: 0 }
+    </style>
+		<link type="text/css" href="css/ui-lightness/jquery-ui-1.8.17.custom.css" rel="stylesheet" />
+    <script type="text/javascript"
+      src="http://maps.googleapis.com/maps/api/js?sensor=false">
+    </script>
+		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
+		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
+		<script type="text/javascript" src="js/jquery-ui-1.8.17.custom.min.js"></script>
+		<script type="text/javascript" src="js/jquery-ui-timepicker-addon.js"></script>
+		<script type="text/javascript" src="js/buckets-minified.js"></script>
+		<script type="text/javascript" src="common.js"></script>
+    <script type="text/javascript">
+
+var g_vid_to_vis = null;
+// keys = string, value = buckets.LinkedList 
+var g_vid_to_markers = new buckets.Dictionary();
+
+
+var g_zoom_to_vehicle_size = [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 10, 13, 15, 25, 40, 50, 60, 70, 80, 100, 130, 100, ];
+
+function get_vehicle_size(zoom_) {
+	if(0 <= zoom_ && zoom_ < g_zoom_to_vehicle_size.length) {
+		return g_zoom_to_vehicle_size[zoom_];
+	} else {
+		return g_zoom_to_vehicle_size[g_zoom_to_vehicle_size.length];
+	}
+}
+
+function make_vehicle_marker(vid_, heading_, lat_, lon_, current_) {
+	var color = 'rgb(100,100,100)';
+	var size = get_vehicle_size(g_map.getZoom());
+	var marker = new google.maps.Marker({
+			position: new google.maps.LatLng(lat_, lon_),
+			map: g_map,
+			draggable: false,
+			icon: new google.maps.MarkerImage(cgi_url('get_vehicle_svg.cgi', [size, heading_, color, (current_ ? 0.8 : 0.3)]), 
+					null, null, new google.maps.Point(size/2, size/2)),
+			visible: true 
+		});
+	marker.setVisible(true);
+	return marker;
+}
+
+function initialize() {
+
+	init_map();
+	google.maps.event.addListener(g_map, 'zoom_changed', function() {
+		redraw_vehicles();
+	});
+	google.maps.event.addListener(g_map, 'bounds_changed', function() {
+		show_vehicle_info_text();
+	});
+	draw_all_routes();
+
+	callpy('util.get_current_wrong_dirs', 
+			function(r_) {
+				g_vid_to_vis = r_;
+				redraw_vehicles();
+				var d = new Date();
+				set_contents('p_last_updated', sprintf('Last updated at %02d:%02d:%02d', d.getHours(), d.getMinutes(), d.getSeconds()));
+			});
+
+}
+
+// Units have no meaning.  Result will be scewed due to the earth not being flat.  Doesn't matter for this purpose. 
+function get_distance(latlng1_, latlng2_) {
+	return Math.sqrt(Math.pow(latlng1_[0]-latlng2_[0], 2) + Math.pow(latlng1_[1]-latlng2_[1], 2));
+}
+
+// ... for whatever vehicle is on the map, closest to the center of the current viewport. 
+function show_vehicle_info_text() {
+	var vid = get_center_vid_in_maps_viewport();
+	if(vid == null) {
+		set_contents('p_vehicle_info', '<b>Found no vehicle</b><br/>');
+	} else {
+		var vis = g_vid_to_vis[vid];
+		var contents = sprintf('<b>vid %s, %s, %d vehicles total</b><br/><br/>', vid, vis[vis.length-1].timestr, g_vid_to_markers.size());
+		for(var i in vis) {
+			var vi = vis[i];
+			contents += vi_to_str(vi) + '<br/>-------<br/>';
+		}
+		set_contents('p_vehicle_info', contents);
+	}
+}
+
+function get_center_vid_in_maps_viewport() {
+	var ne = g_map.getBounds().getNorthEast(), sw = g_map.getBounds().getSouthWest();
+	var center = [(ne.lat() + sw.lat())/2, (ne.lng() + sw.lng())/2];
+	var min_distance = null; min_vid = null;
+	for(var vid in g_vid_to_vis) {
+		var vis = g_vid_to_vis[vid];
+		for(var i in vis) {
+			var vi = vis[i];
+			var distance = get_distance([vi.lat, vi.lon], center);
+			if((min_distance==null) || (min_distance > distance)) {
+				min_distance = distance;
+				min_vid = vi.vehicle_id;
+			}
+		}
+	}
+	return min_vid;
+}
+
+function redraw_vehicles() {
+	g_vid_to_markers.forEach(function(vid, markers) {
+		markers.forEach(function(marker) {
+			marker.setMap(null);
+			delete marker;
+		});
+	});
+	g_vid_to_markers.clear();
+	for(var vid in g_vid_to_vis) {
+		var vis = g_vid_to_vis[vid];
+		g_vid_to_markers.set(vid, new buckets.LinkedList());
+		for(var i in vis) {
+			var vi = vis[i];
+			var is_latest_vi = (i == vis.length-1);
+			g_vid_to_markers.get(vid).add(make_vehicle_marker(vid, vi.heading, vi.lat, vi.lon, is_latest_vi));
+		}
+	}
+
+}
+
+function draw_all_routes() {
+	callpy('routes.get_all_routes_latlons', 
+			function(r_) {
+				draw_routes(r_);
+			});
+}
+
+function draw_routes(routes_) {
+	for(var i=0; i<routes_.length; i++) {
+		var latlngs = new Array();
+		for(var j=0; j<routes_[i].length; j++) {
+			var pt = routes_[i][j];
+			latlngs.push(new google.maps.LatLng(pt[0], pt[1]));
+		}
+		var polyline = new google.maps.Polyline({
+			path: latlngs, 
+			strokeWeight: 3, 
+			strokeOpacity: 0.3, 
+			strokeColor: 'rgb(50,50,50)', 
+			zIndex: -10, 
+			map: g_map
+		});
+	}
+}
+
+$(document).ready(initialize);
+
+    </script>
+  </head>
+  <body>
+		<div id="map_canvas" style="width:100%; height:100%"></div>
+		<div>
+			<img id="loading_img" src="loading.gif" style="visibility:hidden"/>&nbsp; &nbsp; &nbsp; &nbsp; <br/>
+			<br/>
+			<p id="p_vehicle_info">...</p>
+			<span id="p_last_updated">...</span> 
+		</div>
+  </body>
+</html>
