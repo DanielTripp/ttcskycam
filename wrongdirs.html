@@ -66,6 +66,7 @@ function initialize() {
 				redraw_vehicles();
 				var d = new Date();
 				set_contents('p_last_updated', sprintf('Last updated at %02d:%02d:%02d', d.getHours(), d.getMinutes(), d.getSeconds()));
+                show_vehicle_info_text();
 			});
 
 }
