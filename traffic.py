@@ -31,14 +31,7 @@ def massage_time_arg(time_, now_round_step_millis_):
 	return round_down(r, now_round_step_millis_)
 
 def get_recent_vehicle_locations_impl(fudgeroute_, dir_, current_, time_, log_=False):
-	r = []
-	for timeslice in db.query2(fudgeroute_, TIME_WINDOW_MINUTES, dir_, current_, time_window_end_=time_, log_=log_):
-		r_e = []
-		r.append(r_e)
-		r_e.append(timeslice[0])
-		for vi in timeslice[1:]:
-			r_e.append(vi.to_json_dict())
-	return r
+	return db.get_recent_vehicle_locations(fudgeroute_, TIME_WINDOW_MINUTES, dir_, current_, time_window_end_=time_, log_=log_)
 
 def get_vid_to_vis_from_db(fudgeroute_name_, dir_, time_, log_=False):
 	vis = []

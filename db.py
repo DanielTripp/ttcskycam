@@ -238,7 +238,7 @@ def query1(whereclause_, maxrows_, interp_by_time_):
 def make_whereclause_safe(whereclause_):
 	return re.sub('(?i)insert|delete|drop|create|truncate|alter|update|;', '', whereclause_)
 
-def query2(fudgeroute_, num_minutes_, direction_, current_conditions_, time_window_end_, log_=False):
+def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, current_conditions_, time_window_end_, log_=False):
 	assert type(fudgeroute_) == str and type(num_minutes_) == int and direction_ in (0,1)
 	r = []
 	configroutes = routes.fudgeroute_to_configroutes(fudgeroute_)
