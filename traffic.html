@@ -410,7 +410,7 @@ function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
 			position: new google.maps.LatLng(lat_, lon_),
 			map: g_map,
 			draggable: false,
-			icon: new google.maps.MarkerImage(cgi_url('get_vehicle_svg.cgi', [size, heading_, color, (static_aot_moving_ ? 0.8 : 0.3)]), 
+			icon: new google.maps.MarkerImage(cgi_url('get_vehicle_image.cgi', [size, heading_, color, (static_aot_moving_ ? 0.8 : 0.3)]), 
 					null, null, new google.maps.Point(size/2, size/2)),
 			visible: false
 		});
@@ -523,7 +523,7 @@ function initialize() {
 		set_contents("p_zoom_info", "zoom: "+g_map.getZoom());
 	});
 	var origlat, origlon, destlat, destlon;
-	if(true) { // dundas 
+	if(false) { // dundas 
 		if(false) { // eastbound 
 			origlat=43.6492799; origlon=-79.42095; destlat=43.65085; destlon=-79.4128799;
 		} else {
@@ -986,8 +986,8 @@ $(document).ready(initialize);
 			<p id="p_trip_endpoint_info"></p>
 			<p id="p_vid_checkboxes"></p>
 			<p id="p_temp"></p>
-			<input type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()" checked="checked"   />Now 
-			<input type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()"  />Past
+			<input type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()" checked="checked"  />Now 
+			<input type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()"   />Past
 			<input type="text" name="datetimepicker" id="datetimepicker" value="" />
 		</div>
   </body>
