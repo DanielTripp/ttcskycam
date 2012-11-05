@@ -4,7 +4,7 @@ if [ "$#" == 1 ] ; then
 	file="$1"
 	rsync -avz ./"$file" dt@theorem.ca:~/web/ttc-traffic-reports/dev2039462378923789/"$file"
 elif [ "$#" == 0 ] ; then
-	rsync -avz . dt@theorem.ca:~/web/ttc-traffic-reports/dev2039462378923789
+	rsync -avz --delete . dt@theorem.ca:~/web/ttc-traffic-reports/dev2039462378923789
 else
 	echo 'Need 0 or 1 arguments.'
 fi
