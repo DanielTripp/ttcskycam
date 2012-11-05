@@ -71,7 +71,7 @@ function initialize() {
 
 }
 
-// Units have no meaning.  Result will be scewed due to the earth not being flat.  Doesn't matter for this purpose. 
+// Units have no meaning.  Result will be skewed due to the earth not being flat.  Doesn't matter for this purpose.
 function get_distance(latlng1_, latlng2_) {
 	return Math.sqrt(Math.pow(latlng1_[0]-latlng2_[0], 2) + Math.pow(latlng1_[1]-latlng2_[1], 2));
 }
