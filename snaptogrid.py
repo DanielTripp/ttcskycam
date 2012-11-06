@@ -6,7 +6,7 @@ import math
 import geom
 from misc import *
 
-LATSTEP = 0.0035; LNGSTEP = 0.005
+LATSTEP = 0.00175; LNGSTEP = 0.0025
 
 # Grid squares are offset from a point that has no large importance, it just makes for more easily
 # readable values during debugging:
