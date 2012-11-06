@@ -74,13 +74,19 @@ class LineSeg(object):
 		self.start = start_
 		self.end = end_
 
+	def __str__(self):
+		return '[%s -> %s]' % (self.start, self.end)
+
+	def __repr__(self):
+		return self.__str__()
+
 class SnapToGridCache(object):
 
 	def __init__(self, polylines_):
 		assert isinstance(polylines_[0][0], geom.LatLng)
 		self.latstep = LATSTEP; self.lngstep = LNGSTEP
 		self.polylines = polylines_
-		self.gridsquare_to_linesegaddrs = defaultdict(lambda: set())
+		self.gridsquare_to_linesegaddrs = defaultdict(lambda: set()) # key: GridSquare.  value: set of LineSegAddr
 		for polylineidx, polyline in enumerate(self.polylines):
 			for startptidx in range(0, len(polyline)-1):
 				linesegstartgridsquare = GridSquare(polyline[startptidx])
@@ -144,6 +150,16 @@ class SnapToGridCache(object):
 				searching_gridsquare = GridSquare((gridlat, gridlng))
 				if searching_gridsquare in self.gridsquare_to_linesegaddrs:
 					r |= self.gridsquare_to_linesegaddrs[searching_gridsquare]
+		if 0: # debugging
+			printerr(len(r), target_)
+			l = []
+			for linesegaddr in r:
+				print linesegaddr
+				lineseg = self.get_lineseg(linesegaddr)
+				l.append([lineseg.start.lat, lineseg.start.lng])
+				l.append([lineseg.end.lat, lineseg.end.lng])
+			import json
+			printerr(json.dumps(l, indent=0))
 		return r
 
 def get_reach(target_, searchradius_):
@@ -193,9 +209,23 @@ def snap_to_line(target_, lineseg_):
 		else:
 			return (lineseg_.end, 1, dist1)
 
+# A list of line segments.  Line segments points are geom.LatLng.
+def get_display_grid(southwest_latlng_, northeast_latlng_):
+	assert isinstance(southwest_latlng_, geom.LatLng) and isinstance(northeast_latlng_, geom.LatLng)
+	southwest_gridsquare = GridSquare(southwest_latlng_)
+	northeast_gridsquare = GridSquare(northeast_latlng_)
+	northeast_gridsquare.gridlat += 1; northeast_gridsquare.gridlng += 1
+	r = []
+	for gridlat in range(southwest_gridsquare.gridlat, northeast_gridsquare.gridlat+1):
+		for gridlng in range(southwest_gridsquare.gridlng, northeast_gridsquare.gridlng+1):
+			r.append([GridSquare((gridlat, gridlng)).latlng(), GridSquare((gridlat, gridlng+1)).latlng()])
+			r.append([GridSquare((gridlat, gridlng)).latlng(), GridSquare((gridlat+1, gridlng)).latlng()])
+	return r
+
 if __name__ == '__main__':
 
-	pass
+	pprint.pprint(get_display_grid(geom.LatLng(43.634359782072586, -79.45922656258244), geom.LatLng(43.66888894444148, -79.39116282662053)))
+
 
 
 
