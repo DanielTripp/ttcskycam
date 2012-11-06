@@ -156,7 +156,12 @@ function callpy_sync(module_and_funcname_) {
 function callpy_url(module_and_funcname_, func_args_) {
 	var paramstr = "module_and_funcname="+module_and_funcname_;
 	for(var i=0; i<func_args_.length; i++) {
-		paramstr += "&arg"+i+"="+encode_url_paramval(window.JSON.stringify(func_args_[i]));
+		var argval = func_args_[i];
+		if(argval instanceof google.maps.LatLng) {
+			argval = [argval.lat(), argval.lng()];
+		}
+		var argval_json = window.JSON.stringify(argval);
+		paramstr += "&arg"+i+"="+encode_url_paramval(argval_json);
 	}
 	return "callpy.cgi?"+paramstr;
 }

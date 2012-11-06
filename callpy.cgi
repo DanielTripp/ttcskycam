@@ -52,7 +52,7 @@ class OurJSONEncoder(json.JSONEncoder):
 
 vars = urlparse.parse_qs(os.getenv('QUERY_STRING'))
 module_and_funcname = vars['module_and_funcname'][0]
-allowables = ['web.get_vehicle_svg', 'traffic.get_traffics', 'traffic.get_recent_vehicle_locations', 'routes.get_all_routes_latlons', 'routes.get_endpoint_info', 'routes.snaptest', 'util.get_current_wrong_dirs']
+allowables = ['web.get_vehicle_svg', 'traffic.get_traffics', 'traffic.get_recent_vehicle_locations', 'routes.get_all_routes_latlons', 'routes.get_endpoint_info', 'routes.snaptest', 'util.get_current_wrong_dirs', 'tracks.get_all_tracks_polylines', 'snaptogrid.get_display_grid']
 if (module_and_funcname in allowables) or (os.getenv('HTTP_REFERER').endswith('test.24972394874134958.html')):
 	modulename = module_and_funcname.split('.')[0]
 	funcname = module_and_funcname.split('.')[1]
