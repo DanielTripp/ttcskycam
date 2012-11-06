@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+  <head>
+		<title>test</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <style type="text/css">
+      html { height: 100% }
+      body { height: 70%; margin: 0; padding: 0 }
+    </style>
+    <script type="text/javascript"
+		      src="http://maps.googleapis.com/maps/api/js?sensor=false">
+					    </script>
+		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
+		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
+		<script type="text/javascript" src="common.js"></script>
+		<script type="text/javascript" src="js/buckets-minified.js"></script>
+    <script type="text/javascript">
+
+var g_latlngs = new buckets.LinkedList();
+var g_polylines = new buckets.LinkedList();
+var g_i = 0;
+
+function initialize() {
+
+	init_map();
+
+  $('#filename_field').keydown(function (e){
+      if(e.keyCode == 13) {
+				g_polylines.forEach(function(e) {
+					e.setMap(null);
+				});
+				g_polylines.clear();
+				g_latlngs.clear();
+				g_i = 0;
+
+				var contents_latlng_list = $.parseJSON(get_sync(get_value('filename_field')));
+				for(var i in contents_latlng_list) {
+					var raw_latlng = contents_latlng_list[i];
+					var glatlng = new google.maps.LatLng(raw_latlng[0], raw_latlng[1]);
+					g_latlngs.add(glatlng);
+				}
+				draw_one_point();
+      }
+    });
+
+
+}
+
+function draw_one_point() {
+	var glatlng = g_latlngs.elementAtIndex(g_i);
+	//var polyline = new google.maps.Polyline({map: g_map, strokeWeight: 10, strokeOpacity: 0.3, 
+	//		path: [glatlng, glatlng]});
+	var polyline = new google.maps.Marker({map: g_map, 
+			position: glatlng, draggable: true});
+	g_polylines.add(polyline);
+	g_i += 1;
+	if(g_i < g_latlngs.size()) {
+		setTimeout("draw_one_point()", 5);
+	}
+}
+
+
+
+    </script>
+  </head>
+  <body onload="initialize()" >
+		<div id="map_canvas" style="width:80%; height:100%"></div>
+		<input type="text" size="130" name="filename_field" id="filename_field" />
+		<p id="p1"/>
+  </body>
+</html>
