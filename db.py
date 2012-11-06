@@ -18,15 +18,7 @@ def force_host(hostmoniker_):
 
 def connect():
 	global g_conn
-	if g_forced_hostmoniker is not None:
-		hostmoniker = g_forced_hostmoniker
-	else:
-		with open('HOST') as fin:
-			hostmoniker = fin.read().strip()
-	if hostmoniker not in HOSTMONIKER_TO_IP:
-		raise Exception('Unknown host moniker: "%s"' % hostmoniker)
-	host_ip = HOSTMONIKER_TO_IP[hostmoniker]
-	DATABASE_CONNECT_POSITIONAL_ARGS = ("dbname='postgres' user='postgres' host='%s' password='doingthis'" % (host_ip),)
+	DATABASE_CONNECT_POSITIONAL_ARGS = ("dbname='postgres' user='postgres' host='%s' password='doingthis'" % (get_host()),)
 	DATABASE_CONNECT_KEYWORD_ARGS = {}
 	DATABASE_DRIVER_MODULE_NAME = 'psycopg2'
 	USE_DB_DRIVER_IN_CURRENT_DIRECTORY = socket.gethostname().endswith('theorem.ca')
@@ -39,6 +31,21 @@ def connect():
 		driver_module = __import__(DATABASE_DRIVER_MODULE_NAME)
 		sys.path = saved_syspath
 	g_conn = getattr(driver_module, 'connect')(*DATABASE_CONNECT_POSITIONAL_ARGS, **DATABASE_CONNECT_KEYWORD_ARGS)
+
+def get_host():
+	if g_forced_hostmoniker is not None:
+		hostmoniker = g_forced_hostmoniker
+	else:
+		with open('HOST') as fin:
+			hostmoniker = fin.read().strip()
+	if hostmoniker == 'local':
+		if socket.gethostname().endswith('theorem.ca'):
+			hostmoniker = 'theorem'
+		else:
+			hostmoniker = 'black'
+	if hostmoniker not in HOSTMONIKER_TO_IP:
+		raise Exception('Unknown host moniker: "%s"' % hostmoniker)
+	return HOSTMONIKER_TO_IP[hostmoniker]
 
 def conn():
 	if g_conn is None:
