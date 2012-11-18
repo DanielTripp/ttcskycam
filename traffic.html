@@ -502,6 +502,7 @@ function redraw_vehicle_markers() {
 	clear_vehicles();
 	draw_static_vehicles();
 	create_moving_vehicle_markers();
+	show_cur_minute_vehicles();
 }
 
 function draw_traffic_lines() {
@@ -530,7 +531,11 @@ function initialize() {
 			destlat=43.6492799; destlon=-79.42095; origlat=43.65085; origlon=-79.4128799;
 		}
 	} else { // queen 
-		origlat=43.64457; origlon=-79.4165499; destlat=43.6471199; destlon=-79.4042;
+		if(false) { // eastbound 
+			origlat=43.64457; origlon=-79.4165499; destlat=43.6471199; destlon=-79.4042;
+		} else {
+			destlat=43.64457; destlon=-79.4165499; origlat=43.6471199; origlon=-79.4042;
+		}
 	}
 	g_origmark = new google.maps.Marker({
 		position: new google.maps.LatLng(origlat, origlon),
@@ -986,8 +991,8 @@ $(document).ready(initialize);
 			<p id="p_trip_endpoint_info"></p>
 			<p id="p_vid_checkboxes"></p>
 			<p id="p_temp"></p>
-			<input type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()" checked="checked"  />Now 
-			<input type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()"   />Past
+			<input type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"   />Now 
+			<input type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()" checked="checked"  />Past
 			<input type="text" name="datetimepicker" id="datetimepicker" value="" />
 		</div>
   </body>
