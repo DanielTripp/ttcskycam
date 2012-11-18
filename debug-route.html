@@ -372,7 +372,7 @@ function add_buildfudgeroute_marker(glatlon_) {
 	var glatlon = glatlon_;
 	if(glatlon == null) {
 		if(g_buildfudgeroute_markers.length == 0) {
-			glatlon = new google.maps.LatLng(43.65, -79.44);
+			glatlon = g_map.getCenter();
 		} else {
 			if(g_buildfudgeroute_markers.length >= 2) {
 				var pos1 = g_buildfudgeroute_markers[g_buildfudgeroute_markers.length-2].getPosition();
@@ -382,6 +382,7 @@ function add_buildfudgeroute_marker(glatlon_) {
 				var lastmarkpos = g_buildfudgeroute_markers[g_buildfudgeroute_markers.length-1].getPosition();
 				glatlon = new google.maps.LatLng(lastmarkpos.lat(), lastmarkpos.lng()+0.002);
 			}
+			glatlon = constrain_latlng_by_map_bounds(glatlon);
 		}
 	}
 	var marker = new google.maps.Marker({
@@ -397,6 +398,32 @@ function add_buildfudgeroute_marker(glatlon_) {
 	g_objects.push(marker);
 
 	redraw_buildfudgeroute_path();
+}
+
+function constrain_latlng_by_map_bounds(latlng_) {
+	var top = g_map.getBounds().getNorthEast().lat();
+	var bottom = g_map.getBounds().getSouthWest().lat();
+	var left = g_map.getBounds().getSouthWest().lng();
+	var right = g_map.getBounds().getNorthEast().lng();
+	var MARGIN = 0.2;
+	var margin_top = top - (top - bottom)*MARGIN;
+	var margin_bottom = bottom + (top - bottom)*MARGIN;
+	var margin_left = left + (right - left)*MARGIN;
+	var margin_right = right - (right - left)*MARGIN;
+	var r = latlng_;
+	if(latlng_.lat() > margin_top) {
+		r = new google.maps.LatLng(margin_top, latlng_.lng());
+	}
+	if(latlng_.lat() < bottom) {
+		r = new google.maps.LatLng(margin_bottom, latlng_.lng());
+	}
+	if(latlng_.lng() < margin_left) {
+		r = new google.maps.LatLng(latlng_.lat(), margin_left);
+	}
+	if(latlng_.lng() > margin_right) {
+		r = new google.maps.LatLng(latlng_.lat(), margin_right);
+	}
+	return r;
 }
 
 function redraw_buildfudgeroute_path() {
