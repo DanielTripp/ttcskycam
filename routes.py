@@ -74,7 +74,7 @@ class RouteInfo:
 
 	def latlon_to_mofr(self, post_, tolerance_=0):
 		assert isinstance(post_, geom.LatLng) and (tolerance_ in (0, 1, 2))
-		snap_result = self.snaptogridcache.snap(post_, {0:50, 1:300, 2:750}[tolerance_])
+		snap_result = self.snaptogridcache.snap(post_, {0:50, 1:300, 2:2000}[tolerance_])
 		if snap_result is None:
 			return -1
 		dir = snap_result[1].polylineidx; routeptidx = snap_result[1].startptidx

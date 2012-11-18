@@ -130,7 +130,7 @@ function clear_traffic() {
 }
 
 function refresh_vehicles_from_server() {
-	callpy('traffic.get_recent_vehicle_locations', g_route, g_direction, is_traffictype_current(), get_datetime_from_gui(), 
+	callpy('traffic.get_recent_vehicle_locations', g_route, g_direction, true, get_datetime_from_gui(), 
 		function(r_) {
 			clear_vehicles();
 			update_last_updated_time();
@@ -524,14 +524,14 @@ function initialize() {
 		set_contents("p_zoom_info", "zoom: "+g_map.getZoom());
 	});
 	var origlat, origlon, destlat, destlon;
-	if(false) { // dundas 
-		if(false) { // eastbound 
+	if(true) { // true for dundas 
+		if(false) { // true for eastbound 
 			origlat=43.6492799; origlon=-79.42095; destlat=43.65085; destlon=-79.4128799;
 		} else {
 			destlat=43.6492799; destlon=-79.42095; origlat=43.65085; origlon=-79.4128799;
 		}
-	} else { // queen 
-		if(false) { // eastbound 
+	} else { 
+		if(false) { // true for eastbound 
 			origlat=43.64457; origlon=-79.4165499; destlat=43.6471199; destlon=-79.4042;
 		} else {
 			destlat=43.64457; destlon=-79.4165499; origlat=43.6471199; origlon=-79.4042;
