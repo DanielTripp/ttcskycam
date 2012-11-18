@@ -197,7 +197,7 @@ def is_plausible(dist_m_, speed_kmph_):
 		return speed_kmph_ < 30
 
 def remove_bad_gps_readings_single_vid(vis_):
-	assert len(set(vi.vehicle_id for vi in vis_)) == 1
+	assert len(set(vi.vehicle_id for vi in vis_)) <= 1
 	if not vis_:
 		return []
 	vis = vis_[:]

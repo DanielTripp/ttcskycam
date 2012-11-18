@@ -33,6 +33,8 @@ class VehicleInfo:
 		self.time_epoch = time_epoch_
 		self.time = time_
 		self._mofr = None
+		self._widemofr = None
+		self.is_dir_tag_corrected = False
 
 	def calc_time(self):
 		self.time = self.time_epoch - self.secs_since_report*1000
@@ -72,11 +74,20 @@ class VehicleInfo:
 
 	@property
 	def mofr(self):
-		if self._mofr == None:
+		if self._mofr is None:
 			self._mofr = routes.latlon_to_mofr(self.route_tag, self.latlng)
 		return self._mofr
 
-	# Returns None if we don't seem to have one.  
+	@property
+	def widemofr(self):
+		if self.mofr != -1:
+			return self.mofr
+		else:
+			if self._widemofr is None:
+				self._widemofr = routes.latlon_to_mofr(self.route_tag, self.latlng, tolerance_=2)
+			return self._widemofr
+
+	# Returns None if we don't seem to have one.
 	@property
 	def fudgeroute(self):
 		return routes.CONFIGROUTE_TO_FUDGEROUTE.get(self.route_tag)

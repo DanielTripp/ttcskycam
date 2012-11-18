@@ -1,7 +1,7 @@
 #!/usr/bin/python2.6
 
 import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket, datetime, calendar
-from collections import defaultdict
+from collections import defaultdict, Sequence
 import vinfo, geom, traffic, routes, yards
 from misc import *
 
@@ -88,27 +88,16 @@ def insert_vehicle_info(vi_):
 	curs.execute('INSERT INTO ttc_vehicle_locations VALUES (%s)' % ', '.join(['%s']*len(cols)), cols)
 	curs.close()
 
-def massage_dir_arg(in_):
-	if in_ not in (None, 'east', 'west', 0, 1):
-		raise Exception('invalid direction arg: %s' % (in_))
-	if in_ == 'east':
-		return 0
-	elif in_ == 'west':
-		return 1
-	else:
-		return in_
-
-def vi_select_generator(route_, end_time_em_, start_time_em_, dir_=None, include_unpredictables_=False, vid_=None):
+def vi_select_generator(configroute_, end_time_em_, start_time_em_, dir_=None, include_unpredictables_=False, vid_=None):
 	curs = (conn().cursor('cursor_%d' % (int(time.time()*1000))) if start_time_em_ == 0 else conn().cursor())
-	dir = massage_dir_arg(dir_)
-	dir_clause = ('and dir_tag like \'%%%%\\\\_%s\\\\_%%%%\' ' % (str(dir)) if dir != None else ' ')
+	dir_clause = ('and dir_tag like \'%%%%\\\\_%s\\\\_%%%%\' ' % (str(dir_)) if dir_ != None else ' ')
 	sql = 'select '+VI_COLS+' from ttc_vehicle_locations where route_tag = %s '\
 		+('' if include_unpredictables_ else ' and predictable = true ') \
 		+' and time <= %s and time >= %s '\
 		+(' and vehicle_id = %s ' if vid_ else '') \
 		+ dir_clause \
 		+' order by time desc'
-	curs.execute(sql, [route_, end_time_em_, start_time_em_] + ([vid_] if vid_ else []))
+	curs.execute(sql, [configroute_, end_time_em_, start_time_em_] + ([vid_] if vid_ else []))
 	while True:
 		row = curs.fetchone()
 		if not row:
@@ -117,22 +106,76 @@ def vi_select_generator(route_, end_time_em_, start_time_em_, dir_=None, include
 		yield vi
 	curs.close()
 
-def get_latest_vehicle_info_list(config_route_, num_minutes_, end_time_em_=now_em(), 
-			dir_=None, include_unpredictables_=False, log_=False):
-	r = []
-	gen = vi_select_generator(config_route_, end_time_em_, end_time_em_ - num_minutes_*60*1000, dir_, include_unpredictables_)
-	for vi in gen:
-		r.append(vi)
-	add_inside_overshots_for_traffic(r, dir_, end_time_em_, log_=log_)
-	return r
+# return dict.  key: vid.  value: list of list of VehicleInfo.
+def get_vid_to_vises(fudge_route_, dir_, num_minutes_, end_time_em_, for_traffic_, current_conditions_, log_=False):
+	assert dir_ in (0, 1)
+	start_time = end_time_em_ - num_minutes_*60*1000
+	vi_list = []
+	for configroute in routes.fudgeroute_to_configroutes(fudge_route_):
+		vis = list(vi_select_generator(configroute, end_time_em_, start_time, None, True))
+		vis += get_outside_overshots(vis, start_time, False, 5, log_=log_)
+		if not for_traffic_:
+			if current_conditions_:
+				pass # TODO: think about whether to re-introduce the call below.
+				# add_inside_overshots_for_locations(r, direction_, time_window_end_, log_=log_)
+			else:
+				vis[:] = get_outside_overshots(vis, end_time_em_, True, log_=log_) + vis
+		vi_list += vis
+	# TODO: maybe get outside overshots /forward/ here too, for the benefit of historical traffic reports.
+	vid_to_vis = file_under_key(vi_list, lambda vi: vi.vehicle_id)
+	for vis in vid_to_vis.values():
+		vis.sort(key=lambda x: x.time, reverse=True)
+	for vid, vis in vid_to_vis.items():
+		yards.remove_vehicles_in_yards(vis)
+		remove_time_duplicates(vis)
+		geom.remove_bad_gps_readings_single_vid(vis)
+		fix_dirtags(vis)
+		if len(vis) == 0: del vid_to_vis[vid]
+	vid_to_vises = {}
+	for vid, vis in vid_to_vis.items():
+		vises = get_maximal_sublists3(vis, lambda vi: vi.dir_tag_int)
+		vid_to_vises[vid] = filter(lambda vis: (vis[0].dir_tag_int == dir_) and (len(vis) > 5 or abs(vis[0].widemofr - vis[-1].widemofr) > 300), vises)
+	return vid_to_vises
 
-# returns a list of 2-tuples - (fore VehicleInfo, stand VehicleInfo) 
+def remove_time_duplicates(vis_):
+	for i in range(len(vis_)-2, -1, -1): # Removing duplicates by time.  Not sure if this ever happens.
+		if vis_[i].time == vis_[i+1]:
+			del vis_[i]
+
+def fix_dirtags(r_vis_):
+	assert len(set(vi.vehicle_id for vi in r_vis_)) <= 1
+	for prevvi, vi in hopscotch(r_vis_[::-1]):
+		if prevvi.widemofr < vi.widemofr:
+			fix_dirtag(vi, 0)
+		elif prevvi.widemofr > vi.widemofr:
+			fix_dirtag(vi, 1)
+		elif (prevvi.widemofr == vi.widemofr) and (prevvi.dir_tag_int in (0, 1)):
+			fix_dirtag(vi, prevvi.dir_tag_int)
+
+def fix_dirtag(vi_, dir_):
+	assert isinstance(vi_, vinfo.VehicleInfo) and dir_ in (0, 1)
+	if dir_ == vi_.dir_tag_int:
+		pass
+	elif vi_.dir_tag_int == 1 and dir_ == 0:
+		vi_.dir_tag = vi_.dir_tag.replace('_1_', '_0_')
+		vi_.is_dir_tag_corrected = True
+	elif vi_.dir_tag_int == 0 and dir_ == 1:
+		vi_.dir_tag = vi_.dir_tag.replace('_0_', '_1_')
+		vi_.is_dir_tag_corrected = True
+	elif vi_.dir_tag_int is None:
+		assert vi_.dir_tag == ''
+		vi_.dir_tag = '%s_%d_%s' % (vi_.route_tag, dir_, vi_.route_tag)
+		vi_.is_dir_tag_corrected = True
+	else:
+		raise Exception('Don\'t know how to fix dir_tag on %s' % str(vi_))
+
+# returns a list of 2-tuples - (fore VehicleInfo, stand VehicleInfo)
 # list probably has max_ elements.
 def get_recent_passing_vehicles(route_, post_, max_, end_time_em_=now_em(), dir_=None, include_unpredictables_=False):
 	vid_to_lastvi = {}
 	n = 0
 	r = []
-	for curvi in vi_select_generator(route_, end_time_em_, 0, dir_, include_unpredictables_):
+	for curvi in vi_select_generator((route_,), end_time_em_, 0, dir_, include_unpredictables_):
 		if len(r) >= max_:
 			break
 		vid = curvi.vehicle_id
@@ -146,7 +189,7 @@ def get_recent_passing_vehicles(route_, post_, max_, end_time_em_=now_em(), dir_
 def find_passing(route_, vid_, dir_, t_, post_):
 	assert isinstance(route_, str) and isinstance(vid_, basestring) and isinstance(t_, long) and isinstance(post_, geom.LatLng)
 	lastvi = None
-	gen = vi_select_generator(route_, t_, 0, dir_=dir_, include_unpredictables_=True, vid_=vid_)
+	gen = vi_select_generator((route_,), t_, 0, dir_=dir_, include_unpredictables_=True, vid_=vid_)
 	for curvi in gen:
 		if lastvi and geom.passes(curvi.latlng, lastvi.latlng, post_):
 			return (curvi, lastvi)
@@ -247,81 +290,47 @@ def make_whereclause_safe(whereclause_):
 
 def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, current_conditions_, time_window_end_, log_=False):
 	assert type(fudgeroute_) == str and type(num_minutes_) == int and direction_ in (0,1)
+	vid_to_vises = get_vid_to_vises(fudgeroute_, direction_, num_minutes_, time_window_end_, False, current_conditions_, log_=log_)
 	r = []
-	configroutes = routes.fudgeroute_to_configroutes(fudgeroute_)
-	sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations ' \
-		+ ' where route_tag in ('+(','.join(['%s']*len(configroutes)))+')' \
-		+' and time <= %s and time >= %s ' + ('and (dir_tag = \'\' or dir_tag like \'%%%%\\\\_%d\\\\_%%%%\') ' % (direction_)) \
-		+ ' order by time desc' 
-	curs = conn().cursor()
-	starttime = time_window_end_ - num_minutes_*60*1000
-	curs.execute(sqlstr, configroutes + [time_window_end_, starttime])
-	for row in curs:
-		vi = vinfo.VehicleInfo(*row)
-		if log_: printerr('raw vinfo: '+str(vi))
-		r.append(vi)
-	curs.close()
-	remove_unwanted_detours(r, fudgeroute_, direction_, log_)
-	r += get_outside_overshots(r, starttime, False, log_=log_)
-	if current_conditions_:
-		add_inside_overshots_for_locations(r, direction_, time_window_end_, log_=log_)
-	else:
-		r = get_outside_overshots(r, time_window_end_, True, log_=log_) + r
-	geom.remove_bad_gps_readings(r)
-	yards.remove_vehicles_in_yards(r)
+	for vid, vises in vid_to_vises.iteritems():
+		for vis in vises:
+			r += [vi for vi in vis if vi.widemofr != -1]
+			if log_: printerr('vid %s: %d-vi stretch, from %s to %s (widemofrs %d to %d)' \
+					% (vid, len(vis), em_to_str_hms(vis[-1].time), em_to_str_hms(vis[0].time), vis[-1].widemofr, vis[0].widemofr))
 	r = interp_by_time(r, True, True, current_conditions_, direction_, time_window_end_, log_=log_)
-	r = filter(lambda vilist: str_to_em(vilist[0]) >= starttime, r) # first elem is a date/time string. 
+	starttime = time_window_end_ - num_minutes_*60*1000
+	r = filter(lambda vilist: str_to_em(vilist[0]) >= starttime, r) # first elem of each timeslice list is a date/time string. 
 	return r
 
 # The idea here is, for each vid, to get one more vi from the db, greater in time than the pre-existing
 # max time vi.  This new vi may be on a different route or direction, but it will help us show that vehicle
 # a little longer on the screen, which I think is desirable.
+# ^^ I'm not sure of the usefulness of this any more. 
 def add_inside_overshots_for_locations(r_vis_, direction_, time_window_end_, log_=False):
+	assert len(set([vi.vehicle_id for vi in r_vis_])) == 1
 	new_vis = []
-	for vid in set([vi.vehicle_id for vi in r_vis_]):
-		time_to_beat = max(vi.time for vi in r_vis_ if vi.vehicle_id == vid)
-		sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations ' \
-			+ ' where vehicle_id = %s and time > %s and time <= %s order by time limit 1' 
-		curs = conn().cursor()
-		curs.execute(sqlstr, [vid, time_to_beat, time_window_end_])
-		row = curs.fetchone()
-		vi = None
-		if row:
-			vi = vinfo.VehicleInfo(*row)
-			if log_: printerr('Got inside overshot: %s' % (str(vi)))
-			new_vis.append(vi)
-		else:
-			if log_: printerr('No inside overshot found for vid %s.' % (vid))
-		curs.close()
+	time_to_beat = max(vi.time for vi in r_vis_ if vi.vehicle_id == vid)
+	sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations ' \
+		+ ' where vehicle_id = %s and time > %s and time <= %s order by time limit 1' 
+	curs = conn().cursor()
+	curs.execute(sqlstr, [vid, time_to_beat, time_window_end_])
+	row = curs.fetchone()
+	vi = None
+	if row:
+		vi = vinfo.VehicleInfo(*row)
+		if log_: printerr('Got inside overshot: %s' % (str(vi)))
+		new_vis.append(vi)
+	else:
+		if log_: printerr('No inside overshot found for vid %s.' % (vid))
+	curs.close()
 	r_vis_ += new_vis
 	r_vis_.sort(key=lambda vi: vi.time, reverse=True)
 
-# The idea here is mostly to get from the db those vis which got a blank dirtag because they are stuck in traffic
-# very badly.  eg. dundas westbound 2012-09-24 13:00.  I want these stuck vehicles to contribute to the traffic report.
-def add_inside_overshots_for_traffic(r_vis_, direction_, time_window_end_, log_=False):
-	assert all(vi1.route_tag == vi2.route_tag for vi1, vi2 in hopscotch(r_vis_))
-	new_vis = []
-	for vid in set([vi.vehicle_id for vi in r_vis_]):
-		old_vis = [vi for vi in r_vis_ if vi.vehicle_id == vid]
-		time_to_beat = max(vi.time for vi in old_vis)
-		if log_: printerr('Looking for inside overshots for %s.  Time to beat: %s / %d.' % (vid, em_to_str(time_to_beat), time_to_beat))
-		sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations ' \
-			+ ' where vehicle_id = %s and time > %s and time <= %s and route_tag = %s and dir_tag = \'\' order by time' 
-		curs = conn().cursor()
-		curs.execute(sqlstr, [vid, time_to_beat, time_window_end_, old_vis[0].route_tag])
-		for row in curs:
-			vi = vinfo.VehicleInfo(*row)
-			if vi.mofr != -1:
-				if log_: printerr('Got inside overshot: (time: %d) %s' % (vi.time, str(vi)))
-				new_vis.append(vi)
-		curs.close()
-	r_vis_ += new_vis
-	r_vis_.sort(key=lambda vi: vi.time, reverse=True)
-
-# When I say detour I mean a vehicle with a blank dir_tag.  
+# Temporary detours typically have a blank dirTag eg. dundas eastbound 2012-06-09 12:00. 
 # See http://groups.google.com/group/nextbus-api-discuss/browse_thread/thread/61fc64649ab928b5 
 # "Detours and dirTag (Toronto / TTC)"
-# Vehicles that are stuck badly also, at least sometimes, have a blank dir_tag for that time.  eg. vid 4104, 2012-09-24 13:00.  
+# Vehicles that are stuck badly also, at least sometimes, have a blank dir_tag for that time.  eg. vid 4104, 2012-09-24 13:00.
+# So here we make a point of not removing those.
 def remove_unwanted_detours(r_vis_, fudgeroute_, direction_, log_=False):
 	routes_general_heading = routes.get_routeinfo(fudgeroute_).general_heading(direction_)
 	for detour in get_blank_dirtag_stretches(r_vis_):
@@ -336,14 +345,9 @@ def remove_unwanted_detours(r_vis_, fudgeroute_, direction_, log_=False):
 				unwanted = True
 		if unwanted:
 			remove_all_by_identity(r_vis_, detour)
-		logstr = 'vehicle %s from %s to %s.' % (detour[0].vehicle_id, em_to_str(detour[-1].time), em_to_str(detour[0].time))
-		if unwanted:
-			if log_: printerr('Discarding apparent detour: %s' % (logstr))
-		else:
-			if log_: printerr('Keeping apparent detour: %s' % (logstr))
-
-def detour_moves(detour_):
-	assert all(vi.dir_tag == '' for vi in detour_)
+		if log_:
+			logstr = 'vehicle %s from %s to %s.' % (detour[0].vehicle_id, em_to_str(detour[-1].time), em_to_str(detour[0].time))
+			printerr('%sing apparent detour: %s' % (('Discard' if unwanted else 'Keep'), logstr))
 
 def remove_all_by_identity(r_list_, to_remove_list_):
 	for to_remove_elem in to_remove_list_:
@@ -372,8 +376,8 @@ def get_maximal_sublists(list_, predicate_):
 			cur_sublist = None
 	return r
 
-# fetch one row before startime, to give us something to interpolate with. 
-def get_outside_overshots(vilist_, time_window_boundary_, forward_in_time_, log_=False):
+# Fetch one row before startime (or after endtime), to give us something to interpolate with.
+def get_outside_overshots(vilist_, time_window_boundary_, forward_in_time_, n_=1, log_=False):
 	forward_str = ('forward' if forward_in_time_ else 'backward')
 	if not vilist_:
 		return []
@@ -383,22 +387,19 @@ def get_outside_overshots(vilist_, time_window_boundary_, forward_in_time_, log_
 		assert all(vi1.time >= vi2.time for vi1, vi2 in hopscotch(vis_for_vid)) # i.e. is in reverse order 
 		vid_extreme_time = vis_for_vid[0 if forward_in_time_ else -1].time
 		if log_: printerr('Looking for %s overshot for vid %s.  Time to beat is %s.' % (forward_str, vid, em_to_str(vid_extreme_time)))
-		if (vid_extreme_time >= time_window_boundary_ if forward_in_time_ else vid_extreme_time <= time_window_boundary_):
-			continue
 		routes = [vi.route_tag for vi in vilist_]
 		sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations ' \
 			+ ' where vehicle_id = %s ' + ' and route_tag in ('+(','.join(['%s']*len(routes)))+')' + ' and time < %s and time > %s '\
-			+ ' order by time '+('' if forward_in_time_ else 'desc')+' limit 1' 
+			+ ' order by time '+('' if forward_in_time_ else 'desc')+' limit '+str(n_)
 		curs = conn().cursor()
 		curs.execute(sqlstr, [vid] + routes \
 			+ ([time_window_boundary_+20*60*1000, vid_extreme_time] if forward_in_time_ else [vid_extreme_time, time_window_boundary_-20*60*1000]))
-		row = curs.fetchone()
-		if row:
+	 	# TODO: 20 minutes (above) may be a bit much, especially now that I'm using this function for traffic (not just vehicle locations).
+		# TODO: Think about this.
+		for row in curs:
 			vi = vinfo.VehicleInfo(*row)
 			if log_: printerr('Got %s outside overshot: %s' % (forward_str, str(vi)))
 			r.append(vi)
-		else:
-			if log_: printerr('No %s outside overshot found for vid %s.' % (forward_str, vid))
 		curs.close()
 	return r
 
@@ -410,24 +411,10 @@ def group_by_time(vilist_):
 		r[time_idx].append(vi)
 	return r
 
-def vis_bridge_detour(lo_, hi_):
-	assert (lo_.vehicle_id == hi_.vehicle_id) and (lo_.time != hi_.time)
-	lo, hi = ((lo_, hi_) if lo_.time < hi_.time else (hi_, lo_))
-	curs = conn().cursor()
-	try:
-		curs.execute('select '+VI_COLS+' from ttc_vehicle_locations where vehicle_id = %s and time > %s and time < %s ', \
-			[lo.vehicle_id, lo.time, hi.time])
-		for row in curs:
-			vi = vinfo.VehicleInfo(*row)
-			if vi.mofr != -1:
-				return False
-		return True
-	finally:
-		curs.close()
-
 # Takes a flat list of VehicleInfo objects.  Returns a list of lists of Vehicleinfo objects, interpolated.
 # Also, with a date/time string as element 0 in each list.
 def interp_by_time(vilist_, try_for_mofr_based_loc_interp_, use_db_for_heading_inference_, current_conditions_, dir_=None, end_time_=None, log_=False):
+	assert isinstance(vilist_, Sequence)
 	if len(vilist_) == 0:
 		return []
 	starttime = round_down_by_minute(min(vi.time for vi in vilist_))
@@ -441,7 +428,7 @@ def interp_by_time(vilist_, try_for_mofr_based_loc_interp_, use_db_for_heading_i
 			i_vi = None
 			if lo_vi and hi_vi:
 				if (min(interptime - lo_vi.time, hi_vi.time - interptime) > 3*60*1000) or dirs_disagree(dir_, hi_vi.dir_tag_int)\
-				or (lo_vi.route_tag != hi_vi.route_tag):
+						or (lo_vi.route_tag != hi_vi.route_tag):
 					continue
 				ratio = (interptime - lo_vi.time)/float(hi_vi.time - lo_vi.time)
 				i_latlon, i_heading = interp_latlonnheading(lo_vi, hi_vi, ratio, try_for_mofr_based_loc_interp_)

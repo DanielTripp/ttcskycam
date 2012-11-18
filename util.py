@@ -1,7 +1,6 @@
 #!/usr/bin/python2.6
 
-import pprint
-import vinfo, db, routes, geom, mc, yards, c
+import vinfo, db, routes, mc
 from misc import *
 
 def get_vids(route_, start_time_, end_time_):
@@ -13,19 +12,6 @@ def get_vids(route_, start_time_, end_time_):
 	for row in curs:
 		r.append(row[0])
 	curs.close()
-	return r
-
-def get_maximal_sublists2(list_, predicate_):
-	cur_sublist = None
-	r = []
-	for e1, e2 in hopscotch(list_):
-		if predicate_(e1, e2):
-			if cur_sublist == None:
-				cur_sublist = [e1]
-				r.append(cur_sublist)
-			cur_sublist.append(e2)
-		else:
-			cur_sublist = None
 	return r
 
 def is_at_end_of_route(vi_):

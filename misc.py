@@ -1,7 +1,7 @@
 #!/usr/bin/python2.6
 
 import sys, os, time, math
-from collections import MutableSequence
+from collections import MutableSequence, defaultdict
 
 def em_to_str(t_):
 	return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t_/1000))
@@ -136,9 +136,48 @@ def avg(lo_, hi_, ratio_):
 	else:
 		return r
 
+def file_under_key(list_, key_):
+	assert callable(key_)
+	r = defaultdict(lambda: [])
+	for e in list_:
+		r[key_(e)].append(e)
+	return dict(r)
+
+# Return only elements for which predicate is true.  Group them as they appeared in input list as runs of trues.
+def get_maximal_sublists2(list_, predicate_):
+	cur_sublist = None
+	r = []
+	for e1, e2 in hopscotch(list_):
+		if predicate_(e1, e2):
+			if cur_sublist is None:
+				cur_sublist = [e1]
+				r.append(cur_sublist)
+			cur_sublist.append(e2)
+		else:
+			cur_sublist = None
+	return r
+
+# Return all input elements, but group them by runs of the same key.
+def get_maximal_sublists3(list_, key_):
+	assert callable(key_)
+	if not list_:
+		return list_
+	cur_sublist = [list_[0]]
+	r = [cur_sublist]
+	prev_elem_key = key_(list_[0])
+	for prev_elem, cur_elem in hopscotch(list_):
+		cur_elem_key = key_(cur_elem)
+		if prev_elem_key == cur_elem_key:
+			cur_sublist.append(cur_elem)
+		else:
+			cur_sublist = [cur_elem]
+			r.append(cur_sublist)
+		prev_elem_key = cur_elem_key
+	return r
+
 if __name__ == '__main__':
 
-	print intervalii(1, -1)
-
+	l = ['bb', 'cb', 'ac', 'bc', 'cc']
+	print get_maximal_sublists3(l, lambda x: x[-1])
 
 

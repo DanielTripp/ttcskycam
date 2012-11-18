@@ -33,35 +33,27 @@ def massage_time_arg(time_, now_round_step_millis_):
 def get_recent_vehicle_locations_impl(fudgeroute_, dir_, current_, time_, log_=False):
 	return db.get_recent_vehicle_locations(fudgeroute_, TIME_WINDOW_MINUTES, dir_, current_, time_window_end_=time_, log_=log_)
 
-def get_vid_to_vis_from_db(fudgeroute_name_, dir_, time_, log_=False):
-	vis = []
-	for config_route in routes.fudgeroute_to_configroutes(fudgeroute_name_):
-		vis += db.get_latest_vehicle_info_list(config_route, TIME_WINDOW_MINUTES, dir_=dir_, end_time_em_=time_, log_=log_)
-	yards.remove_vehicles_in_yards(vis)
-	vis.sort(key=lambda x: x.time, reverse=True) # got to sort these by time again b/c even though they come from the db 
-		# call above sorted thusly, a fugderoute with more than one configroute (eg. queen) may have a vehicle that changes 
-		# routes all of a sudden (eg. from 501 to 301, around 1:30 AM), and then that would mess up remove_doublebacks() below. 
-	vid_to_vis = defaultdict(lambda: [])
-	for vi in vis:
-		if vi.mofr != -1: # b/c we can't use vis that are not on the route.  
-			vid_to_vis[vi.vehicle_id].append(vi)
-		else:
-			if log_: printerr('Not on route (i.e. mofr==-1), discarding: %s' % (str(vi)))
-	for vid, vis in vid_to_vis.items():
-		vis[:] = remove_doublebacks(vis, dir_, log_=log_)
-	return dict(vid_to_vis) # b/c a defaultdict can't be pickled i.e. memcached 
-
-def remove_doublebacks(vis_, dir_, log_=False):
-	if len(vis_) < 2:
-		return vis_
-	assert all(vi1.time > vi2.time for vi1, vi2 in hopscotch(vis_)) # b/c that's the order we get these in, apparently 
-	assert all(vi.mofr >= 0 for vi in vis_)
-	r = [vis_[0]]
-	for vi in vis_[1:]:
-		if r[-1].mofr <= vi.mofr if dir_ else r[-1].mofr >= vi.mofr:
-			r.append(vi)
-		else:
-			if log_: printerr('Removing double-back: %s' % (str(vi)))
+# returns: key: vid.  value: list of list of VehicleInfo
+# second list - these are 'stretches' of increasing (or decreasing) mofr.  Doing it this way so that if the database gives us a
+# single vehicle that say goes from mofr = 1000 to mofr = 1500 (over however many VehicleInfo objects), then goes AWOL for a while,
+# then reappears and goes from mofr = 500 to mofr = 1200 (i.e. it doubled back and did part of the same route again), then we can
+# handle that.
+# The above case is in my opinion only moderately important to handle.  Our traffic-determinging interpolating code needs monotonic
+# vis like this, but we could get them another way eg. removing the earlier stretch, because it's probably not very crucial
+# to the result anyway.  But the more important case to handle is a buggy GPS or mofr case where a vehicle only appears to doubles back
+# (even a little bit) and thus appears to be going in a different direction for a while.  I wouldn't want a case like that to result in
+# the discarding of the more important stretch, and I don't want to write code that makes a judgement call about how many metres or
+# for how many readings should a vehicle have to go in an opposite direction before we believe that it is really going in that direction.
+# So I do it by stretches, like this.
+# Example: routes 501/301, westbound, vid = 1531, 2012-10-30 00:45 to 01:15.  The vehicle goes west from 00:45 to 00:54.  Fine.
+# Then it also appears to go west briefly between 01:07 and 01:08, but that's a fluke of the mofr reading as it gets bask onto queen
+# there.  Then it stands still for a few minutes there.  Then it continues eastward.  I don't want that to mess things up.
+# TODO: improve this comment.
+def get_vid_to_vises_from_db_for_traffic(fudgeroute_name_, dir_, time_, log_=False):
+	r = db.get_vid_to_vises(fudgeroute_name_, dir_, TIME_WINDOW_MINUTES, time_, True, False, log_=log_)
+	for vid, vises in r.items():
+		for vis in vises:
+			filter_in_place(vis, lambda vi: vi.mofr != -1)
 	return r
 
 def between(bound1_, value_, bound2_):
@@ -129,18 +121,22 @@ def get_traffics_impl_old_for_directional_arrows(fudgeroute_name_, dir_, time_, 
 def get_traffic_avgspeedsandweights(fudgeroute_name_, dir_, time_, current_, log_=False):
 	r = {}
 	mofr_to_rawtraffics = get_traffic_rawspeeds(fudgeroute_name_, dir_, time_, log_=log_)
-	for mofr, rawtraffics in mofr_to_rawtraffics.items():
+	for mofr, rawtraffics in sorted(mofr_to_rawtraffics.iteritems()): # Here we iterate in sorted key order only to print easier-to-read log msgs.
+		if log_: printerr('mofr=%d:' % mofr)
 		if not rawtraffics:
+			if log_: printerr('\tNo raw traffics.')
 			r[mofr] = None
 		else:
 			for rawtraffic in rawtraffics:
 				rawtraffic['weight'] = (time_to_weight(rawtraffic['time'], time_) if current_ else 1.0)
+				if log_: printerr('\tInterpolated time %s ==> weight %.3f' % (em_to_str_hms(rawtraffic['time']), rawtraffic['weight']))
 			weights_total = sum([x['weight'] for x in rawtraffics])
-			if weights_total > 0:
+			if weights_total >= 0.01:
 				weighted_avg_speed = abs(sum([x['speed_kmph']*x['weight']/weights_total for x in rawtraffics]))
+				r[mofr] = {'kmph': weighted_avg_speed, 'weight': weights_total}
 			else:
-				weighted_avg_speed = 0.0
-			r[mofr] = {'kmph': weighted_avg_speed, 'weight': weights_total}
+				if log_: printerr('\tZero or negligible weight tally at this mofr.  Will treat as though there is no traffic here.')
+				r[mofr] = None
 	return r
 
 def time_to_weight(time_, now_):
@@ -159,30 +155,41 @@ def get_traffic_rawspeeds(fudgeroute_name_, dir_, time_=now_em(), log_=False):
 	mofr_to_rawtraffics = {}
 	for mofr in range(0, routes.max_mofr(fudgeroute_name_), MOFR_STEP):
 		mofr_to_rawtraffics[mofr] = []
-	for vid, vis in get_vid_to_vis_from_db(fudgeroute_name_, dir_, time_=time_, log_=log_).items():
-		if log_: printerr('For vid "%s":' % (vid))
-		if log_:
-			for vi in vis[::-1]:
-				printerr('\traw vinfo: %s' % (str(vi)))
-		if len(vis) < 2:
-			continue
-		for interp_mofr in range(0, routes.max_mofr(fudgeroute_name_), MOFR_STEP):
-			if log_: printerr('\tFor mofr %d:' % (interp_mofr))
-			vi_lo, vi_hi = get_bounding_mofr_vis(interp_mofr, vis)
-			if vi_lo and vi_hi:
-				if log_: printerr('\t\tFound bounding vis at mofrs %d and %d (%s and %s).' % (vi_lo.mofr, vi_hi.mofr, vi_lo.timestr, vi_hi.timestr))
-				interp_ratio = (interp_mofr - vi_lo.mofr)/float(vi_hi.mofr - vi_lo.mofr)
-				interp_t = int(vi_lo.time + interp_ratio*(vi_hi.time - vi_lo.time))
-				speed_kmph = ((vi_hi.mofr - vi_lo.mofr)/1000.0)/((vi_hi.time - vi_lo.time)/(1000.0*60*60))
-				if log_: printerr('\t\tSpeed: %.1f' % (speed_kmph))
-				# TODO: fix buggy negative speeds a better way, maybe. 
-				mofr_to_rawtraffics[interp_mofr].append({'speed_kmph': speed_kmph, 'time':interp_t, 'vid': vid})
-			else:
-				if log_: printerr('\t\tNo bounding vis found for this mofr step / vid.')
+	for vid, vises in get_vid_to_vises_from_db_for_traffic(fudgeroute_name_, dir_, time_=time_, log_=log_).items():
+		for vis in vises:
+			if log_: printerr('For vid "%s":' % (vid))
+			if log_:
+				for vi in vis[::-1]:
+					printerr('\traw vinfo: %s' % (str(vi)))
+			if len(vis) < 2:
+				continue
+			for interp_mofr in range(0, routes.max_mofr(fudgeroute_name_), MOFR_STEP):
+				if log_: printerr('\tFor mofr %d:' % (interp_mofr))
+				vi_lo, vi_hi = get_bounding_mofr_vis(interp_mofr, vis)
+				if vi_lo and vi_hi:
+					if log_: printerr('\t\tFound bounding vis at mofrs %d and %d (%s and %s).' % (vi_lo.mofr, vi_hi.mofr, vi_lo.timestr, vi_hi.timestr))
+					interp_ratio = (interp_mofr - vi_lo.mofr)/float(vi_hi.mofr - vi_lo.mofr)
+					interp_t = int(vi_lo.time + interp_ratio*(vi_hi.time - vi_lo.time))
+					speed_kmph = ((vi_hi.mofr - vi_lo.mofr)/1000.0)/((vi_hi.time - vi_lo.time)/(1000.0*60*60))
+					if log_: printerr('\t\tSpeed: %.1f.  Interpolated time at this mofr: %s' % (speed_kmph, em_to_str_hms(interp_t)))
+					# TODO: fix buggy negative speeds a better way, maybe.
+					mofr_to_rawtraffics[interp_mofr].append({'speed_kmph': speed_kmph, 'time':interp_t, 'vid': vid})
+				else:
+					if log_: printerr('\t\tNo bounding vis found for this mofr step / vid.')
 	return mofr_to_rawtraffics
 
+# [1] Here I am trying to implement the following judgement call:
+# It is better to show no traffic at all (white) than a misleading orange
+# that is derived from one or more vehicles that never traversed that stretch of road,
+# but detoured around it.   This will happen in the case of major incidents involving detours eg.
+# dundas westbound 2012-09-24 13:35 (preceeding half-hour thereof).  See how vid 4087 detours around
+# ossington and college, how no vehicles traverse westbound dundas between ossington and lansdowne
+# between 13:05 and 13:35, and how this could result in vid 4087 single-handedly causing a
+# decent-looking traffic report for that stretch of road.  I would rather show white (or whatever
+# I'm showing to signify 'no traffic data' now) and thus encourage the user to look for the detour.
 def get_bounding_mofr_vis(mofr_, vis_):
 	assert all(vi1.vehicle_id == vi2.vehicle_id for vi1, vi2 in hopscotch(vis_))
+	assert all(vi.mofr != -1 for vi in vis_)
 
 	mofr_key = lambda x: x.mofr
 
@@ -204,26 +211,11 @@ def get_bounding_mofr_vis(mofr_, vis_):
 
 	if vi_lo and vi_hi:
 		assert vi_lo.mofr < vi_hi.mofr
-	if vi_lo and vi_hi and vis_bridge_significant_detour(vi_lo, vi_hi):
+
+	if vi_lo and vi_hi and (abs(vi_hi.time - vi_lo.time) > 1000*60*10): # see [1] above.
 		return (None, None)
 	else:
 		return (vi_lo, vi_hi)
-
-# This method implements this judgement call: 
-# It is better to show no traffic at all (white) than a misleading orange 
-# that is derived from one or more vehicles that never traversed that stretch of road, 
-# but detoured around it.   This will happen in the case of major incidents involving detours eg. 
-# dundas westbound 2012-09-24 13:35 (preceeding half-hour thereof).  See how vid 4087 detours around 
-# ossington and college, how no vehicles traverse westbound dundas between ossington and lansdowne 
-# between 13:05 and 13:35, and how this coudl result in vid 4087 single-handedly causing a 
-# decent-looking traffic report for that stretch of road.  I woudl rather show white (or however 
-# I'm showing 'no traffic data' now) and thus encourage the user to find the detour.  
-def vis_bridge_significant_detour(lo_, hi_):
-	assert lo_.vehicle_id == hi_.vehicle_id and lo_.mofr != -1 and hi_.mofr != -1
-	if hi_.mofr - lo_.mofr < 1000:
-		return False
-	else:
-		return db.vis_bridge_detour(lo_, hi_)
 
 def kmph_to_mps(kmph_):
 	return kmph_*1000.0/(60*60)
