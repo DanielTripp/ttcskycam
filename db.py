@@ -2,7 +2,7 @@
 
 import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket, datetime, calendar
 from collections import defaultdict, Sequence
-import vinfo, geom, traffic, routes, yards
+import vinfo, geom, traffic, routes, yards, tracks
 from misc import *
 
 HOSTMONIKER_TO_IP = {'theorem': '72.2.4.176', 'black': '24.52.231.206'}
@@ -413,7 +413,7 @@ def group_by_time(vilist_):
 
 # Takes a flat list of VehicleInfo objects.  Returns a list of lists of Vehicleinfo objects, interpolated.
 # Also, with a date/time string as element 0 in each list.
-def interp_by_time(vilist_, try_for_mofr_based_loc_interp_, use_db_for_heading_inference_, current_conditions_, dir_=None, end_time_=None, log_=False):
+def interp_by_time(vilist_, attempt_clever_location_interp_, use_db_for_heading_inference_, current_conditions_, dir_=None, end_time_=None, log_=False):
 	assert isinstance(vilist_, Sequence)
 	if len(vilist_) == 0:
 		return []
@@ -431,7 +431,7 @@ def interp_by_time(vilist_, try_for_mofr_based_loc_interp_, use_db_for_heading_i
 						or (lo_vi.route_tag != hi_vi.route_tag):
 					continue
 				ratio = (interptime - lo_vi.time)/float(hi_vi.time - lo_vi.time)
-				i_latlon, i_heading = interp_latlonnheading(lo_vi, hi_vi, ratio, try_for_mofr_based_loc_interp_)
+				i_latlon, i_heading = interp_latlonnheading(lo_vi, hi_vi, ratio, attempt_clever_location_interp_)
 				i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, i_heading, vid, i_latlon.lat, i_latlon.lng,
 										 lo_vi.predictable and hi_vi.predictable,
 										 lo_vi.route_tag, 0, interptime, interptime)
@@ -453,9 +453,11 @@ def interp_by_time(vilist_, try_for_mofr_based_loc_interp_, use_db_for_heading_i
 def dirs_disagree(dir1_, dir2_):
 	return (dir1_ == 0 and dir2_ == 1) or (dir1_ == 1 and dir2_ == 0)
 
-def interp_latlonnheading(vi1_, vi2_, ratio_, try_for_mofr_based_loc_interp_):
+def interp_latlonnheading(vi1_, vi2_, ratio_, attempt_clever_location_interp_):
+	assert isinstance(vi1_, vinfo.VehicleInfo) and isinstance(vi2_, vinfo.VehicleInfo) and (vi1_.vehicle_id == vi2_.vehicle_id)
+	assert vi1_.time < vi2_.time
 	r = None
-	if try_for_mofr_based_loc_interp_ and vi1_.dir_tag and vi2_.dir_tag:
+	if attempt_clever_location_interp_ and vi1_.dir_tag and vi2_.dir_tag:
 		if routes.CONFIGROUTE_TO_FUDGEROUTE[vi1_.route_tag] == routes.CONFIGROUTE_TO_FUDGEROUTE[vi2_.route_tag]:
 			config_route = vi1_.route_tag
 			vi1mofr = routes.latlon_to_mofr(config_route, vi1_.latlng)
@@ -466,9 +468,19 @@ def interp_latlonnheading(vi1_, vi2_, ratio_, try_for_mofr_based_loc_interp_):
 				if dir_tag_int == None:
 					raise Exception('Could not determine dir_tag_int of %s' % (str(vi2_)))
 				r = routes.mofr_to_latlonnheading(config_route, interp_mofr, dir_tag_int)
-	if r==None:
-		r = (geom.LatLng(*(geom.avg(vi1_.latlng.lat, vi2_.latlng.lat, ratio_), avg(vi1_.latlng.lng, vi2_.latlng.lng, ratio_))),
-			 avg_headings(vi1_.heading, vi2_.heading, ratio_))
+			elif vi1_.is_a_streetcar():
+				vi1_tracks_snap_result = tracks.snap(vi1_.latlng); vi2_tracks_snap_result = tracks.snap(vi2_.latlng)
+				if vi1_tracks_snap_result is not None and vi2_tracks_snap_result is not None:
+					simple_interped_loc = vi1_.latlng.avg(vi2_.latlng, ratio_)
+					interped_loc_snap_result = tracks.snap(simple_interped_loc, 5000)
+					if interped_loc_snap_result is not None:
+						tracks_based_heading = tracks.heading(interped_loc_snap_result[1], interped_loc_snap_result[2])
+						if geom.diff_heading(tracks_based_heading, vi1_.latlng.heading(vi2_.latlng)) > 90:
+							tracks_based_heading = geom.normalize_heading(tracks_based_heading+180)
+						r = (interped_loc_snap_result[0], tracks_based_heading)
+
+	if r is None:
+		r = (vi1_.latlng.avg(vi2_.latlng, ratio_), avg_headings(vi1_.heading, vi2_.heading, ratio_))
 	return r
 
 def avg_headings(heading1_, heading2_, ratio_):

@@ -79,8 +79,8 @@ class RouteInfo:
 			return -1
 		dir = snap_result[1].polylineidx; routeptidx = snap_result[1].startptidx
 		r = self.routeptidx_to_mofr[routeptidx]
-		if snap_result[2] is not None:
-			r += snap_result[2].dist_m(self.routepts(dir)[routeptidx])
+		if snap_result[2]:
+			r += snap_result[0].dist_m(self.routepts(dir)[routeptidx])
 		return int(r)
 
 	def snaptest(self, pt_, tolerance_=0):

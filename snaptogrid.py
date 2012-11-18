@@ -108,15 +108,16 @@ class SnapToGridCache(object):
 
 	# arg searchradius_ is in metres.
 	#
-	# returns None, or a tuple - (LineSegAddr, geom.LatLng|None)
+	# returns None, or a tuple - (geom.LatLng, LineSegAddr, bool)
 	# if None: no line was found within the search radius.
 	# if tuple:
 	#	elem 0: snapped-to point.  geom.LatLng.
 	# 	elem 1: reference line segment address (or point address) that the snapped-to point is on.
-	#	elem 2: if None: then intepret elem 1 as the address of a point (not a line) - and the snapped-to point
-	# 				is exactly the point referenced by elem 1.  Also, elem 0 will equal elem 2.
-	#			if not None: then interpret elem 1 as the address of a line segment (not a point).  The snapped-to point
+	#	elem 2: 'snapped-to point is along a line' flag.
+	#			if True: then interpret elem 1 as the address of a line segment (not a point).  The snapped-to point
 	# 				(i.e. elem 0) is somewhere along that line segment.
+	# 			if False: then intepret elem 1 as the address of a point (not a line) - and the snapped-to point (elem 0)
+	# 				is exactly the point referenced by elem 1.
 	def snap(self, target_, searchradius_):
 		assert isinstance(target_, geom.LatLng) and isinstance(searchradius_, int)
 		# Guarding against changes in LATSTEP/LNGSTEP while a SnapToGridCache object was sitting in memcached:
@@ -132,13 +133,22 @@ class SnapToGridCache(object):
 			return None
 		else:
 			if best_yet_snapresult[1] == None:
-				return (best_yet_snapresult[0], best_yet_linesegaddr, best_yet_snapresult[0])
+				return (best_yet_snapresult[0], best_yet_linesegaddr, True)
 			else:
 				if best_yet_snapresult[1] == 0:
 					reference_point_addr = best_yet_linesegaddr
 				else:
 					reference_point_addr = LineSegAddr(best_yet_linesegaddr.polylineidx, best_yet_linesegaddr.startptidx+1)
-				return (self.get_point(reference_point_addr).clone(), reference_point_addr, None)
+				return (self.get_point(reference_point_addr).clone(), reference_point_addr, False)
+
+	def heading(self, linesegaddr_, referencing_point_aot_lineseg_):
+		assert isinstance(linesegaddr_, LineSegAddr)
+		# TODO: do something fancier on corners i.e. when referencing_point_aot_lineseg_ is True.
+		assert (0 <= linesegaddr_.polylineidx < len(self.polylines))
+		assert 0 <= linesegaddr_.startptidx < len(self.polylines[linesegaddr_.polylineidx])+1
+		linesegaddr = LineSegAddr(linesegaddr_.polylineidx, min(linesegaddr_.startptidx, len(self.polylines[linesegaddr_.polylineidx])-1))
+		lineseg = self.get_lineseg(linesegaddr)
+		return lineseg.start.heading(lineseg.end)
 
 	def get_nearby_linesegaddrs(self, target_, searchradius_):
 		assert isinstance(target_, geom.LatLng)

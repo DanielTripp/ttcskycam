@@ -34,11 +34,17 @@ def _get_polylines_from_files():
 	return r
 
 def is_on_a_track(latlng_):
+	return (snap(latlng_) is not None)
+
+# Default search radius here is the same as tolerance "0" in routes.RouteInfo.latlon_to_mofr().  This may be important.
+# Maybe we should maintain a central constant for it somewhere.
+def snap(latlng_, searchradius_=50):
 	assert isinstance(latlng_, geom.LatLng)
 	_init()
-	searchradius = 50 # Same as tolerenace "0" in routes.RouteInfo.latlon_to_mofr().  This may be important.
-			# Maybe we should maintain a central constant for it somewhere.
-	return (g_snaptogridcache.snap(latlng_, searchradius) is not None)
+	return g_snaptogridcache.snap(latlng_, searchradius_)
+
+def heading(linesegaddr_, referencing_point_aot_lineseg_):
+	return g_snaptogridcache.heading(linesegaddr_, referencing_point_aot_lineseg_)
 
 def get_all_tracks_polylines():
 	_init()
