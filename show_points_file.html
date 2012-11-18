@@ -39,14 +39,26 @@ function initialize() {
 					var glatlng = new google.maps.LatLng(raw_latlng[0], raw_latlng[1]);
 					g_latlngs.add(glatlng);
 				}
-				draw_one_point();
+				if(false) {
+					draw_one_point_at_a_time();
+				} else {
+					draw_all_points();
+				}
       }
     });
 
 
 }
 
-function draw_one_point() {
+function draw_all_points() {
+	g_latlngs.forEach(function(glatlng) {
+		var polyline = new google.maps.Polyline({map: g_map, strokeWeight: 10, strokeOpacity: 0.3, 
+				path: [glatlng, glatlng]});
+		g_polylines.add(polyline);
+	});
+}
+
+function draw_one_point_at_a_time() {
 	var glatlng = g_latlngs.elementAtIndex(g_i);
 	//var polyline = new google.maps.Polyline({map: g_map, strokeWeight: 10, strokeOpacity: 0.3, 
 	//		path: [glatlng, glatlng]});
