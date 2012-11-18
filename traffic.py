@@ -212,7 +212,7 @@ def get_bounding_mofr_vis(mofr_, vis_):
 	if vi_lo and vi_hi:
 		assert vi_lo.mofr < vi_hi.mofr
 
-	if vi_lo and vi_hi and (abs(vi_hi.time - vi_lo.time) > 1000*60*10): # see [1] above.
+	if vi_lo and vi_hi and (abs(vi_hi.time - vi_lo.time) > 1000*60*8): # see [1] above.
 		return (None, None)
 	else:
 		return (vi_lo, vi_hi)

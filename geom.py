@@ -69,6 +69,10 @@ class LatLng:
 			heading = get_range_val((0, 90), (90, 0), ang)
 		return int(heading)
 
+	def avg(self, other_, ratio_):
+		assert isinstance(other_, LatLng)
+		return LatLng(avg(self.lat, other_.lat, ratio_), avg(self.lng, other_.lng, ratio_))
+
 	def inside_polygon(self, poly_):
 		assert all(isinstance(x, LatLng) for x in poly_)
 		sum_angles = 0
@@ -147,7 +151,7 @@ def normalize_heading(heading_):
 		r -= 360
 	return r
 
-def diff_headings(h1_, h2_):
+def diff_heading(h1_, h2_):
 	if h1_ > h2_:
 		r = h1_ - h2_
 	else:

@@ -113,6 +113,9 @@ class VehicleInfo:
 	def lng(self):
 		return self.latlng.lng
 
+	def is_a_streetcar(self):
+		return self.vehicle_id.startswith('4')
+
 if __name__ == '__main__':
 	pass
 
