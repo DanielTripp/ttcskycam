@@ -4,7 +4,9 @@ import sys, json, os.path
 import vinfo, geom, mc, c, snaptogrid
 from misc import *
 
-FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301'], 'king': ['504'], 'spadina': ['510']}
+FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301'], 'king': ['504'], 'spadina': ['510'], \
+'bathurst': ['511', '310'], 'dufferin': ['29', '329'], 'lansdowne': ['47'], 'ossington': ['63', '316'], 'college': ['506', '306'], \
+'dupont': ['26']}
 
 CONFIGROUTE_TO_FUDGEROUTE = {}
 for fudgeroute, configroutes in FUDGEROUTE_TO_CONFIGROUTES.items():
