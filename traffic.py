@@ -49,11 +49,10 @@ def get_recent_vehicle_locations_impl(fudgeroute_, dir_, current_, time_, log_=F
 # Then it also appears to go west briefly between 01:07 and 01:08, but that's a fluke of the mofr reading as it gets bask onto queen
 # there.  Then it stands still for a few minutes there.  Then it continues eastward.  I don't want that to mess things up.
 # TODO: improve this comment.
-def get_vid_to_vises_from_db_for_traffic(fudgeroute_name_, dir_, time_, log_=False):
-	r = db.get_vid_to_vises(fudgeroute_name_, dir_, TIME_WINDOW_MINUTES, time_, True, False, log_=log_)
-	for vid, vises in r.items():
-		for vis in vises:
-			filter_in_place(vis, lambda vi: vi.mofr != -1)
+def get_vid_to_vis_from_db_for_traffic(fudgeroute_name_, dir_, time_, log_=False):
+	r = db.get_vid_to_vis(fudgeroute_name_, dir_, TIME_WINDOW_MINUTES, time_, True, False, log_=log_)
+	for vid, vis in r.items():
+		filter_in_place(vis, lambda vi: vi.mofr != -1)
 	return r
 
 def between(bound1_, value_, bound2_):
@@ -155,27 +154,26 @@ def get_traffic_rawspeeds(fudgeroute_name_, dir_, time_=now_em(), log_=False):
 	mofr_to_rawtraffics = {}
 	for mofr in range(0, routes.max_mofr(fudgeroute_name_), MOFR_STEP):
 		mofr_to_rawtraffics[mofr] = []
-	for vid, vises in get_vid_to_vises_from_db_for_traffic(fudgeroute_name_, dir_, time_=time_, log_=log_).items():
-		for vis in vises:
-			if log_: printerr('For vid "%s":' % (vid))
-			if log_:
-				for vi in vis[::-1]:
-					printerr('\traw vinfo: %s' % (str(vi)))
-			if len(vis) < 2:
-				continue
-			for interp_mofr in range(0, routes.max_mofr(fudgeroute_name_), MOFR_STEP):
-				if log_: printerr('\tFor mofr %d:' % (interp_mofr))
-				vi_lo, vi_hi = get_bounding_mofr_vis(interp_mofr, vis)
-				if vi_lo and vi_hi:
-					if log_: printerr('\t\tFound bounding vis at mofrs %d and %d (%s and %s).' % (vi_lo.mofr, vi_hi.mofr, vi_lo.timestr, vi_hi.timestr))
-					interp_ratio = (interp_mofr - vi_lo.mofr)/float(vi_hi.mofr - vi_lo.mofr)
-					interp_t = int(vi_lo.time + interp_ratio*(vi_hi.time - vi_lo.time))
-					speed_kmph = ((vi_hi.mofr - vi_lo.mofr)/1000.0)/((vi_hi.time - vi_lo.time)/(1000.0*60*60))
-					if log_: printerr('\t\tSpeed: %.1f.  Interpolated time at this mofr: %s' % (speed_kmph, em_to_str_hms(interp_t)))
-					# TODO: fix buggy negative speeds a better way, maybe.
-					mofr_to_rawtraffics[interp_mofr].append({'speed_kmph': speed_kmph, 'time':interp_t, 'vid': vid})
-				else:
-					if log_: printerr('\t\tNo bounding vis found for this mofr step / vid.')
+	for vid, vis in get_vid_to_vis_from_db_for_traffic(fudgeroute_name_, dir_, time_=time_, log_=log_).items():
+		if log_: printerr('For vid "%s":' % (vid))
+		if log_:
+			for vi in vis[::-1]:
+				printerr('\traw vinfo: %s' % (str(vi)))
+		if len(vis) < 2:
+			continue
+		for interp_mofr in range(0, routes.max_mofr(fudgeroute_name_), MOFR_STEP):
+			if log_: printerr('\tFor mofr %d:' % (interp_mofr))
+			vi_lo, vi_hi = get_bounding_mofr_vis(interp_mofr, vis)
+			if vi_lo and vi_hi:
+				if log_: printerr('\t\tFound bounding vis at mofrs %d and %d (%s and %s).' % (vi_lo.mofr, vi_hi.mofr, vi_lo.timestr, vi_hi.timestr))
+				interp_ratio = (interp_mofr - vi_lo.mofr)/float(vi_hi.mofr - vi_lo.mofr)
+				interp_t = int(vi_lo.time + interp_ratio*(vi_hi.time - vi_lo.time))
+				speed_kmph = ((vi_hi.mofr - vi_lo.mofr)/1000.0)/((vi_hi.time - vi_lo.time)/(1000.0*60*60))
+				if log_: printerr('\t\tSpeed: %.1f.  Interpolated time at this mofr: %s' % (speed_kmph, em_to_str_hms(interp_t)))
+				# TODO: fix buggy negative speeds a better way, maybe.
+				mofr_to_rawtraffics[interp_mofr].append({'speed_kmph': speed_kmph, 'time':interp_t, 'vid': vid})
+			else:
+				if log_: printerr('\t\tNo bounding vis found for this mofr step / vid.')
 	return mofr_to_rawtraffics
 
 # [1] Here I am trying to implement the following judgement call:

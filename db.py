@@ -107,7 +107,7 @@ def vi_select_generator(configroute_, end_time_em_, start_time_em_, dir_=None, i
 	curs.close()
 
 # return dict.  key: vid.  value: list of list of VehicleInfo.
-def get_vid_to_vises(fudge_route_, dir_, num_minutes_, end_time_em_, for_traffic_, current_conditions_, log_=False):
+def get_vid_to_vis(fudge_route_, dir_, num_minutes_, end_time_em_, for_traffic_, current_conditions_, log_=False):
 	assert dir_ in (0, 1)
 	start_time = end_time_em_ - num_minutes_*60*1000
 	vi_list = []
@@ -131,11 +131,15 @@ def get_vid_to_vises(fudge_route_, dir_, num_minutes_, end_time_em_, for_traffic
 		geom.remove_bad_gps_readings_single_vid(vis)
 		fix_dirtags(vis)
 		if len(vis) == 0: del vid_to_vis[vid]
-	vid_to_vises = {}
 	for vid, vis in vid_to_vis.items():
-		vises = get_maximal_sublists3(vis, lambda vi: vi.dir_tag_int)
-		vid_to_vises[vid] = filter(lambda vis: (vis[0].dir_tag_int == dir_) and (len(vis) > 5 or abs(vis[0].widemofr - vis[-1].widemofr) > 300), vises)
-	return vid_to_vises
+		vis_grouped_by_dir = get_maximal_sublists3(vis, lambda vi: vi.dir_tag_int)
+		vis_desirables_only = filter(lambda vis: (vis[0].dir_tag_int == dir_) and (len(vis) > 5 or abs(vis[0].widemofr - vis[-1].widemofr) > 300), \
+				vis_grouped_by_dir)
+		vis[:] = sum(vis_desirables_only, [])
+	for vid in vid_to_vis.keys():
+		if len(vid_to_vis[vid]) == 0:
+			del vid_to_vis[vid]
+	return vid_to_vis
 
 def remove_time_duplicates(vis_):
 	for i in range(len(vis_)-2, -1, -1): # Removing duplicates by time.  Not sure if this ever happens.
@@ -290,13 +294,12 @@ def make_whereclause_safe(whereclause_):
 
 def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, current_conditions_, time_window_end_, log_=False):
 	assert type(fudgeroute_) == str and type(num_minutes_) == int and direction_ in (0,1)
-	vid_to_vises = get_vid_to_vises(fudgeroute_, direction_, num_minutes_, time_window_end_, False, current_conditions_, log_=log_)
+	vid_to_vis = get_vid_to_vis(fudgeroute_, direction_, num_minutes_, time_window_end_, False, current_conditions_, log_=log_)
 	r = []
-	for vid, vises in vid_to_vises.iteritems():
-		for vis in vises:
-			r += [vi for vi in vis if vi.widemofr != -1]
-			if log_: printerr('vid %s: %d-vi stretch, from %s to %s (widemofrs %d to %d)' \
-					% (vid, len(vis), em_to_str_hms(vis[-1].time), em_to_str_hms(vis[0].time), vis[-1].widemofr, vis[0].widemofr))
+	for vid, vis in vid_to_vis.iteritems():
+		if log_: printerr('For locations, pre-interp: vid %s: %d vis, from %s to %s (widemofrs %d to %d)' \
+				% (vid, len(vis), em_to_str_hms(vis[-1].time), em_to_str_hms(vis[0].time), vis[-1].widemofr, vis[0].widemofr))
+		r += [vi for vi in vis if vi.widemofr != -1]
 	r = interp_by_time(r, True, True, current_conditions_, direction_, time_window_end_, log_=log_)
 	starttime = time_window_end_ - num_minutes_*60*1000
 	r = filter(lambda vilist: str_to_em(vilist[0]) >= starttime, r) # first elem of each timeslice list is a date/time string. 
