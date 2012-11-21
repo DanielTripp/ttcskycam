@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-
-./mc-stop-daemon
-./mc-start-daemon
-

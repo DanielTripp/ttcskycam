@@ -1,0 +1,2 @@
+nohup memcached -m 2 -p 2029 </dev/null &
+echo $! > mc-dev.pid

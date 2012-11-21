@@ -3,7 +3,7 @@
 import memcache
 import c
 
-client = memcache.Client(['127.0.0.1:2029'], debug=0)
+client = memcache.Client(['127.0.0.1:%d' % (2029 if c.IS_DEV else 2030)], debug=0)
 
 # Important that we cast to the return value of this is a str because that's what the memcache client insists on.  
 # Unicode will cause an error right away. 

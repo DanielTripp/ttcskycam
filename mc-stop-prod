@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+
+kill $(cat mc-prod.pid)
+rm mc-prod.pid
+
+
