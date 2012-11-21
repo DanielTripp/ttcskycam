@@ -169,7 +169,7 @@ function make_vids_html() {
 	vids.sort();
 	for(var i in vids) {
 		var vid = vids[i];
-		r += sprintf('%s <span onclick="%s" ondblclick="set_solo_vid(%s)">%s</span>, ', 
+		r += sprintf('%s <span onclick="%s" ondblclick="set_solo_vid(%s)">%s</span>&nbsp;&nbsp;', 
 			make_vid_checkbox_html(vid), 
 			"$('#"+vid_checkbox_id(vid)+"').trigger('click')", 
 			vid, 
@@ -994,6 +994,8 @@ $(document).ready(initialize);
 			<input type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"   />Now 
 			<input type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()" checked="checked"  />Past
 			<input type="text" name="datetimepicker" id="datetimepicker" value="" />
+
+			<p><a href="about.html">About this website.</a></p>
 		</div>
   </body>
 </html>
