@@ -164,7 +164,7 @@ function remove_vid_checkboxes() {
 }
 
 function make_vids_html() {
-	var r = '';
+	var r = 'Showing vehicle IDs: ';
 	var vids = all_vids();
 	vids.sort();
 	for(var i in vids) {
@@ -517,11 +517,18 @@ function draw_traffic_lines() {
 
 function initialize() {
 
+	init_datetimepicker();
+	$.ajax({url:'TRAFFIC_HTML_SHOW_TIME_SELECTOR', async:true, 
+		error: function(jqXHR_, textStatus_, errorThrown_) {}, 
+		success: function(data_, textStatus_, jqXHR_) {
+			document.getElementById('time_selector_div').style.visibility='visible';
+		}
+	});
+
 	init_map();
 	google.maps.event.addListener(g_map, 'zoom_changed', function() {
 		draw_traffic_lines();
 		redraw_vehicle_markers();
-		set_contents("p_zoom_info", "zoom: "+g_map.getZoom());
 	});
 	var origlat, origlon, destlat, destlon;
 	if(true) { // true for dundas 
@@ -558,7 +565,6 @@ function initialize() {
 	google.maps.event.addListener(g_destmark, 'dragend', function() { on_trip_mark_moved(); });
 
 	draw_all_routes();
-	init_datetimepicker();
 
 	set_play_buttons_appropriately();
 
@@ -626,8 +632,8 @@ function is_traffictype_historical() {
 }
 
 function init_datetimepicker() {
-	set_value('datetimepicker', get_sync('datetime.txt'));
-	$('#datetimepicker').datetimepicker({
+	set_value('datetimepicker_textfield', get_sync('datetime.txt'));
+	$('#datetimepicker_textfield').datetimepicker({
 		dateFormat: 'yy-mm-dd', 
 		onSelect: function(dateText, inst) { 
 			on_datetime_changed();
@@ -650,11 +656,11 @@ function schedule_refresh_data_from_server() {
 }
 
 function update_datetimepicker_enabledness() {
-	$('#datetimepicker').prop('disabled', is_traffictype_current());
+	$('#datetimepicker_textfield').prop('disabled', is_traffictype_current());
 }
 
 function get_datetime_from_gui() {
-	return (is_traffictype_current() ? 0 : get_value('datetimepicker'));
+	return (is_traffictype_current() ? 0 : get_value('datetimepicker_textfield'));
 }
 
 function draw_all_routes() {
@@ -870,7 +876,8 @@ function draw_traffic_line(start_latlon_, end_latlon_, kmph_, mofr_) {
 	}
 
 	google.maps.event.addListener(line, 'mouseover', function() {
-		set_contents('p_marker_info', sprintf("KMPH: %s, mofr: %d", (kmph_==null ? 'not available' : sprintf('%.1f', kmph_)), mofr_));
+		set_contents('p_marker_info', sprintf("The average speed in this direction, at %d metres along this route, is %s kmph.", 
+				mofr_, (kmph_==null ? 'not available' : sprintf('%.1f', kmph_))));
 	});
 }
 
@@ -943,7 +950,7 @@ $(document).ready(initialize);
   <body>
 		<div id="map_canvas" style="width:100%; height:100%"></div>
 		<div>
-			<span id="p_last_updated">...</span>
+			<span id="p_last_updated"></span>
 			<img id="loading_img" src="loading.gif" style="visibility:hidden"/>&nbsp; &nbsp; &nbsp; &nbsp; <br/>
 			<svg id="clock" viewBox="0 0 100 100" width="100" height="100">
 				<!-- SVG clock from https://gist.github.com/1188550 --> 
@@ -979,23 +986,29 @@ $(document).ready(initialize);
 					<!--<line id="secondhand" x1="50" y1="50" x2="50" y2="16"/>-->
 				</g>
 			</svg> <br/>
-			<span id="p_cur_time">...</span> 
+			<span id="p_cur_time">&nbsp;</span> 
 			<br/>
 			<input type="button" id="playpause_button" onclick="on_playpause_clicked()" value="" />
 			<input type="button" id="back_button" onclick="on_back_clicked()" value="<" />
 			<input type="button" id="forward_button" onclick="on_forward_clicked()" value=">" />
 			<br/>
-			<p id="p_marker_info">...</p>
-			<p id="p_zoom_info"></p>
-			<p id="p_trip_time_info"></p>
-			<p id="p_trip_endpoint_info"></p>
-			<p id="p_vid_checkboxes"></p>
-			<p id="p_temp"></p>
-			<input type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"   />Now 
-			<input type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()" checked="checked"  />Past
-			<input type="text" name="datetimepicker" id="datetimepicker" value="" />
+			<p id="p_trip_time_info">&nbsp;</p>
+			<hr>
+			<font size="-1">
+			<p>Details:</p>
+			<p id="p_marker_info">(Hover your mouse (or finger) over a coloured section to see the average speed of that section.)</p>
+			<p id="p_vid_checkboxes">&nbsp;</p>
+			<p id="p_trip_endpoint_info">&nbsp;</p>
+			<div id="time_selector_div" style="visibility:hidden">
+			<input id="current_button" type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"    checked="checked"    />Now 
+			<input id="historical_button" type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()"  />Past
+			<input id="datetimepicker_textfield" type="text" name="datetimepicker_textfield" value="" />
+			</div>
+			</font>
+			<hr>
 
 			<p><a href="about.html">About this website.</a></p>
+			<p></p>
 		</div>
   </body>
 </html>
