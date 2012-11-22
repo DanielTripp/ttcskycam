@@ -416,7 +416,7 @@ def group_by_time(vilist_):
 
 # Takes a flat list of VehicleInfo objects.  Returns a list of lists of Vehicleinfo objects, interpolated.
 # Also, with a date/time string as element 0 in each list.
-def interp_by_time(vilist_, attempt_clever_location_interp_, use_db_for_heading_inference_, current_conditions_, dir_=None, end_time_=None, log_=False):
+def interp_by_time(vilist_, be_clever_, use_db_for_heading_inference_, current_conditions_, dir_=None, end_time_=None, log_=False):
 	assert isinstance(vilist_, Sequence)
 	if len(vilist_) == 0:
 		return []
@@ -427,14 +427,14 @@ def interp_by_time(vilist_, attempt_clever_location_interp_, use_db_for_heading_
 	for interptime in lrange(starttime, endtime+1, 60*1000):
 		interped_timeslice = []
 		for vid in vids:
-			lo_vi, hi_vi = get_nearest_time_vis(vilist_, vid, interptime)
+			lolo_vi, lo_vi, hi_vi = get_nearest_time_vis(vilist_, vid, interptime)
 			i_vi = None
 			if lo_vi and hi_vi:
 				if (min(interptime - lo_vi.time, hi_vi.time - interptime) > 3*60*1000) or dirs_disagree(dir_, hi_vi.dir_tag_int)\
 						or (lo_vi.route_tag != hi_vi.route_tag):
 					continue
 				ratio = (interptime - lo_vi.time)/float(hi_vi.time - lo_vi.time)
-				i_latlon, i_heading = interp_latlonnheading(lo_vi, hi_vi, ratio, attempt_clever_location_interp_)
+				i_latlon, i_heading = interp_latlonnheading(lo_vi, hi_vi, ratio, be_clever_)
 				i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, i_heading, vid, i_latlon.lat, i_latlon.lng,
 										 lo_vi.predictable and hi_vi.predictable,
 										 lo_vi.route_tag, 0, interptime, interptime)
@@ -442,7 +442,8 @@ def interp_by_time(vilist_, attempt_clever_location_interp_, use_db_for_heading_
 				if current_conditions_:
 					if (interptime - lo_vi.time > 3*60*1000) or dirs_disagree(dir_, lo_vi.dir_tag_int):
 						continue
-					i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, lo_vi.heading, vid, lo_vi.lat, lo_vi.lng,
+					heading = (lolo_vi.latlng.heading(lo_vi.latlng) if lolo_vi is not None else lo_vi.heading)
+					i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, heading, vid, lo_vi.lat, lo_vi.lng,
 											 lo_vi.predictable, lo_vi.route_tag, 0, interptime, interptime)
 
 			if i_vi:
@@ -456,11 +457,12 @@ def interp_by_time(vilist_, attempt_clever_location_interp_, use_db_for_heading_
 def dirs_disagree(dir1_, dir2_):
 	return (dir1_ == 0 and dir2_ == 1) or (dir1_ == 1 and dir2_ == 0)
 
-def interp_latlonnheading(vi1_, vi2_, ratio_, attempt_clever_location_interp_):
+# be_clever_ - means use routes if mofrs are valid, else use 'tracks' if a streetcar.
+def interp_latlonnheading(vi1_, vi2_, ratio_, be_clever_):
 	assert isinstance(vi1_, vinfo.VehicleInfo) and isinstance(vi2_, vinfo.VehicleInfo) and (vi1_.vehicle_id == vi2_.vehicle_id)
 	assert vi1_.time < vi2_.time
 	r = None
-	if attempt_clever_location_interp_ and vi1_.dir_tag and vi2_.dir_tag:
+	if be_clever_ and vi1_.dir_tag and vi2_.dir_tag:
 		if routes.CONFIGROUTE_TO_FUDGEROUTE[vi1_.route_tag] == routes.CONFIGROUTE_TO_FUDGEROUTE[vi2_.route_tag]:
 			config_route = vi1_.route_tag
 			vi1mofr = routes.latlon_to_mofr(config_route, vi1_.latlng)
@@ -483,14 +485,8 @@ def interp_latlonnheading(vi1_, vi2_, ratio_, attempt_clever_location_interp_):
 						r = (interped_loc_snap_result[0], tracks_based_heading)
 
 	if r is None:
-		r = (vi1_.latlng.avg(vi2_.latlng, ratio_), avg_headings(vi1_.heading, vi2_.heading, ratio_))
+		r = (vi1_.latlng.avg(vi2_.latlng, ratio_), vi1_.latlng.heading(vi2_.latlng))
 	return r
-
-def avg_headings(heading1_, heading2_, ratio_):
-	if heading1_==-4 or heading2_==-4:
-		return -4
-	else:
-		return avg(heading1_, heading2_, ratio_)
 
 def round_down_by_minute(t_em_):
 	dt = datetime.datetime.utcfromtimestamp(t_em_/1000.0)
@@ -597,17 +593,25 @@ def massage_to_list(time_to_vis_):
 			break
 	return r
 
+# return (lolo, lo, hi).  lo and hi bound t_ by time.  lolo is one lower than lo.
 def get_nearest_time_vis(vilist_, vid_, t_):
 	assert type(t_) == long
-	lo_vi = None; hi_vi = None
-	for vi in (vi for vi in vilist_ if vi.vehicle_id == vid_):
-		if vi.time < t_:
-			if lo_vi==None or lo_vi.time < vi.time:
-				lo_vi = vi
-		elif vi.time > t_:
-			if hi_vi==None or hi_vi.time > vi.time:
-				hi_vi = vi
-	return (lo_vi, hi_vi)
+	vis = [vi for vi in vilist_ if vi.vehicle_id == vid_]
+	if len(vis) == 0:
+		return (None, None, None)
+	assert is_sorted(vis, reverse=True, key=lambda vi: vi.time)
+	r_lo = None; r_hi = None
+	for hi_idx in range(len(vis)-1):
+		lo_idx = hi_idx+1
+		hi = vis[hi_idx]; lo = vis[lo_idx]
+		if hi.time > t_ >= lo.time:
+			return ((vis[lo_idx+1] if lo_idx < len(vis)-1 else None), lo, hi)
+	if t_ >= vis[0].time:
+		return (vis[1] if len(vis) >= 2 else None, vis[0], None)
+	elif t_ < vis[-1].time:
+		 return (None, None, vis[-1])
+	else:
+		return (None, None, None)
 
 @trans
 def purge():
@@ -635,7 +639,19 @@ def t():
 
 if __name__ == '__main__':
 
-	conn()
+	class VI:
+		def __init__(self, time_):
+			self.time = time_
+			self.vehicle_id = '4111'
+
+		def __repr__(self):
+			return '%d' % self.time
+
+	for vilist in [[VI(200), VI(150), VI(100), VI(50)], [VI(200), VI(150)], [VI(200)]]:
+		for t in [220, 201, 200, 199, 160, 151, 150, 149, 110, 60, 40]:
+			print vilist, t
+			print get_nearest_time_vis(vilist, '4111', long(t))
+			print '-----'
 
 
 
