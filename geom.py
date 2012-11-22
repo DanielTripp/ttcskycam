@@ -45,12 +45,12 @@ class LatLng:
 
 	# Returns 'absolute angle' between two points (measured counter-clockwise from the positive X axis)
 	# Returns between -pi and +pi.
-	def abs_angle(self, other_):
-		assert isinstance(other_, LatLng)
-		opposite = LatLng(self.lat, other_.lng).dist_m(LatLng(other_.lat, other_.lng))
-		adjacent = LatLng(self.lat, other_.lng).dist_m(LatLng(self.lat, self.lng))
+	def abs_angle(self, fore_):
+		assert isinstance(fore_, LatLng)
+		opposite = LatLng(self.lat, fore_.lng).dist_m(LatLng(fore_.lat, fore_.lng))
+		adjacent = LatLng(self.lat, fore_.lng).dist_m(LatLng(self.lat, self.lng))
 		r = math.atan2(opposite, adjacent)
-		latdiff = other_.lat - self.lat; londiff = other_.lng - self.lng
+		latdiff = fore_.lat - self.lat; londiff = fore_.lng - self.lng
 		if londiff > 0 and latdiff > 0: # first quadrant 
 			pass
 		elif londiff <= 0 and latdiff > 0: # second quadrant 
@@ -61,8 +61,8 @@ class LatLng:
 			r = -r
 		return r
 
-	def heading(self, other_):
-		ang = math.degrees(self.abs_angle(other_))
+	def heading(self, fore_):
+		ang = math.degrees(self.abs_angle(fore_))
 		if ang > 90:
 			heading = get_range_val((90, 360), (180, 270), ang)
 		else:
