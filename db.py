@@ -450,7 +450,6 @@ def interp_by_time(vilist_, be_clever_, use_db_for_heading_inference_, current_c
 				interped_timeslice.append(i_vi)
 
 		time_to_vis[interptime] = interped_timeslice
-	infer_headings(time_to_vis, use_db_for_heading_inference_, log_=log_)
 	return massage_to_list(time_to_vis)
 
 # Either arg could be None (i.e. blank dir_tag).  For this we consider None to 'agree' with 0 or 1.
@@ -493,82 +492,6 @@ def round_down_by_minute(t_em_):
 	dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute)
 	r = long(calendar.timegm(dt.timetuple())*1000)
 	return r
-
-def infer_headings(r_time_to_vis_, use_db_, log_=False):
-	assert isinstance(use_db_, bool)
-	times = sorted(r_time_to_vis_.keys())
-	for timei, time in enumerate(times):
-		if timei==0:
-			continue
-		for target_vi in r_time_to_vis_[time]:
-			# -4 means blank, or at least that's what nextbus seems to mean by it.
-			if target_vi.heading == -4:
-				infer_headings_technique1(target_vi, r_time_to_vis_, times, timei, log_=log_)
-			if target_vi.heading == -4:
-				infer_headings_technique2(target_vi, r_time_to_vis_, times, timei, log_=log_)
-	if use_db_:
-		infer_headings_technique3(r_time_to_vis_, log_=log_)
-
-# Look back in time (amongst our in-memory list here) for a previous appearance of this vid which indicates
-# a direction by change of mofr, then get a heading from our route info based on that direction.
-def infer_headings_technique1(r_target_vi_, time_to_vis_, times_, timei_, log_=False):
-	if r_target_vi_.mofr != -1:
-		prev_vi = None
-		for timej in range(timei_-1, -1, -1):
-			if prev_vi != None:
-				break
-			for older_vi in time_to_vis_[times_[timej]]:
-				if (older_vi.vehicle_id == r_target_vi_.vehicle_id) and (older_vi.mofr != -1)\
-				   and (older_vi.fudgeroute == r_target_vi_.fudgeroute)\
-				and (abs(r_target_vi_.mofr - older_vi.mofr) >= 5):
-					prev_vi = older_vi
-					break
-		if prev_vi is not None:
-			dir = (0 if prev_vi.mofr < r_target_vi_.mofr else 1)
-			heading = routes.get_routeinfo(r_target_vi_.route_tag).mofr_to_heading(r_target_vi_.mofr, dir)
-			if log_: printerr('Inferred heading %d via mofrs for vid %s at %s' % (heading, r_target_vi_.vehicle_id, r_target_vi_.timestr))
-			r_target_vi_.heading = heading
-
-# If the above didn't work out then try again using lat/lons instead of mofrs.
-def infer_headings_technique2(r_target_vi_, time_to_vis_, times_, timei_, log_=False):
-	prev_vi = None
-	for timej in range(timei_-1, -1, -1):
-		if prev_vi is not None:
-			break
-		for older_vi in time_to_vis_[times_[timej]]:
-			if (older_vi.vehicle_id == r_target_vi_.vehicle_id) and (older_vi.latlng.dist_m(r_target_vi_.latlng) >= 20):
-				prev_vi = older_vi
-				break
-	if prev_vi is not None:
-		heading = prev_vi.latlng.heading(r_target_vi_.latlng)
-		if log_: printerr('Inferred heading %d via in-memory lat/lng diff for vid %s at %s' % (heading, r_target_vi_.vehicle_id, r_target_vi_.timestr))
-		r_target_vi_.heading = heading
-
-# As a last resort, use the database to look further back in time.
-def infer_headings_technique3(r_time_to_vis_, log_=False):
-	vid_to_latlng_to_heading = defaultdict(lambda: {}) # Whatever we've seen so far.  Will contain -4 if our searching of the db yielded no heading.
-	for tyme in sorted(r_time_to_vis_.keys()):
-		for vi in (vi for vi in r_time_to_vis_[tyme] if vi.heading == -4):
-			for latlng, heading in vid_to_latlng_to_heading[vi.vehicle_id].items():
-				if vi.latlng.dist_m(latlng) < 5:
-					if log_: printerr('Inferred heading %d via in-db lat/lng diff for vid %s at %s.  Using cached value - same as %s.' % (heading, vi.vehicle_id, vi.timestr, latlng))
-					vi.heading = heading
-			if vi.heading == -4:
-				curs = conn().cursor('cursor_%d' % (int(time.time()*1000)))
-				curs.execute('select lat, lon, time from ttc_vehicle_locations where vehicle_id = %s and time > %s and time < %s order by time desc',\
-							 [vi.vehicle_id, vi.time - 1000*60*60*12, vi.time])
-				for row in curs:
-					past_latlng = geom.LatLng(row[0], row[1])
-					if past_latlng.dist_m(vi.latlng) > 20:
-						heading = past_latlng.heading(vi.latlng)
-						vid_to_latlng_to_heading[vi.vehicle_id][vi.latlng.clone()] = heading
-						vi.heading = heading
-						if log_: printerr('Inferred heading %d via in-db lat/lng diff for vid %s at %s (referencing %s in db).' % (heading, vi.vehicle_id, vi.timestr, em_to_str(row[2])))
-						break
-				else:
-					if log_: printerr('Failed to infer heading via in-db lat/lng diff for vid %s at %s.' % (vi.vehicle_id, vi.timestr))
-					vid_to_latlng_to_heading[vi.vehicle_id][vi.latlng.clone()] = -4
-				curs.close()
 
 def massage_to_list(time_to_vis_):
 	time_to_vis = time_to_vis_.copy()
