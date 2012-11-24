@@ -89,13 +89,18 @@ function int_to_rgbstr(int_) {
 	
 function init_map() {
 	var myOptions = {
-		center: new google.maps.LatLng(43.655, -79.425),
+		center: new google.maps.LatLng(43.65431690357294, -79.40920715332034),
 		zoom: 14,
 		scaleControl: true, 
 		mapTypeId: google.maps.MapTypeId.ROADMAP
 	};
 	g_map = new google.maps.Map(document.getElementById("map_canvas"),
 			myOptions);
+	var bounds = new google.maps.LatLngBounds(new google.maps.LatLng(43.64280759826894, -79.47029872139592), 
+			new google.maps.LatLng(43.666964279902764, -79.34704585274358));
+	// The line below seemed not to work on iPhone and even worse, it broke everything too (no data, routes, or 
+	// start / destination markers shown).   
+	//g_map.fitBounds(bounds);
 }
 
 function set_contents(id_, contents_) {
@@ -211,6 +216,28 @@ function vi_to_str(vi_) {
 	return sprintf('%s  route: %4s, vehicle: %s, dir: %-12s, (  %2.5f, %2.5f  ) , mofr: %d, heading: %3d %s', 
 			vi_.timestr, vi_.route_tag, vi_.vehicle_id, dir_tag, vi_.lat, vi_.lon, vi_.mofr, vi_.heading, 
 				(vi_.predictable ? '' : 'UNPREDICTABLE'));
+}
+
+function avg(lo_, hi_, ratio_) {
+  return (lo_ + (hi_ - lo_)*ratio_);
+}
+
+var g_temp_infowin = null;
+
+function show_temp_infowin(text_) {
+	close_temp_infowin();
+	var top = g_map.getBounds().getNorthEast().lat(), bottom = g_map.getBounds().getSouthWest().lat();
+	var pos = new google.maps.LatLng(avg(bottom, top, 0.1), g_map.getCenter().lng());
+	g_temp_infowin = new google.maps.InfoWindow({content: text_, position: pos, disableAutoPan: true});
+	g_temp_infowin.open(g_map);
+	setTimeout("close_temp_infowin()", 3000);
+}
+
+function close_temp_infowin() {
+	if(g_temp_infowin != null) {
+		g_temp_infowin.close();
+		g_temp_infowin = null;
+	}
 }
 
 eval(get_sync("js/json2.js"));

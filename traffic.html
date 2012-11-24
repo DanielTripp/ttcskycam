@@ -268,7 +268,7 @@ function round_heading(heading_) {
 
 function update_last_updated_time() {
 	var d = new Date();
-	set_contents('p_last_updated', sprintf('Last updated at %02d:%02d:%02d', d.getHours(), d.getMinutes(), d.getSeconds()));
+	set_contents('p_last_updated', sprintf('(Last updated at %02d:%02d:%02d)', d.getHours(), d.getMinutes(), d.getSeconds()));
 }
 
 function refresh_data_from_server_timer_func() {
@@ -515,6 +515,22 @@ function draw_traffic_lines() {
 	}
 }
 
+function add_text_to_marker(marker_, string_) {
+	var text_marker = new RichMarker({
+		position: marker_.getPosition(),
+		map: g_map,
+		draggable: false,
+		flat: true,
+		anchor: new google.maps.Size(-40, -60), 
+		content: sprintf('<svg width="120px" height="25px" version="1.1">' +
+				'<text x="0" y="20" font-size="20" stroke="rgb(0,0,0)" stroke-width="0.3" fill="rgb(255,124,112)">%s</text>' +
+				'</svg>', string_)
+		});
+	google.maps.event.addListener(marker_, 'position_changed', function() {
+		text_marker.setPosition(marker_.getPosition());
+	});
+}
+
 function initialize() {
 
 	init_datetimepicker();
@@ -532,10 +548,14 @@ function initialize() {
 	});
 	var origlat, origlon, destlat, destlon;
 	if(true) { // true for dundas 
+		var westlat = 43.65162;
+		var westlon = -79.4096099;
+		var eastlat = 43.6523999;
+		var eastlon = -79.40589;
 		if(false) { // true for eastbound 
-			origlat=43.6492799; origlon=-79.42095; destlat=43.65085; destlon=-79.4128799;
+			origlat=westlat; origlon=westlon; destlat=eastlat; destlon=eastlon;
 		} else {
-			destlat=43.6492799; destlon=-79.42095; origlat=43.65085; origlon=-79.4128799;
+			destlat=westlat; destlon=westlon; origlat=eastlat; origlon=eastlon;
 		}
 	} else { 
 		if(false) { // true for eastbound 
@@ -546,22 +566,19 @@ function initialize() {
 	}
 	g_origmark = new google.maps.Marker({
 		position: new google.maps.LatLng(origlat, origlon),
-		title: 'Starting point', 
 		map: g_map,
 		draggable: true
 		});
-	var origmark_infowin = new google.maps.InfoWindow({content: 'Start'});
-	//origmark_infowin.open(g_map, g_origmark);
+	add_text_to_marker(g_origmark, "Starting point");
+
 	google.maps.event.addListener(g_origmark, 'dragend', function() { on_trip_mark_moved(); });
 
 	g_destmark = new google.maps.Marker({
 		position: new google.maps.LatLng(destlat, destlon),
-		title: 'Destination', 
 		map: g_map,
 		draggable: true
 		});
-	var destmark_infowin = new google.maps.InfoWindow({content: 'End'});
-	//destmark_infowin.open(g_map, g_destmark);
+	add_text_to_marker(g_destmark, "Destination");
 	google.maps.event.addListener(g_destmark, 'dragend', function() { on_trip_mark_moved(); });
 
 	draw_all_routes();
@@ -569,6 +586,8 @@ function initialize() {
 	set_play_buttons_appropriately();
 
 	on_trip_mark_moved();
+
+	//google.maps.event.addListener(g_map, 'dragend', function() { alert(g_map.getCenter());  }); // TDR 
 
 }
 
@@ -716,6 +735,9 @@ function on_trip_mark_moved() {
 					}
 				} else {
 					update_trip_time();
+				}
+				if(g_route == null) {
+					show_temp_infowin('Please drag both markers onto a route eg. King street.');
 				}
 			});
 }
@@ -876,8 +898,8 @@ function draw_traffic_line(start_latlon_, end_latlon_, kmph_, mofr_) {
 	}
 
 	google.maps.event.addListener(line, 'mouseover', function() {
-		set_contents('p_marker_info', sprintf("The average speed in this direction, at %d metres along this route, is %s kmph.", 
-				mofr_, (kmph_==null ? 'not available' : sprintf('%.1f', kmph_))));
+		set_contents('p_marker_info', sprintf("The average speed in this direction, at %d metres along this route, is %s.", 
+				mofr_, (kmph_==null ? 'not available' : sprintf('%.1f kmph', kmph_))));
 	});
 }
 
@@ -950,7 +972,9 @@ $(document).ready(initialize);
   <body>
 		<div id="map_canvas" style="width:100%; height:100%"></div>
 		<div>
-			<span id="p_last_updated"></span>
+			<br/>
+			<a href="instructions.html">Instructions.</a>
+			<hr>
 			<img id="loading_img" src="loading.gif" style="visibility:hidden"/>&nbsp; &nbsp; &nbsp; &nbsp; <br/>
 			<svg id="clock" viewBox="0 0 100 100" width="100" height="100">
 				<!-- SVG clock from https://gist.github.com/1188550 --> 
@@ -986,8 +1010,10 @@ $(document).ready(initialize);
 					<!--<line id="secondhand" x1="50" y1="50" x2="50" y2="16"/>-->
 				</g>
 			</svg> <br/>
-			<span id="p_cur_time">&nbsp;</span> 
-			<br/>
+			<span id="p_cur_time">&nbsp;</span><br/>
+			<span id="p_last_updated"></span>
+			<hr>
+			Animated vehicles: 
 			<input type="button" id="playpause_button" onclick="on_playpause_clicked()" value="" />
 			<input type="button" id="back_button" onclick="on_back_clicked()" value="<" />
 			<input type="button" id="forward_button" onclick="on_forward_clicked()" value=">" />
