@@ -19,22 +19,26 @@ g_loading_get_count = 0;
 function inc_loading_get_count() {
 	g_loading_get_count++;
 	if(g_loading_get_count == 1) {
-		var img = document.getElementById('loading_img');
-		if(img != null) {
-			img.style.visibility = 'visible';
+		if(g_loading_gif_marker!=null) {
+			g_loading_gif_marker.setVisible(true);
 		}
-		//set_contents('p_get_status', '...');
+        var img = document.getElementById('loading_img');
+        if(img != null) {
+            img.style.visibility = 'visible';
+        }
 	}
 }
 
 function dec_loading_get_count() {
 	g_loading_get_count--;
 	if(g_loading_get_count == 0) {
-		var img = document.getElementById('loading_img');
-		if(img != null) {
-			img.style.visibility = 'hidden';
+		if(g_loading_gif_marker!=null) {
+			g_loading_gif_marker.setVisible(false);
 		}
-		//set_contents('p_get_status', '');
+        var img = document.getElementById('loading_img');
+        if(img != null) {
+            img.style.visibility = 'hidden';
+        }
 	}
 }
 
@@ -87,6 +91,8 @@ function int_to_rgbstr(int_) {
 	return 'rgb('+r+')';
 }
 	
+var g_loading_gif_marker = null;
+
 function init_map() {
 	var myOptions = {
 		center: new google.maps.LatLng(43.65431690357294, -79.40920715332034),
@@ -101,7 +107,24 @@ function init_map() {
 	// The line below seemed not to work on iPhone and even worse, it broke everything too (no data, routes, or 
 	// start / destination markers shown).   
 	//g_map.fitBounds(bounds);
+
+  g_loading_gif_marker = new google.maps.Marker({
+      position: new google.maps.LatLng(43.652868888096386, -79.41064639290471),
+      map: g_map,
+      optimized: false,
+      draggable: false,
+      icon: new google.maps.MarkerImage('loading.gif',
+          null, null, new google.maps.Point(-10, 70)),
+      visible: false
+    });
+
+	google.maps.event.addListener(g_map, 'bounds_changed', reposition_loading_gif_marker);
 }
+
+function reposition_loading_gif_marker() {
+	g_loading_gif_marker.setPosition(g_map.getBounds().getSouthWest());
+}
+
 
 function set_contents(id_, contents_) {
 	document.getElementById(id_).innerHTML = contents_;
