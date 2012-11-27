@@ -137,6 +137,7 @@ function refresh_vehicles_from_server() {
 			stop_play_timer();
 			appropriate_vehicle_locations(r_);
 			if(g_times.length > 0) {
+				$('#playpause_button').prop('disabled', false);
 				draw_static_vehicles();
 				create_moving_vehicle_markers();
 				create_vid_checkboxes();
@@ -145,12 +146,16 @@ function refresh_vehicles_from_server() {
 						// Not worth it to fuss about overtime here. 
 					g_cur_minute = 0;
 				}
+				update_time_display();
 				show_cur_minute_vehicles();
 				if(g_playing) {
 					g_play_timer = setTimeout('moving_vehicles_timer_func()', MOVING_VEHICLES_ANIM_INTERVAL_MS);
 				}
 			} else {
+				$('#playpause_button').prop('disabled', true);
 				remove_vid_checkboxes();
+				set_analog_clock_hour_minute(0, 0);
+				set_contents('p_cur_time', 'Found no vehicles.');
 			}
 		});
 }
@@ -390,17 +395,38 @@ function move_vehicles_forward_one_minute_normal() {
 
 function update_time_display() {
 	var timestr = g_times[Math.min(g_cur_minute, g_times.length-1)];
-	// We want a timestamp in the format: 2012-10-30 01:14:00 
-	assert((new RegExp('\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}')).test(timestr), "date/time does not match");
 
-	var hour = parseInt(timestr.substr(11, 2), 10), minute = parseInt(timestr.substr(14, 2), 10);
-	setAnalogClock(hour, minute);
+	set_analog_clock_timestr(timestr);
 
 	var cur_time_html = timestr.substr(0, 16);
 	if((g_cur_minute == g_times.length-1) || (in_overtime() && in_overtime_flash_on())) {
 		cur_time_html = '<b>'+cur_time_html+'</b>';
 	}
 	set_contents('p_cur_time', cur_time_html);
+}
+
+function set_analog_clock_timestr(timestr_) {
+	// We want a timestamp in the format: 2012-10-30 01:14:00 
+	assert((new RegExp('\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}')).test(timestr_), "date/time does not match");
+
+	var hour = parseInt(timestr_.substr(11, 2), 10), minute = parseInt(timestr_.substr(14, 2), 10);
+	set_analog_clock_hour_minute(hour, minute);
+}
+
+// SVG clock from https://gist.github.com/1188550 
+function set_analog_clock_hour_minute(hour_, minute_) {
+	var hourangle = ((hour_ % 12) + minute_/60)*30;
+	var minangle = minute_*6;
+
+	// Get SVG elements for the hands of the clock
+	//var sechand = document.getElementById('secondhand');
+	var minhand = document.getElementById("minutehand");
+	var hourhand = document.getElementById("hourhand");
+
+	// Set an SVG attribute on them to move them around the clock face
+	//sechand.setAttribute("transform", "rotate(" + secangle + ",50,50)");
+	minhand.setAttribute("transform", "rotate(" + minangle + ",50,50)");
+	hourhand.setAttribute("transform", "rotate(" + hourangle + ",50,50)");
 }
 
 function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
@@ -415,10 +441,8 @@ function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
 			visible: false
 		});
 	marker.setVisible(true);
-	if(static_aot_moving_) {
-		add_vid_mouseover_infowin(marker, size, vid_);
-		add_solo_vid_click_listener(marker, vid_);
-	}
+	add_vid_mouseover_infowin(marker, size, vid_);
+	add_solo_vid_click_listener(marker, vid_);
 	return marker;
 }
 
@@ -461,10 +485,10 @@ function is_solo_already() {
 
 function add_vid_mouseover_infowin(vehicle_marker_, vehicle_marker_size_, vid_) {
 	var infowin = new google.maps.InfoWindow({content: 'Vehicle ID: '+vid_, disableAutoPan: true, 
-		position: vehicle_marker_.getPosition(), 
 		pixelOffset: new google.maps.Size(vehicle_marker_size_/3, -vehicle_marker_size_/3)
 		});
 	google.maps.event.addListener(vehicle_marker_, 'mouseover', function() {
+		infowin.setPosition(vehicle_marker_.getPosition());
 		infowin.open(g_map);
 	});
 	google.maps.event.addListener(vehicle_marker_, 'mouseout', function() {
@@ -547,7 +571,7 @@ function initialize() {
 		redraw_vehicle_markers();
 	});
 	var origlat, origlon, destlat, destlon;
-	if(true) { // true for dundas 
+	if(false) { // true for dundas 
 		var westlat = 43.65078;
 		var westlon = -79.4138099;
 		var eastlat = 43.6523999;
@@ -558,7 +582,7 @@ function initialize() {
 			destlat=westlat; destlon=westlon; origlat=eastlat; origlon=eastlon;
 		}
 	} else { 
-		if(false) { // true for eastbound 
+		if(true) { // true for eastbound 
 			origlat=43.64457; origlon=-79.4165499; destlat=43.6471199; destlon=-79.4042;
 		} else {
 			destlat=43.64457; destlon=-79.4165499; origlat=43.6471199; origlon=-79.4042;
@@ -598,6 +622,9 @@ function set_play_buttons_appropriately() {
 }
 
 function on_playpause_clicked() {
+	if(g_times.length == 0) {
+		return;
+	}
 	g_playing = !g_playing;
 	set_play_buttons_appropriately();
 	if(g_playing) { // go from paused to playing: 
@@ -631,12 +658,18 @@ function show_cur_minute_vehicles() {
 }
 
 function on_forward_clicked() {
+	if(g_times.length == 0) {
+		return;
+	}
 	g_cur_minute = Math.min(g_cur_minute+1, g_times.length-1);
 	update_time_display();
 	show_cur_minute_vehicles();
 }
 
 function on_back_clicked() {
+	if(g_times.length == 0) {
+		return;
+	}
 	g_cur_minute = Math.max(g_cur_minute-1, 0);
 	update_time_display();
 	show_cur_minute_vehicles();
@@ -921,22 +954,6 @@ function vid_to_color(vid_) {
 	return g_vehicle_colors[hashCode(vid_) % g_vehicle_colors.length];
 }
 
-// SVG clock from https://gist.github.com/1188550 
-function setAnalogClock(hour_, minute_) {
-	var hourangle = ((hour_ % 12) + minute_/60)*30;
-	var minangle = minute_*6;
-
-	// Get SVG elements for the hands of the clock
-	//var sechand = document.getElementById('secondhand');
-	var minhand = document.getElementById("minutehand");
-	var hourhand = document.getElementById("hourhand");
-
-	// Set an SVG attribute on them to move them around the clock face
-	//sechand.setAttribute("transform", "rotate(" + secangle + ",50,50)");
-	minhand.setAttribute("transform", "rotate(" + minangle + ",50,50)");
-	hourhand.setAttribute("transform", "rotate(" + hourangle + ",50,50)");
-}
-
 
 $(document).ready(initialize);
 
@@ -1025,7 +1042,7 @@ $(document).ready(initialize);
 			<p id="p_vid_checkboxes">&nbsp;</p>
 			<p id="p_trip_endpoint_info">&nbsp;</p>
 			<div id="time_selector_div" style="visibility:hidden">
-			<input id="current_button" type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"    checked="checked"    />Now 
+			<input id="current_button" type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"    checked="checked"    />Now
 			<input id="historical_button" type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()"  />Past
 			<input id="datetimepicker_textfield" type="text" name="datetimepicker_textfield" value="" />
 			</div>
