@@ -56,12 +56,27 @@ function get(url_, success_) {
 	});
 }
 
-function get_sync(url_) {
-	r = $.ajax({url:url_, async:false, 
-		error: function(jqXHR_, textStatus_, errorThrown_) {
-			alert("Error");
-		}
-	}).responseText;
+function dict_union(dict1_, dict2_) {
+	r = {}
+	for(var i in dict1_) {
+		r[i] = dict1_[i];
+	}
+	for(var i in dict2_) {
+		r[i] = dict2_[i];
+	}
+	return r;
+}
+
+function get_sync(url_, additional_options_) {
+	var options = {url:url_, async:false, 
+			error: function(jqXHR_, textStatus_, errorThrown_) {
+				alert("Error");
+			}
+		};
+	if(additional_options_ != undefined) {
+		options = dict_union(options, additional_options_);
+	}
+	r = $.ajax(options).responseText;
 	return r;
 }
 
