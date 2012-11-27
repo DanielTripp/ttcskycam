@@ -277,7 +277,7 @@ def query1(whereclause_, maxrows_, interp_by_time_):
 	whereclause = massage_whereclause(whereclause_)
 	r = []
 	sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations where ' \
-		+ (whereclause if whereclause else 'true')+' order by route_tag, time desc limit %d' % (maxrows_)
+		+ (whereclause if whereclause else 'true')+' order by time desc limit %d' % (maxrows_)
 	curs = conn().cursor()
 	curs.execute(sqlstr)
 	for row in curs:
