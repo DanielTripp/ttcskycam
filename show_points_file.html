@@ -33,7 +33,7 @@ function initialize() {
 				g_latlngs.clear();
 				g_i = 0;
 
-				var contents_latlng_list = $.parseJSON(get_sync(get_value('filename_field')));
+				var contents_latlng_list = $.parseJSON(get_sync(get_value('filename_field'), {cache: false}));
 				for(var i in contents_latlng_list) {
 					var raw_latlng = contents_latlng_list[i];
 					var glatlng = new google.maps.LatLng(raw_latlng[0], raw_latlng[1]);
