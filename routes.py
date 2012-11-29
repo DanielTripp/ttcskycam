@@ -47,13 +47,18 @@ class RouteInfo:
 			routepts = [read('fudge_route_%s_dir0.json' % (routename_)), read('fudge_route_%s_dir1.json' % (routename_))]
 			self.is_split_by_dir = True
 		self.snaptogridcache = snaptogrid.SnapToGridCache(routepts)
-		self.routeptidx_to_mofr = []
-		for i in range(len(self.routepts(0))):
-			if i==0:
-				self.routeptidx_to_mofr.append(0)
+		self.routeptaddr_to_mofr = [[], []]
+		for dir in (0, 1):
+			if dir == 1 and not self.is_split_by_dir:
+				self.routeptaddr_to_mofr[1] = self.routeptaddr_to_mofr[0]
 			else:
-				self.routeptidx_to_mofr.append(self.routeptidx_to_mofr[i-1] + self.routepts(0)[i].dist_m(self.routepts(0)[i-1]))
-		assert len(self.routeptidx_to_mofr) == len(self.routepts(0))
+				for i in range(len(self.routepts(dir))):
+					if i==0:
+						self.routeptaddr_to_mofr[dir].append(0)
+					else:
+						prevpt = self.routepts(dir)[i-1]; curpt = self.routepts(dir)[i]
+						self.routeptaddr_to_mofr[dir].append(self.routeptaddr_to_mofr[dir][i-1] + prevpt.dist_m(curpt))
+			assert len(self.routeptaddr_to_mofr[dir]) == len(self.routepts(dir))
 		if self.is_split_by_dir:
 			assert (sum(pt1.dist_m(pt2) for pt1, pt2 in hopscotch(self.routepts(0))) - \
 					sum(pt1.dist_m(pt2) for pt1, pt2 in hopscotch(self.routepts(1)))) < 0.01
@@ -80,7 +85,7 @@ class RouteInfo:
 		if snap_result is None:
 			return -1
 		dir = snap_result[1].polylineidx; routeptidx = snap_result[1].startptidx
-		r = self.routeptidx_to_mofr[routeptidx]
+		r = self.routeptaddr_to_mofr[dir][routeptidx]
 		if snap_result[2]:
 			r += snap_result[0].dist_m(self.routepts(dir)[routeptidx])
 		return int(r)
@@ -94,7 +99,7 @@ class RouteInfo:
 		return (snapped_pt, mofr, resnapped_pts)
 
 	def max_mofr(self):
-		return int(math.ceil(self.routeptidx_to_mofr[-1]))
+		return int(math.ceil(self.routeptaddr_to_mofr[0][-1]))
 
 	def mofr_to_latlon(self, mofr_, dir_):
 		r = self.mofr_to_latlonnheading(mofr_, dir_)
@@ -108,10 +113,10 @@ class RouteInfo:
 		assert dir_ in (0, 1)
 		if mofr_ < 0:
 			return None
-		for i in range(1, len(self.routeptidx_to_mofr)):
-			if self.routeptidx_to_mofr[i] >= mofr_:
+		for i in range(1, len(self.routeptaddr_to_mofr[dir_])):
+			if self.routeptaddr_to_mofr[dir_][i] >= mofr_:
 				prevpt = self.routepts(dir_)[i-1]; curpt = self.routepts(dir_)[i]
-				prevmofr = self.routeptidx_to_mofr[i-1]; curmofr = self.routeptidx_to_mofr[i]
+				prevmofr = self.routeptaddr_to_mofr[dir_][i-1]; curmofr = self.routeptaddr_to_mofr[dir_][i]
 				pt = curpt.subtract(prevpt).scale((mofr_-prevmofr)/float(curmofr-prevmofr)).add(prevpt)
 				return (pt, prevpt.heading(curpt) if dir_==0 else curpt.heading(prevpt))
 		return None
