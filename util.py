@@ -1,6 +1,7 @@
 #!/usr/bin/python2.6
 
-import vinfo, db, routes, mc
+import json
+import vinfo, db, routes, mc, geom
 from misc import *
 
 def get_vids(route_, start_time_, end_time_):
@@ -90,6 +91,42 @@ def print_current_wrong_dirs(start_time_ = now_em()-1000*60*30):
 		for vi in vis:
 			print vi
 
+def file_to_latlngs(filename_):
+	with open(filename_) as fin:
+		r = []
+		for raw_latlng in json.load(fin):
+			r.append(geom.LatLng(raw_latlng[0], raw_latlng[1]))
+		return r
+
+class OurJSONEncoder(json.JSONEncoder):
+
+	def default(self, o):
+		if isinstance(o, geom.LatLng):
+			return (o.lat, o.lng)
+		elif isinstance(o, vinfo.VehicleInfo):
+			return o.to_json_dict()
+		else:
+			return json.JSONEncoder.default(self, o)
+
+
+def split_route_loop(filename_):
+	latlngs = file_to_latlngs(filename_)
+	total_metres = sum(p1.dist_m(p2) for p1, p2 in hopscotch(latlngs))
+
+	cur_metres = 0.0
+	for i in range(1, len(latlngs)):
+		cur_leg_metres = latlngs[i-1].dist_m(latlngs[i])
+		cur_metres += cur_leg_metres
+		if cur_metres >= total_metres/2.0:
+			prevpt = latlngs[i-1]; curpt = latlngs[i]
+			prev_metres = cur_metres - cur_leg_metres
+			midpt = curpt.subtract(prevpt).scale((total_metres/2.0 - prev_metres)/float(cur_metres - prev_metres)).add(prevpt)
+			def p(latlngs__):
+				print json.dumps(latlngs__, indent=0, cls=OurJSONEncoder)
+			p(latlngs[0:i] + [midpt])
+			print
+			p(([midpt] + latlngs[i:] + [latlngs[0]])[::-1])
+			break
 
 if __name__ == '__main__':
 
