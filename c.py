@@ -1,5 +1,5 @@
 
 SITE_VERSION = 'dev'
 
-IS_DEV = False
+IS_DEV = True
 
