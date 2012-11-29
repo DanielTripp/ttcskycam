@@ -6,14 +6,15 @@ import traffic, db, vinfo, routes, geom, mc, tracks
 
 if __name__ == '__main__':
 
-	LIMIT = 50
+	LIMIT = 50000
 
 	vis = []
-	for route in routes.CONFIGROUTES:
+	for route in ('505', '501', '504', '301', '511', '510', '508', '506', '509', '512'):
+		printerr(route+'...')
 		curs = db.conn().cursor()
-		t0 = str_to_em('2012-10-01 12:00');
+		t0 = str_to_em('2012-11-17 00:00');
 		curs.execute('select '+db.VI_COLS+' from ttc_vehicle_locations where route_tag = %s and time > %s and time < %s and vehicle_id like %s',\
-				[route, t0, t0+1000*60*60*2, '4%'])
+				[route, t0, t0+1000*60*60*48, '4%'])
 		for row in curs:
 			vi = vinfo.VehicleInfo(*row)
 			if not tracks.is_on_a_track(vi.latlng):
