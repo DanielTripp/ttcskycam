@@ -1,2 +1,2 @@
 nohup memcached -m 2 -p 2030 </dev/null &
-echo $! > mc-prod.pid
+echo $! > ~/mc-prod.pid
