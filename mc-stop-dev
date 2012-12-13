@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-kill $(cat mc-dev.pid)
-rm mc-dev.pid
+kill $(cat ~/mc-dev.pid)
+rm ~/mc-dev.pid
 
 
