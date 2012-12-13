@@ -17,9 +17,8 @@ def get_arg_objvals(vardict_):
 	strvals = get_arg_strvals(vardict_)
 	return [int(strvals[0]), int(strvals[1]), strvals[2], float(strvals[3])]
 
-
-
 def get_vehicle_svg(size_, heading_, color_, opacity_):
+	#opacity_ = 1.0 # TDR 
 	return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 91 91" width="%dpx" height="%dpx" version="1.1">' + \
 			'<g transform="rotate(%d 45 45)" >' + \
 			'<polygon points="30,30, 45,15, 60,30, 60,75, 30,75" fill="%s" fill-opacity="%f" stroke="rgb(0,0,0)" stroke-width="1" />' + \
@@ -46,11 +45,6 @@ def get_vehicle_png(size_, heading_, color_, opacity_):
 vars = urlparse.parse_qs(os.getenv('QUERY_STRING'))
 args = get_arg_objvals(vars)
 
-user_agent = os.getenv('HTTP_USER_AGENT')
-if any(x in user_agent for x in ('MSIE 6', 'MSIE 7', 'MSIE 8')):
-	print 'Content-type: image/png\n'
-	print get_vehicle_png(*args)
-else:
-	print 'Content-type: image/svg+xml\n'
-	print get_vehicle_svg(*args)
+print 'Content-type: image/png\n'
+print get_vehicle_png(*args)
 

@@ -300,9 +300,8 @@ def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, current_
 		if log_: printerr('For locations, pre-interp: vid %s: %d vis, from %s to %s (widemofrs %d to %d)' \
 				% (vid, len(vis), em_to_str_hms(vis[-1].time), em_to_str_hms(vis[0].time), vis[-1].widemofr, vis[0].widemofr))
 		r += [vi for vi in vis if vi.widemofr != -1]
-	r = interp_by_time(r, True, True, current_conditions_, direction_, time_window_end_, log_=log_)
 	starttime = time_window_end_ - num_minutes_*60*1000
-	r = filter(lambda vilist: str_to_em(vilist[0]) >= starttime, r) # first elem of each timeslice list is a date/time string. 
+	r = interp_by_time(r, True, True, current_conditions_, direction_, starttime, time_window_end_, log_=log_)
 	return r
 
 # The idea here is, for each vid, to get one more vi from the db, greater in time than the pre-existing
@@ -416,12 +415,12 @@ def group_by_time(vilist_):
 
 # Takes a flat list of VehicleInfo objects.  Returns a list of lists of Vehicleinfo objects, interpolated.
 # Also, with a date/time string as element 0 in each list.
-def interp_by_time(vilist_, be_clever_, use_db_for_heading_inference_, current_conditions_, dir_=None, end_time_=None, log_=False):
+def interp_by_time(vilist_, be_clever_, use_db_for_heading_inference_, current_conditions_, dir_=None, start_time_=None, end_time_=None, log_=False):
 	assert isinstance(vilist_, Sequence)
 	if len(vilist_) == 0:
 		return []
-	starttime = round_down_by_minute(min(vi.time for vi in vilist_))
-	endtime = end_time_ if end_time_!=None else max(vi.time for vi in vilist_)
+	starttime = (round_up_by_minute(start_time_) if start_time_ is not None else round_down_by_minute(min(vi.time for vi in vilist_)))
+	endtime = (round_up_by_minute(end_time_) if end_time_ is not None else max(vi.time for vi in vilist_))
 	vids = set(vi.vehicle_id for vi in vilist_)
 	time_to_vis = {}
 	for interptime in lrange(starttime, endtime+1, 60*1000):
@@ -450,7 +449,7 @@ def interp_by_time(vilist_, be_clever_, use_db_for_heading_inference_, current_c
 				interped_timeslice.append(i_vi)
 
 		time_to_vis[interptime] = interped_timeslice
-	return massage_to_list(time_to_vis)
+	return massage_to_list(time_to_vis, starttime, endtime)
 
 # Either arg could be None (i.e. blank dir_tag).  For this we consider None to 'agree' with 0 or 1.
 def dirs_disagree(dir1_, dir2_):
@@ -493,27 +492,32 @@ def round_down_by_minute(t_em_):
 	r = long(calendar.timegm(dt.timetuple())*1000)
 	return r
 
-def massage_to_list(time_to_vis_):
+def round_up_by_minute(t_em_):
+	dt = datetime.datetime.utcfromtimestamp(t_em_/1000.0)
+	dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
+	if dt.second > 0:
+		dt += datetime.timedelta(minutes=1)
+	r = long(calendar.timegm(dt.timetuple())*1000)
+	return r
+
+def massage_to_list(time_to_vis_, start_time_, end_time_):
 	time_to_vis = time_to_vis_.copy()
 
-	# Deleting all empty timeslices at the end of the time frame.
+	# Deleting one empty timeslice at the end of the time frame.
 	# doing this because the last timeslice is the current vehicle locations of course, and that is an important
 	# timeslice and will be rendered differently in the GUI.
-	for time in sorted(time_to_vis.keys(), reverse=True):
-		if len(time_to_vis[time]) == 0:
+	#latest_time = sorted(time_to_vis.keys())[-1]
+	#if len(time_to_vis[latest_time]) == 0:
+	#	del time_to_vis[latest_time]
+
+	for time in time_to_vis.keys():
+		if time < start_time_ or time > end_time_:
 			del time_to_vis[time]
-		else:
-			break
 
 	r = []
 	for time in sorted(time_to_vis.keys()):
 		vis = time_to_vis[time]
 		r.append([em_to_str(time)] + vis)
-	for i in range(len(r)-1, -1, -1):
-		if len(r[i]) == 1: # Delete all empty (empty except for the date/time string) timeslices at the end.
-			del r[i] # doing this because the last timeslice is the current vehicle locations of course, and that is an important
-		else: # timeslice and will be rendered differently in the GUI.
-			break
 	return r
 
 # return (lolo, lo, hi).  lo and hi bound t_ by time.  lolo is one lower than lo.
@@ -562,20 +566,8 @@ def t():
 
 if __name__ == '__main__':
 
-	class VI:
-		def __init__(self, time_):
-			self.time = time_
-			self.vehicle_id = '4111'
-
-		def __repr__(self):
-			return '%d' % self.time
-
-	for vilist in [[VI(200), VI(150), VI(100), VI(50)], [VI(200), VI(150)], [VI(200)]]:
-		for t in [220, 201, 200, 199, 160, 151, 150, 149, 110, 60, 40]:
-			print vilist, t
-			print get_nearest_time_vis(vilist, '4111', long(t))
-			print '-----'
 
 
+	connect()
 
 
