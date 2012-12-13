@@ -60,6 +60,9 @@ var g_refresh_data_from_server_timer = null;
 var g_hidden_vids = new buckets.Set();
 var g_playing = true;
 
+var g_mouseover_infowin = null;
+var g_mouseover_infowin_timer = null;
+
 var HEADING_ROUNDING_DEGREES = 5;
 var REFRESH_INTERVAL_MS = 15*1000;
 var MOVING_VEHICLES_OVERTIME_FLASH_INTERVAL_MS = 500;
@@ -651,11 +654,11 @@ function add_vid_mouseover_infowin(vehicle_marker_, vehicle_marker_size_, vid_) 
 }
 
 function add_mouseover_infowin(map_object_, offset_, text_) {
-	var infowin = null;
 	google.maps.event.addListener(map_object_, 'mouseover', function() {
-		if(infowin!=null) {
-			infowin.close();
-			infowin = null;
+		clear_mouseover_infowin();
+		if(g_mouseover_infowin_timer != null) {
+			clearTimeout(g_mouseover_infowin_timer);
+			g_mouseover_infowin_timer = null;
 		}
 		var pos = null;
 		if(map_object_ instanceof google.maps.Marker) {
@@ -665,17 +668,21 @@ function add_mouseover_infowin(map_object_, offset_, text_) {
 		} else {
 			assert(false, "add_mouseover_infowin unknown object type");
 		}
-		infowin = new google.maps.InfoWindow({content: text_, disableAutoPan: true, 
+		g_mouseover_infowin = new google.maps.InfoWindow({content: text_, disableAutoPan: true, 
 				position: pos, pixelOffset: new google.maps.Size(offset_, -offset_) 
 			});
-		infowin.open(g_map);
+		g_mouseover_infowin.open(g_map);
 	});
 	google.maps.event.addListener(map_object_, 'mouseout', function() {
-		if(infowin!=null) {
-			infowin.close();
-			infowin = null;
-		}
+		g_mouseover_infowin_timer = setTimeout('clear_mouseover_infowin()', 1000);
 	});
+}
+
+function clear_mouseover_infowin() {
+	if(g_mouseover_infowin != null) {
+		g_mouseover_infowin.close();
+		g_mouseover_infowin = null;
+	}
 }
 
 function forget_vehicles_allroutes() {
