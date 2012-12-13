@@ -19,21 +19,43 @@
 		<script type="text/javascript" src="common.js"></script>
     <script type="text/javascript">
 
-var g_traffic_mofr2speed = null, g_traffic_linedefs = null;
-var g_traffic_lines = new Array();
+var TEST_INVISIBLE = false;
+var DISABLE_OVERTIME = false;
+var SHOW_FRAMERATE = false;
+var SHOW_TIME_SELECTOR = true;
+
+var g_directions_service = new google.maps.DirectionsService();
+var g_directions_result = null;
+var g_selected_route_idx = -1;
+var g_rendered_route_objects = new buckets.LinkedList();
+
+function new_fudgeroute_data() {
+	return {
+		traffic_mofr2speed: new buckets.Dictionary(), 
+		traffic_linedefs: new buckets.LinkedList(), 
+		traffic_lines: new buckets.LinkedList(), 
+		time_to_vid_to_vi: new buckets.Dictionary(), // key: date/time string.  value: dictionary (key: vid string, value: VehicleInfo object) 
+		vid_to_static_vehicle_marker: new buckets.Dictionary(), 
+		vid_to_heading_to_moving_vehicle_marker: new buckets.Dictionary(), 
+		start_latlng: null, end_latlng: null,
+		traffic_request_pending: false, 
+		vehicles_request_pending: false
+	};
+}
+
+var g_framerate_period_times = new buckets.LinkedList();
+for(var i=0; i<15; i++) {
+	g_framerate_period_times.add(0);
+}
+var g_framerate_last_epochtime = (new Date()).getTime();
+
+var g_fudgeroute_data = new buckets.Dictionary();
 var g_origmark=null, g_destmark=null;
-var g_route=null, g_direction=null;
-var g_orig_stoptag=null, g_dest_stoptag=null;
-var g_orig_mofr=0, g_dest_mofr=0;
 var g_play_timer = null;
-/* a list of lists of VehicleInfo objects. */
-var g_minute_to_vid_to_vi = null;
-/* current time location (index into g_minute_to_vid_to_vi and g_times) of the animation. */
-var g_cur_minute = 0;
-/* Contains date/time strings.  same size as g_minute_to_vid_to_vi.  Each element is a minute. */
-var g_times = null;
-var g_vid_to_static_vehicle_marker = new Array();
-var g_vid_to_heading_to_moving_vehicle_marker = null;
+/* current time location (index into g_times) of the animation. */
+var g_cur_minute_idx = 0;
+/* Contains date/time strings.  Each element is a minute. */
+var g_times = new buckets.LinkedList();
 var g_refresh_data_from_server_timer = null;
 var g_hidden_vids = new buckets.Set();
 var g_playing = true;
@@ -43,10 +65,11 @@ var REFRESH_INTERVAL_MS = 15*1000;
 var MOVING_VEHICLES_OVERTIME_FLASH_INTERVAL_MS = 500;
 var MOVING_VEHICLES_ANIM_INTERVAL_MS = 100;
 var MOFR_STEP = parseInt(get_sync('MOFR_STEP'), 10);
+var CONFIGROUTE_TO_FUDGEROUTE = callpy_sync('routes.get_configroute_to_fudgeroute_map');
 
 var g_zoom_to_vehicle_size = [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 10, 13, 15, 25, 40, 50, 60, 70, 80, 100, 130, 100, ];
 
-function get_vehicle_size(zoom_) {
+function get_vehicle_size_by_zoom(zoom_) {
 	if(0 <= zoom_ && zoom_ < g_zoom_to_vehicle_size.length) {
 		return g_zoom_to_vehicle_size[zoom_];
 	} else {
@@ -54,22 +77,8 @@ function get_vehicle_size(zoom_) {
 	}
 }
 
-function get_mofrstepincr(zoom_) {
-	if(zoom_ <= 11) {
-		return 10;
-	} else if(zoom_ == 12) {
-		return 8;
-	} else if(zoom_ == 13) {
-		return 4;
-	} else if(zoom_ == 14) {
-		return 3;
-	} else if(zoom_ == 15) {
-		return 2;
-	} else if(zoom_ == 16) {
-		return 1;
-	} else {
-		return 1;
-	}
+function get_vehicle_size() {
+	return get_vehicle_size_by_zoom(g_map.getZoom());
 }
 
 function kmph_to_color(kmph_) {
@@ -102,98 +111,84 @@ function interp_color(c1_, c2_, percent_) {
 	return r;
 }
 
-function remove_existing_traffic_lines() {
-	for(var i in g_traffic_lines) {
-		var marker = g_traffic_lines[i];
-		marker.setMap(null);
-		delete marker;
+function refresh_traffic_from_server(fudgeroute_) {
+	var data = g_fudgeroute_data.get(fudgeroute_);
+	if(!data.traffic_request_pending) {
+		data.traffic_request_pending = true;
+		callpy('traffic.get_traffics_dirfromlatlngs', fudgeroute_, data.start_latlng, data.end_latlng, true, get_datetime_from_gui(), 
+			{success: function(r_) {
+				if(!g_fudgeroute_data.containsKey(fudgeroute_)) {
+					return;
+				}
+				data.traffic_request_pending = false;
+				data.traffic_linedefs = to_buckets_list(r_[0]);
+				data.traffic_mofr2speed = to_buckets_dict(r_[1]);
+				update_last_updated_time();
+				remake_traffic_lines_singleroute(fudgeroute_);
+			}, 
+			error: function() {
+				data.traffic_request_pending = false;
+			}}
+		);
 	}
-	g_traffic_lines.length = 0;
 }
 
-function refresh_traffic_from_server() {
-	callpy('traffic.get_traffics', g_route, g_direction, true, get_datetime_from_gui(), 
-		function(r_) {
-			g_traffic_linedefs = r_[0];
-			g_traffic_mofr2speed = r_[1];
-			update_trip_time();
-			draw_traffic_lines();
-		});
-}
-
-function clear_traffic() {
-	delete g_traffic_linedefs;
-	g_traffic_linedefs = null;
-	delete g_traffic_mofr2speed;
-	g_traffic_mofr2speed = null;
-	remove_existing_traffic_lines();
-}
-
-function refresh_vehicles_from_server() {
-	callpy('traffic.get_recent_vehicle_locations', g_route, g_direction, true, get_datetime_from_gui(), 
-		function(r_) {
-			clear_vehicles();
-			update_last_updated_time();
-			stop_play_timer();
-			appropriate_vehicle_locations(r_);
-			if(g_times.length > 0) {
+function refresh_vehicles_from_server(fudgeroute_) {
+	var data = g_fudgeroute_data.get(fudgeroute_);
+	if(!data.vehicles_request_pending) {
+		data.vehicles_request_pending = true;
+		callpy('traffic.get_recent_vehicle_locations_dirfromlatlngs', fudgeroute_, data.start_latlng, data.end_latlng, true, get_datetime_from_gui(), 
+			{success: function(r_) {
+				if(!g_fudgeroute_data.containsKey(fudgeroute_)) {
+					return;
+				}
+				data.vehicles_request_pending = false;
+				forget_vehicles(fudgeroute_);
+				update_last_updated_time();
+				appropriate_vehicle_locations(fudgeroute_, r_);
 				$('#playpause_button').prop('disabled', false);
-				draw_static_vehicles();
-				create_moving_vehicle_markers();
-				create_vid_checkboxes();
-				if(g_cur_minute >= g_times.length) { // want to keep animation going smoothly if possible - but if eg. route is shutting 
-						// down for the night, then this set of vehicle locations might have fewer than the previous one.  
-						// Not worth it to fuss about overtime here. 
-					g_cur_minute = 0;
+				remake_static_vehicles_singleroute(fudgeroute_);
+				remake_moving_vehicles_singleroute(fudgeroute_);
+				refresh_vid_checkboxes_html();
+				if(g_cur_minute_idx >= g_times.size()) { // want to keep animation going smoothly if possible - but if for some reason 
+						// (what reason I don't know) the server returned fewer timeslices on this refresh and thus g_times shrunk, 
+						// then here we handle that.  Not worth it to fuss about overtime here. 
+					g_cur_minute_idx = 0;
 				}
 				update_time_display();
-				show_cur_minute_vehicles();
-				if(g_playing) {
-					g_play_timer = setTimeout('moving_vehicles_timer_func()', MOVING_VEHICLES_ANIM_INTERVAL_MS);
-				}
-			} else {
-				$('#playpause_button').prop('disabled', true);
-				remove_vid_checkboxes();
-				set_analog_clock_hour_minute(0, 0);
-				set_contents('p_cur_time', 'Found no vehicles.');
-			}
-		});
-}
-
-function create_vid_checkboxes() {
-	set_contents('p_vid_checkboxes', make_vids_html());
-}
-
-function remove_vid_checkboxes() {
-	set_contents('p_vid_checkboxes', '');
-}
-
-function make_vids_html() {
-	var r = 'Showing vehicle IDs: ';
-	var vids = all_vids();
-	vids.sort();
-	for(var i in vids) {
-		var vid = vids[i];
-		r += sprintf('%s <span onclick="%s" ondblclick="set_solo_vid(%s)">%s</span>&nbsp;&nbsp;', 
-			make_vid_checkbox_html(vid), 
-			"$('#"+vid_checkbox_id(vid)+"').trigger('click')", 
-			vid, 
-			vid);
+				show_cur_minute_vehicles_singleroute(fudgeroute_);
+			}, 
+			error: function() {
+				data.vehicles_request_pending = false;
+			}}
+		);
 	}
-	return r;
 }
 
-function all_vids() {
-	return g_vid_to_heading_to_moving_vehicle_marker.keys();
+function refresh_vid_checkboxes_html() {
+	var html = 'Showing vehicle IDs:<br>';
+	g_fudgeroute_data.forEach(function(fudgeroute, data) {
+		html += fudgeroute+': ';
+		var vids = buckets_set_to_list(all_vids_singleroute(fudgeroute));
+		sort_buckets_list(vids);
+		vids.forEach(function(vid) {
+			html += sprintf('%s <span onclick="%s" ondblclick="set_solo_vid(%s)">%s</span>&nbsp;&nbsp;', 
+				make_vid_checkbox_html(fudgeroute, vid), 
+				"$('#"+vid_checkbox_id(fudgeroute, vid)+"').trigger('click')", 
+				vid, vid);
+		});
+		html += '<br>';
+	});
+	set_contents('p_vid_checkboxes', html);
 }
 
-function make_vid_checkbox_html(vid_) {
-	return sprintf('<input type="checkbox" id="'+vid_checkbox_id(vid_)+'" onclick="on_vid_checkbox_clicked(\''+vid_+'\')" %s/>', 
+function make_vid_checkbox_html(fudgeroute_, vid_) {
+	return sprintf('<input type="checkbox" id="'+vid_checkbox_id(fudgeroute_, vid_)+'" onclick="on_vid_checkbox_clicked(\''+vid_+'\')" %s/>', 
 			(g_hidden_vids.contains(vid_) ? '' : 'checked="checked"'));
 }
 
-function vid_checkbox_id(vid_) {
-	return 'vid-checkbox-'+vid_;
+function vid_checkbox_id(fudgeroute_, vid_) {
+	return 'vid-checkbox-'+fudgeroute_+'-'+vid_;
 }
 
 function on_vid_checkbox_clicked(vid_) {
@@ -203,22 +198,41 @@ function on_vid_checkbox_clicked(vid_) {
 		g_hidden_vids.add(vid_);
 	}
 
-	if(vid_ in g_vid_to_static_vehicle_marker) {
-		var show_static_marker = !g_hidden_vids.contains(vid_);
-		if(in_overtime()) {
-			show_static_marker = show_static_marker && in_overtime_flash_on();
-		}
-		g_vid_to_static_vehicle_marker[vid_].setVisible(show_static_marker);
-	}
+	refresh_vid_checkboxes_selectedness();
 
-	var moving_marker = get_moving_vehicle_marker_for_cur_minute(vid_);
-	if(moving_marker != null) {
-		moving_marker.setVisible(!g_hidden_vids.contains(vid_));
-	}
+	show_cur_minute_vehicles_allroutes();
+}
+
+function refresh_vid_checkboxes_selectedness() {
+	g_fudgeroute_data.forEach(function(fudgeroute, data) {
+		var vids = all_vids_singleroute(fudgeroute);
+		vids.forEach(function(vid) {
+			var checkbox_domid = vid_checkbox_id(fudgeroute, vid);
+			set_selected(checkbox_domid, !g_hidden_vids.contains(vid));
+		});
+	});
+}
+
+function all_vids_allroutes() {
+	var r = new buckets.Set();
+	g_fudgeroute_data.forEach(function(fudgeroute, data) {
+		add_all(r, all_vids_singleroute(fudgeroute));
+	});
+	return r;
+}
+
+function all_vids_singleroute(fudgeroute_) {
+	var r = new buckets.Set();
+	g_fudgeroute_data.get(fudgeroute_).time_to_vid_to_vi.forEach(function(time, vid_to_vi) {
+		vid_to_vi.forEach(function(vid, vi) {
+			r.add(vid);
+		});
+	});
+	return r;
 }
 
 function get_moving_vehicle_marker_for_cur_minute(vid_) {
-	var real_cur_minute = Math.min(g_cur_minute, g_times.length-1); // 'real' as in 'ignoring overtime' 
+	var real_cur_minute = Math.min(g_cur_minute_idx, g_times.size()-1); // 'real' as in 'ignoring overtime' 
 	var vi = g_minute_to_vid_to_vi[real_cur_minute].get(vid_);
 	if(vi!=undefined) {
 		return g_vid_to_heading_to_moving_vehicle_marker.get(vid_).get(round_heading(vi.heading));
@@ -233,38 +247,87 @@ function svg_square(color_) {
 			'</svg>', color_);
 }
 
-function appropriate_vehicle_locations(raw_) {
-	g_times = new Array();
-	g_minute_to_vid_to_vi = new Array();
+function appropriate_vehicle_locations(fudgeroute_, raw_) {
+	var data = g_fudgeroute_data.get(fudgeroute_);
+	data.time_to_vid_to_vi.clear();
 	for(var minute in raw_) {
 		var timeslice = raw_[minute];
-		g_times.push(timeslice.shift());
+		var timestr = timeslice.shift();
 		var vid_to_vi = new buckets.Dictionary();
-		g_minute_to_vid_to_vi.push(vid_to_vi);
-		for(var j in timeslice) {
-			var vi = timeslice[j];
+		data.time_to_vid_to_vi.set(timestr, vid_to_vi);
+		for(var timeslicei in timeslice) {
+			var vi = timeslice[timeslicei];
 			vid_to_vi.set(vi.vehicle_id, vi);
 		}
 	}
+
+	update_g_times();
 }
 
-function create_moving_vehicle_markers() {
-	var d = new buckets.Dictionary();
-	for(var minute in g_minute_to_vid_to_vi) {
-		g_minute_to_vid_to_vi[minute].forEach(function(vid, vi) {
-			var d2 = d.get(vid);
-			if(d2 == undefined) {
-				d2 = new buckets.Dictionary();
-				d.set(vid, d2);
+// make g_times the intersection of all times present in all routes. 
+function update_g_times() {
+	var new_times_set = null;
+	g_fudgeroute_data.forEach(function(fudgeroute, data) {
+		if(data.time_to_vid_to_vi.size() > 0) {
+			if(new_times_set==null) {
+				new_times_set = array_to_set(data.time_to_vid_to_vi.keys());
+			} else {
+				var oldsize = new_times_set.size();
+				if(data.time_to_vid_to_vi.size() > 0) { // don't let empty ones influence this.  presumably we haven't 
+						// received any data from the server yet for routes with an empty one of these. 
+					new_times_set.intersection(array_to_set(data.time_to_vid_to_vi.keys()));
+				}
+				var newsize = new_times_set.size();
+			}
+		}
+	});
+	if(new_times_set == null) {
+		new_times_set = new buckets.Set();
+	}
+
+	// Go through some contortions to turn new_times_set into a sorted list: 
+	var new_times_sortedtree = new buckets.BSTree();
+	new_times_set.forEach(function(e) {
+		new_times_sortedtree.add(e);
+	});
+	g_times = new buckets.LinkedList();
+	new_times_sortedtree.forEach(function(e) {
+		g_times.add(e);
+	});
+}
+
+function array_to_set(a_) {
+	var r = new buckets.Set();
+	for(var i in a_) {
+		r.add(a_[i]);
+	}
+	return r;
+}
+
+function remake_moving_vehicles_allroutes(fudgeroute_) {
+	g_fudgeroute_data.forEach(function(fudgeroute, data)  {
+		remake_moving_vehicles_singleroute(fudgeroute);
+	});
+}
+
+function remake_moving_vehicles_singleroute(fudgeroute_) {
+	var data = g_fudgeroute_data.get(fudgeroute_);
+	var new_vid_to_heading_to_moving_vehicle_marker = new buckets.Dictionary();
+	data.time_to_vid_to_vi.forEach(function(timestr, vid_to_vi) {
+		vid_to_vi.forEach(function(vid, vi) {
+			var heading_to_moving_vehicle_marker = new_vid_to_heading_to_moving_vehicle_marker.get(vid);
+			if(heading_to_moving_vehicle_marker == undefined) {
+				heading_to_moving_vehicle_marker = new buckets.Dictionary();
+				new_vid_to_heading_to_moving_vehicle_marker.set(vid, heading_to_moving_vehicle_marker);
 			}
 			var rounded_heading = round_heading(vi.heading);
-			if(!d2.containsKey(rounded_heading)) {
+			if(!heading_to_moving_vehicle_marker.containsKey(rounded_heading)) {
 				var marker = make_vehicle_marker(vid, rounded_heading, 43, 79, false);
-				d2.set(rounded_heading, marker);
+				heading_to_moving_vehicle_marker.set(rounded_heading, marker);
 			}
 		});
-	}
-	g_vid_to_heading_to_moving_vehicle_marker = d;
+	});
+	data.vid_to_heading_to_moving_vehicle_marker = new_vid_to_heading_to_moving_vehicle_marker;
 }
 
 function round_heading(heading_) {
@@ -277,57 +340,101 @@ function update_last_updated_time() {
 }
 
 function refresh_data_from_server_timer_func() {
-	refresh_traffic_and_vehicles_from_server();
+	refresh_traffic_and_vehicles_from_server_allroutes();
 	schedule_refresh_data_from_server();
 }
 
-function refresh_traffic_and_vehicles_from_server() {
-	refresh_traffic_from_server();
-	refresh_vehicles_from_server();
-}
-
-function stop_play_timer() {
-	if(g_play_timer!=null) {
-		clearTimeout(g_play_timer);
-		g_play_timer = null;
-	}
-}
-
-function draw_static_vehicles() {
-	g_minute_to_vid_to_vi[g_minute_to_vid_to_vi.length-1].forEach(function(vid, vi) {
-		var marker = make_vehicle_marker(vid, vi.heading, vi.lat, vi.lon, true);
-		g_vid_to_static_vehicle_marker[vid] = marker;
-		marker.setVisible(!g_hidden_vids.contains(vid));
+function refresh_traffic_and_vehicles_from_server_allroutes() {
+	g_fudgeroute_data.forEach(function(fudgeroute, data) {
+		refresh_traffic_from_server(fudgeroute);
+		refresh_vehicles_from_server(fudgeroute);
 	});
 }
 
-function moving_vehicles_timer_func() {
-	g_cur_minute = (g_cur_minute + 1) % (g_times.length + 4);
-	update_time_display();
-	move_vehicles_forward_one_minute();
-
-	g_play_timer = setTimeout('moving_vehicles_timer_func()', 
-			((g_cur_minute >= g_times.length-1) ? MOVING_VEHICLES_OVERTIME_FLASH_INTERVAL_MS : MOVING_VEHICLES_ANIM_INTERVAL_MS));
+function remake_static_vehicles_allroutes() {
+	g_fudgeroute_data.forEach(function(fudgeroute, data)  {
+		remake_static_vehicles_singleroute(fudgeroute);
+	});
 }
 
-function in_overtime() {
-	return (g_cur_minute >= g_times.length);
-}
-
-function in_overtime_flash_on() {
-	return ((g_cur_minute - g_times.length) % 2 == 1);
-}
-
-// Not 'all' really.  This function respects the hidden vid checkboxes. 
-function set_all_static_vehicle_markers_visible(visible_) {
-	for(var vid in g_vid_to_static_vehicle_marker) {
-		var marker = g_vid_to_static_vehicle_marker[vid];
-		marker.setVisible(visible_ && !g_hidden_vids.contains(vid));
+function remake_static_vehicles_singleroute(fudgeroute_) {
+	if(g_times.size() > 0) {
+		var last_time = g_times.elementAtIndex(g_times.size()-1);
+		var data = g_fudgeroute_data.get(fudgeroute_);
+		data.time_to_vid_to_vi.get(last_time).forEach(function(vid, vi) {
+			var marker = make_vehicle_marker(vid, vi.heading, vi.lat, vi.lon, true);
+			data.vid_to_static_vehicle_marker.set(vid, marker);
+		});
 	}
 }
 
+function moving_vehicles_timer_func() {
+	var method_start_epochtime = (new Date()).getTime();
+
+	var timeout = (g_cur_minute_idx >= g_times.size()-1 
+			? MOVING_VEHICLES_OVERTIME_FLASH_INTERVAL_MS : MOVING_VEHICLES_ANIM_INTERVAL_MS);
+	if(DISABLE_OVERTIME) {
+		timeout = MOVING_VEHICLES_ANIM_INTERVAL_MS;
+	}
+	g_play_timer = setTimeout('moving_vehicles_timer_func()', timeout);
+
+	if(!g_playing) {
+		return;
+	}
+
+	g_cur_minute_idx = (g_cur_minute_idx + 1) % (g_times.size() + 4);
+	if(DISABLE_OVERTIME) {
+		g_cur_minute_idx = g_cur_minute_idx % g_times.size();
+	}
+	update_time_display();
+	move_vehicles_forward_one_minute();
+
+	if(SHOW_FRAMERATE) {
+		var cur_epochtime = (new Date()).getTime();
+		if(g_cur_minute_idx > 0 && g_cur_minute_idx <= g_times.size()-2) {
+			var cur_period_time = cur_epochtime - g_framerate_last_epochtime;
+
+			var our_work_time = (cur_epochtime - method_start_epochtime);
+			set_contents('p_worktime', sprintf('Our work time: %d ms', our_work_time));
+
+			g_framerate_period_times.add(cur_period_time);
+			g_framerate_period_times.removeElementAtIndex(0);
+			var tally_time = 0;
+			g_framerate_period_times.forEach(function(e) {
+				tally_time += e;
+			});
+			var avg_millis_per_frame = tally_time/g_framerate_period_times.size();
+			var frames_per_sec = 1000/avg_millis_per_frame;
+			set_contents('p_framerate', sprintf('%.1f frames per second', frames_per_sec));
+		}
+		g_framerate_last_epochtime = cur_epochtime;
+	}
+}
+
+function in_overtime() {
+	return (g_cur_minute_idx >= g_times.size());
+}
+
+function in_overtime_flash_on() {
+	return ((g_cur_minute_idx - g_times.size()) % 2 == 1);
+}
+
+function set_all_static_vehicle_markers_visible_allroutes(visible_) {
+	g_fudgeroute_data.forEach(function(fudgeroute, data) {
+		set_all_static_vehicle_markers_visible_singleroute(fudgeroute, visible_);
+	});
+}
+
+// Not 'all' really.  This function respects the currently selected directions route, and the hidden vid checkboxes. 
+function set_all_static_vehicle_markers_visible_singleroute(fudgeroute_, visible_) {
+	var data = g_fudgeroute_data.get(fudgeroute_);
+	data.vid_to_static_vehicle_marker.forEach(function(vid, marker) {
+		marker.setVisible(visible_ && !g_hidden_vids.contains(vid));
+	});
+}
+
 function move_vehicles_forward_one_minute() {
-	if(g_cur_minute < g_times.length-1) {
+	if(g_cur_minute_idx < g_times.size()-1) {
 		move_vehicles_forward_one_minute_normal();
 	} else {
 		move_vehicles_forward_one_minute_overtime();
@@ -335,74 +442,124 @@ function move_vehicles_forward_one_minute() {
 }
 
 function move_vehicles_forward_one_minute_overtime() {
-	if(g_cur_minute == g_times.length-1) {
-		var prev_minute_vid_to_vi = g_minute_to_vid_to_vi[g_times.length-2];
-		prev_minute_vid_to_vi.forEach(function(vid, prev_minute_vi) {
-			var prev_heading = round_heading(prev_minute_vi.heading);
-			g_vid_to_heading_to_moving_vehicle_marker.get(vid).get(prev_heading).setVisible(false);
+	if(g_cur_minute_idx == g_times.size()-1) {
+		g_fudgeroute_data.forEach(function(fudgeroute, data) {
+			if(data.time_to_vid_to_vi.size() > 0) {
+				var prev_minute_vid_to_vi = data.time_to_vid_to_vi.get(g_times.elementAtIndex(g_times.size()-2));
+				prev_minute_vid_to_vi.forEach(function(vid, prev_minute_vi) {
+					var prev_heading = round_heading(prev_minute_vi.heading);
+					if(!TEST_INVISIBLE) data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(prev_heading).setVisible(false);
+				});
+			}
 		});
 	} else {
-		g_minute_to_vid_to_vi[g_times.length-1].forEach(function(vid, vi) {
-			var heading = round_heading(vi.heading);
-			var marker = g_vid_to_heading_to_moving_vehicle_marker.get(vid).get(heading);
-			if(g_cur_minute == g_times.length) {
-				marker.setPosition(new google.maps.LatLng(vi.lat, vi.lon));
+		g_fudgeroute_data.forEach(function(fudgeroute, data) {
+			if(data.time_to_vid_to_vi.size() > 0) {
+				var last_time = g_times.elementAtIndex(g_times.size()-1);
+				data.time_to_vid_to_vi.get(last_time).forEach(function(vid, vi) {
+					var heading = round_heading(vi.heading);
+					var marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(heading);
+					if(g_cur_minute_idx == g_times.size()) {
+						marker.setPosition(new google.maps.LatLng(vi.lat, vi.lon));
+					}
+					if(!TEST_INVISIBLE) marker.setVisible(!in_overtime_flash_on() && !g_hidden_vids.contains(vid));
+				});
 			}
-			marker.setVisible(!in_overtime_flash_on() && !g_hidden_vids.contains(vid));
 		});
-		set_all_static_vehicle_markers_visible(in_overtime_flash_on());
+		set_all_static_vehicle_markers_visible_allroutes(in_overtime_flash_on());
 	} 
 }
 
 function move_vehicles_forward_one_minute_normal() {
-	var prev_minute = g_cur_minute-1;
-	if(prev_minute < 0) {
-		prev_minute = g_times.length-1;
+	var prev_minute_idx = g_cur_minute_idx-1;
+	if(prev_minute_idx < 0) {
+		prev_minute_idx = g_times.size()-1;
 	}
-	var prev_minute_vid_to_vi = g_minute_to_vid_to_vi[prev_minute];
-	var cur_minute_vid_to_vi = g_minute_to_vid_to_vi[g_cur_minute];
-	cur_minute_vid_to_vi.forEach(function(vid, cur_minute_vi) {
-		if(g_hidden_vids.contains(vid)) {
-			return;
-		}
-		var prev_minute_vi = prev_minute_vid_to_vi.get(vid);
-		var cur_heading = round_heading(cur_minute_vi.heading);
-		if(prev_minute_vi == undefined) {
-			var marker = g_vid_to_heading_to_moving_vehicle_marker.get(vid).get(cur_heading);
-			marker.setPosition(new google.maps.LatLng(cur_minute_vi.lat, cur_minute_vi.lon));
-			marker.setVisible(true);
-		} else {
-			var prev_heading = round_heading(prev_minute_vi.heading);
-			if(cur_heading == prev_heading) {
-				var marker = g_vid_to_heading_to_moving_vehicle_marker.get(vid).get(cur_heading);
-				marker.setPosition(new google.maps.LatLng(cur_minute_vi.lat, cur_minute_vi.lon));
-			} else {
-				var cur_marker = g_vid_to_heading_to_moving_vehicle_marker.get(vid).get(cur_heading);
-				cur_marker.setPosition(new google.maps.LatLng(cur_minute_vi.lat, cur_minute_vi.lon));
-				cur_marker.setVisible(true);
-				var prev_marker = g_vid_to_heading_to_moving_vehicle_marker.get(vid).get(prev_heading);
-				prev_marker.setVisible(false);
-			}
-		}
-	});
-	prev_minute_vid_to_vi.forEach(function(vid, prev_minute_vi) {
-		if(!cur_minute_vid_to_vi.containsKey(vid) || g_hidden_vids.contains(vid)) {
-			var prev_heading = round_heading(prev_minute_vi.heading);
-			g_vid_to_heading_to_moving_vehicle_marker.get(vid).get(prev_heading).setVisible(false);
+	g_fudgeroute_data.forEach(function(fudgeroute, data) {
+		if(data.time_to_vid_to_vi.size() > 0) {
+			var prev_minute_vid_to_vi = data.time_to_vid_to_vi.get(g_times.elementAtIndex(prev_minute_idx));
+			var cur_minute_vid_to_vi = data.time_to_vid_to_vi.get(g_times.elementAtIndex(g_cur_minute_idx));
+			cur_minute_vid_to_vi.forEach(function(vid, cur_minute_vi) {
+				if(g_hidden_vids.contains(vid)) {
+					return;
+				}
+				var cur_within_bounds = within_map_bounds(cur_minute_vi);
+				var prev_minute_vi = prev_minute_vid_to_vi.get(vid);
+				var cur_heading = round_heading(cur_minute_vi.heading);
+				if(prev_minute_vi == undefined) {
+					if(cur_within_bounds) {
+						var marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(cur_heading);
+						marker.setPosition(new google.maps.LatLng(cur_minute_vi.lat, cur_minute_vi.lon));
+						if(!TEST_INVISIBLE)  marker.setVisible(true);
+					}
+				} else {
+					var prev_within_bounds = within_map_bounds(prev_minute_vi);
+					var prev_heading = round_heading(prev_minute_vi.heading);
+					if(cur_heading == prev_heading) {
+						if((prev_within_bounds && cur_within_bounds) || (!prev_within_bounds && cur_within_bounds)) {
+							var marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(cur_heading);
+							marker.setPosition(new google.maps.LatLng(cur_minute_vi.lat, cur_minute_vi.lon));
+							marker.setVisible(true);
+						} else if(prev_within_bounds && !cur_within_bounds) {
+							var marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(cur_heading);
+							marker.setVisible(false);
+						} 
+					} else {
+						if(prev_within_bounds && cur_within_bounds) {
+							var prev_marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(prev_heading);
+							var cur_marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(cur_heading);
+							prev_marker.setVisible(false);
+							cur_marker.setPosition(new google.maps.LatLng(cur_minute_vi.lat, cur_minute_vi.lon));
+							cur_marker.setVisible(true);
+						} else if(prev_within_bounds && !cur_within_bounds) {
+							var prev_marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(prev_heading);
+							prev_marker.setVisible(false);
+						} else if(!prev_within_bounds && cur_within_bounds) {
+							var cur_marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(cur_heading);
+							cur_marker.setPosition(new google.maps.LatLng(cur_minute_vi.lat, cur_minute_vi.lon));
+							cur_marker.setVisible(true);
+						}
+						//var cur_marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(cur_heading);
+						//cur_marker.setPosition(new google.maps.LatLng(cur_minute_vi.lat, cur_minute_vi.lon));
+						//if(!TEST_INVISIBLE) cur_marker.setVisible(true);
+						//var prev_marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(prev_heading);
+						//if(!TEST_INVISIBLE) prev_marker.setVisible(false);
+					}
+				}
+			});
+			prev_minute_vid_to_vi.forEach(function(vid, prev_minute_vi) {
+				if(!cur_minute_vid_to_vi.containsKey(vid) || g_hidden_vids.contains(vid)) {
+					var prev_within_bounds = within_map_bounds(prev_minute_vi);
+					var prev_heading = round_heading(prev_minute_vi.heading);
+					if(prev_within_bounds) {
+						if(!TEST_INVISIBLE) data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(prev_heading).setVisible(false);
+					}
+				}
+			});
 		}
 	});
 }
 
+function within_map_bounds(vi_) {
+	var map_bounds = g_map.getBounds();
+	var sw = map_bounds.getSouthWest(), ne = map_bounds.getNorthEast();
+	return (sw.lat() <= vi_.lat && vi_.lat <= ne.lat()) && (sw.lng() <= vi_.lon && vi_.lon <= ne.lng());
+}
+
 function update_time_display() {
-	var timestr = g_times[Math.min(g_cur_minute, g_times.length-1)];
-
-	set_analog_clock_timestr(timestr);
-
-	var cur_time_html = timestr.substr(0, 16);
-	if((g_cur_minute == g_times.length-1) || (in_overtime() && in_overtime_flash_on())) {
-		cur_time_html = '<b>'+cur_time_html+'</b>';
+	if(g_times.size() > 0) {
+		var timestr = g_times.elementAtIndex(Math.min(g_cur_minute_idx, g_times.size()-1));
+		set_analog_clock_timestr(timestr);
+		var cur_time_html = timestr.substr(0, 16);
+		if((g_cur_minute_idx == g_times.size()-1) || (in_overtime() && in_overtime_flash_on())) {
+			cur_time_html = '<b>'+cur_time_html+'</b>';
+		}
+		set_contents('p_cur_time', cur_time_html);
+	} else {
+		set_analog_clock_hour_minute(0, 0);
+		set_contents('p_cur_time', ' ');
 	}
-	set_contents('p_cur_time', cur_time_html);
+
 }
 
 function set_analog_clock_timestr(timestr_) {
@@ -431,7 +588,7 @@ function set_analog_clock_hour_minute(hour_, minute_) {
 
 function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
 	var color = vid_to_color(vid_);
-	var size = get_vehicle_size(g_map.getZoom());
+	var size = get_vehicle_size();
 	var marker = new google.maps.Marker({
 			position: new google.maps.LatLng(lat_, lon_),
 			map: g_map,
@@ -440,7 +597,7 @@ function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
 					null, null, new google.maps.Point(size/2, size/2)),
 			visible: false
 		});
-	marker.setVisible(true);
+	if(!TEST_INVISIBLE) marker.setVisible(true);
 	add_vid_mouseover_infowin(marker, size, vid_);
 	add_solo_vid_click_listener(marker, vid_);
 	return marker;
@@ -452,70 +609,105 @@ function add_solo_vid_click_listener(vehicle_marker_, vid_) {
 
 function set_solo_vid(vid_) {
 	if(is_solo_already()) {
-		var vids = all_vids();
-		for(var i in vids) {
-			var vid = vids[i];
-			if(!document.getElementById(vid_checkbox_id(vid)).checked) {
-				document.getElementById(vid_checkbox_id(vid)).checked = true;
-				on_vid_checkbox_clicked(vid);
-			}
-		}
+		g_fudgeroute_data.forEach(function(fudgeroute, data) {
+			data.time_to_vid_to_vi.forEach(function(time, vid_to_vi) {
+				vid_to_vi.forEach(function(vid, vi) {
+					var checkbox = document.getElementById(vid_checkbox_id(fudgeroute, vid));
+					if(!checkbox.checked) {
+						checkbox.checked = true;
+						on_vid_checkbox_clicked(vid);
+					}
+				});
+			});
+		});
 	} else {
-		var vids = all_vids();
-		for(var i in vids) {
-			var vid = vids[i];
-			if(vid == vid_) {
-				if(!document.getElementById(vid_checkbox_id(vid)).checked) {
-					document.getElementById(vid_checkbox_id(vid)).checked = true;
-					on_vid_checkbox_clicked(vid);
-				}
-			} else {
-				if(document.getElementById(vid_checkbox_id(vid)).checked) {
-					document.getElementById(vid_checkbox_id(vid)).checked = false;
-					on_vid_checkbox_clicked(vid);
-				}
-			}
-		}
+		g_fudgeroute_data.forEach(function(fudgeroute, data) {
+			data.time_to_vid_to_vi.forEach(function(time, vid_to_vi) {
+				vid_to_vi.forEach(function(vid, vi) {
+					var checkbox = document.getElementById(vid_checkbox_id(fudgeroute, vid));
+					if(vid == vid_) {
+						if(!checkbox.checked) {
+							checkbox.checked = true;
+							on_vid_checkbox_clicked(vid);
+						}
+					} else {
+						if(checkbox.checked) {
+							checkbox.checked = false;
+							on_vid_checkbox_clicked(vid);
+						}
+					}
+				});
+			});
+		});
 	}
 }
 
 function is_solo_already() {
-	return (all_vids().length == g_hidden_vids.size()+1);
+	return (all_vids_allroutes().size() == g_hidden_vids.size()+1);
 }
 
 function add_vid_mouseover_infowin(vehicle_marker_, vehicle_marker_size_, vid_) {
-	var infowin = new google.maps.InfoWindow({content: 'Vehicle ID: '+vid_, disableAutoPan: true, 
-		pixelOffset: new google.maps.Size(vehicle_marker_size_/3, -vehicle_marker_size_/3)
-		});
-	google.maps.event.addListener(vehicle_marker_, 'mouseover', function() {
-		infowin.setPosition(vehicle_marker_.getPosition());
+	add_mouseover_infowin(vehicle_marker_, vehicle_marker_size_/3, 'Vehicle ID: '+vid_);
+}
+
+function add_mouseover_infowin(map_object_, offset_, text_) {
+	var infowin = null;
+	google.maps.event.addListener(map_object_, 'mouseover', function() {
+		if(infowin!=null) {
+			infowin.close();
+			infowin = null;
+		}
+		var pos = null;
+		if(map_object_ instanceof google.maps.Marker) {
+			pos = map_object_.getPosition();
+		} else if(map_object_ instanceof google.maps.Polyline) {
+			pos = map_object_.getPath().getAt(0);
+		} else {
+			assert(false, "add_mouseover_infowin unknown object type");
+		}
+		infowin = new google.maps.InfoWindow({content: text_, disableAutoPan: true, 
+				position: pos, pixelOffset: new google.maps.Size(offset_, -offset_) 
+			});
 		infowin.open(g_map);
 	});
-	google.maps.event.addListener(vehicle_marker_, 'mouseout', function() {
-		infowin.close();
+	google.maps.event.addListener(map_object_, 'mouseout', function() {
+		if(infowin!=null) {
+			infowin.close();
+			infowin = null;
+		}
 	});
 }
 
-function clear_vehicles() {
-	clear_moving_vehicles();
-	clear_static_vehicles();
+function forget_vehicles_allroutes() {
+	g_fudgeroute_data.forEach(function(fudgeroute, data) {
+		forget_vehicles(fudgeroute);
+	});
 }
 
-function clear_moving_vehicles() {
-	if(g_vid_to_heading_to_moving_vehicle_marker!=null) {
-		g_vid_to_heading_to_moving_vehicle_marker.forEach(function(vid, heading_to_moving_vehicle_marker) {
-			clear_vehicle_list(heading_to_moving_vehicle_marker.values());
+function forget_vehicles(fudgeroute_) {
+	forget_moving_vehicles(fudgeroute_);
+	forget_static_vehicles(fudgeroute_);
+}
+
+function forget_moving_vehicles(fudgeroute_) {
+	if(g_fudgeroute_data.containsKey(fudgeroute_)) {
+		var m = g_fudgeroute_data.get(fudgeroute_).vid_to_heading_to_moving_vehicle_marker;
+		m.forEach(function(vid, heading_to_moving_vehicle_marker) {
+			hide_vehicles(heading_to_moving_vehicle_marker.values());
 		});
-		g_vid_to_heading_to_moving_vehicle_marker = null;
+		m.clear();
 	}
 }
 
-function clear_static_vehicles() {
-	clear_vehicle_list(g_vid_to_static_vehicle_marker);
-	g_vid_to_static_vehicle_marker = new Array();
+function forget_static_vehicles(fudgeroute_) {
+	if(g_fudgeroute_data.containsKey(fudgeroute_)) {
+		var m = g_fudgeroute_data.get(fudgeroute_).vid_to_static_vehicle_marker;
+		hide_vehicles(m.values());
+		m.clear();
+	}
 }
 
-function clear_vehicle_list(list_) {
+function hide_vehicles(list_) {
 	for(var i in list_) {
 		var m = list_[i];
 		m.setMap(null);
@@ -523,19 +715,69 @@ function clear_vehicle_list(list_) {
 }
 
 function redraw_vehicle_markers() {
-	clear_vehicles();
-	draw_static_vehicles();
-	create_moving_vehicle_markers();
-	show_cur_minute_vehicles();
+	forget_vehicles_allroutes();
+	remake_static_vehicles_allroutes();
+	remake_moving_vehicles_allroutes();
+	show_cur_minute_vehicles_allroutes();
 }
 
-function draw_traffic_lines() {
-	remove_existing_traffic_lines();
+function remake_traffic_lines_allroutes() {
+	g_fudgeroute_data.forEach(function(fudgeroute, data) {
+		remake_traffic_lines_singleroute(fudgeroute);
+	});
+}
 
-	for(var i in g_traffic_linedefs) {
-		var linedef = g_traffic_linedefs[i];
-		var traf = g_traffic_mofr2speed[linedef.mofr];
-		draw_traffic_line(linedef.start_latlon, linedef.end_latlon, (traf!=null ? traf.kmph : null), linedef.mofr);
+function remake_traffic_lines_singleroute(fudgeroute_) {
+	forget_traffic_lines(fudgeroute_);
+
+	var data = g_fudgeroute_data.get(fudgeroute_);
+	if(data != undefined) {
+		data.traffic_linedefs.forEach(function(linedef) {
+			var traf = data.traffic_mofr2speed.get(linedef.mofr);
+			var new_lines = make_traffic_line(linedef.start_latlon, linedef.end_latlon, (traf!=null ? traf.kmph : null), linedef.mofr, true);
+			add_all(data.traffic_lines, new_lines);
+		});
+	}
+}
+
+function is_fudgeroute_part_of_selected_directions_route(fudgeroute_) {
+	assert(false);
+	if(0 <= g_selected_route_idx && g_selected_route_idx < g_directions_result.routes.length) {
+		var legs = g_directions_result.routes[g_selected_route_idx].legs;
+		for(var legi in legs) {
+			var leg = legs[legi];
+			for(var stepi in leg.steps) {
+				var step = leg.steps[stepi];
+				var line = null;
+				if(step.travel_mode == google.maps.TravelMode.TRANSIT) {
+					var step_transitline_shortname = step.transit.line.short_name;
+					var step_fudgeroute = CONFIGROUTE_TO_FUDGEROUTE[step_transitline_shortname];
+					if(step_fudgeroute == fudgeroute_) {
+						return true;
+					}
+				}
+			}
+		}
+	}
+	return false;
+}
+
+function forget_traffic_lines(fudgeroute_) {
+	var data = g_fudgeroute_data.get(fudgeroute_);
+	if(data != undefined) {
+		data.traffic_lines.forEach(function(e) {
+			e.setMap(null);
+		});
+		data.traffic_lines.clear();
+	}
+}
+
+function traffic_lines_set_visible(fudgeroute_, visible_) {
+	var data = g_fudgeroute_data.get(fudgeroute_);
+	if(data != undefined) {
+		data.traffic_lines.forEach(function(e) {
+			e.setVisible(visible_);
+		});
 	}
 }
 
@@ -558,16 +800,13 @@ function add_text_to_marker(marker_, string_) {
 function initialize() {
 
 	init_datetimepicker();
-	$.ajax({url:'TRAFFIC_HTML_SHOW_TIME_SELECTOR', async:true, 
-		error: function(jqXHR_, textStatus_, errorThrown_) {}, 
-		success: function(data_, textStatus_, jqXHR_) {
-			document.getElementById('time_selector_div').style.visibility='visible';
-		}
-	});
+	if(!SHOW_TIME_SELECTOR) {
+		$('#div_time_selector').remove();
+	}
 
 	init_map();
 	google.maps.event.addListener(g_map, 'zoom_changed', function() {
-		draw_traffic_lines();
+		remake_traffic_lines_allroutes();
 		redraw_vehicle_markers();
 	});
 	var origlat, origlon, destlat, destlon;
@@ -582,7 +821,9 @@ function initialize() {
 			destlat=westlat; destlon=westlon; origlat=eastlat; origlon=eastlon;
 		}
 	} else { 
-		if(true) { // true for eastbound 
+		if(true) { // true for north on bathurst 
+			origlat=43.64457; origlon=-79.4165499; destlat=43.65454560588453; destlon=-79.40695567330022;
+		} else if(true) { // true for eastbound 
 			origlat=43.64457; origlon=-79.4165499; destlat=43.6471199; destlon=-79.4042;
 		} else {
 			destlat=43.64457; destlon=-79.4165499; origlat=43.6471199; origlon=-79.4042;
@@ -605,13 +846,17 @@ function initialize() {
 	add_text_to_marker(g_destmark, "Destination");
 	google.maps.event.addListener(g_destmark, 'dragend', function() { on_trip_mark_moved(); });
 
-	draw_all_routes();
+	//draw_all_routes();
 
 	set_play_buttons_appropriately();
 
-	on_trip_mark_moved();
+	g_play_timer = setTimeout('moving_vehicles_timer_func()', 0);
 
-	//google.maps.event.addListener(g_map, 'dragend', function() { alert(g_map.getCenter());  }); // TDR 
+	get_google_directions();
+
+	if(!SHOW_FRAMERATE) {
+		$('#div_framerate').remove();
+	}
 
 }
 
@@ -622,57 +867,65 @@ function set_play_buttons_appropriately() {
 }
 
 function on_playpause_clicked() {
-	if(g_times.length == 0) {
-		return;
-	}
 	g_playing = !g_playing;
 	set_play_buttons_appropriately();
 	if(g_playing) { // go from paused to playing: 
 		schedule_refresh_data_from_server();
-		moving_vehicles_timer_func();
 	} else { // go from playing to paused: 
 		stop_refresh_data_from_server_timer();
-		stop_play_timer();
-		if(g_cur_minute > g_times.length-1) {
-			g_cur_minute = g_times.length-1;
+		if(g_times.size() > 0) {
+			if(g_cur_minute_idx > g_times.size()-1) {
+				g_cur_minute_idx = g_times.size()-1;
+			}
+			show_cur_minute_vehicles_allroutes();
+			update_time_display();
 		}
-		show_cur_minute_vehicles();
-		update_time_display();
 	}
 }
 
-function show_cur_minute_vehicles() {
-	set_all_static_vehicle_markers_visible(true);
-	g_vid_to_heading_to_moving_vehicle_marker.forEach(function(vid, heading_to_marker) {
+function show_cur_minute_vehicles_allroutes() {
+	g_fudgeroute_data.forEach(function(fudgeroute, data) {
+		show_cur_minute_vehicles_singleroute(fudgeroute);
+	});
+}
+
+function show_cur_minute_vehicles_singleroute(fudgeroute_) {
+	set_all_static_vehicle_markers_visible_singleroute(fudgeroute_, true);
+
+	var data = g_fudgeroute_data.get(fudgeroute_);
+	data.vid_to_heading_to_moving_vehicle_marker.forEach(function(vid, heading_to_marker) {
 		heading_to_marker.forEach(function(heading, marker) {
-			marker.setVisible(false);
+			if(!TEST_INVISIBLE) marker.setVisible(false);
 		});
 	});
-	g_minute_to_vid_to_vi[g_cur_minute].forEach(function(vid, vi) {
-		if(!g_hidden_vids.contains(vid)) {
-			var marker = g_vid_to_heading_to_moving_vehicle_marker.get(vid).get(round_heading(vi.heading));
-			marker.setPosition(google_LatLng([vi.lat, vi.lon]));
-			marker.setVisible(true);
-		}
-	});
+	var vid_to_vi = data.time_to_vid_to_vi.get(g_times.elementAtIndex(g_cur_minute_idx));
+	if(vid_to_vi != undefined) {
+		vid_to_vi.forEach(function(vid, vi) {
+			if(!g_hidden_vids.contains(vid)) {
+				var marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(round_heading(vi.heading));
+				marker.setPosition(google_LatLng([vi.lat, vi.lon]));
+				if(!TEST_INVISIBLE) marker.setVisible(true);
+			}
+		});
+	}
 }
 
 function on_forward_clicked() {
-	if(g_times.length == 0) {
+	if(g_times.size() == 0) {
 		return;
 	}
-	g_cur_minute = Math.min(g_cur_minute+1, g_times.length-1);
+	g_cur_minute_idx = Math.min(g_cur_minute_idx+1, g_times.size()-1);
 	update_time_display();
-	show_cur_minute_vehicles();
+	show_cur_minute_vehicles_allroutes();
 }
 
 function on_back_clicked() {
-	if(g_times.length == 0) {
+	if(g_times.size() == 0) {
 		return;
 	}
-	g_cur_minute = Math.max(g_cur_minute-1, 0);
+	g_cur_minute_idx = Math.max(g_cur_minute_idx-1, 0);
 	update_time_display();
-	show_cur_minute_vehicles();
+	show_cur_minute_vehicles_allroutes();
 }
 
 function is_traffictype_current() {
@@ -697,10 +950,12 @@ function init_datetimepicker() {
 function on_traffictype_changed() {
 	update_datetimepicker_enabledness();
 	stop_refresh_data_from_server_timer();
+	forget_data_allroutes();
+	update_g_times();
+	get_google_directions();
 	if(is_traffictype_current()) {
 		schedule_refresh_data_from_server();
 	}
-	refresh_traffic_and_vehicles_from_server();
 }
 
 function schedule_refresh_data_from_server() {
@@ -711,8 +966,26 @@ function update_datetimepicker_enabledness() {
 	$('#datetimepicker_textfield').prop('disabled', is_traffictype_current());
 }
 
+function substr_int(str_, startidx_, len_) {
+	return parseInt(str_.substr(startidx_, len_), 10);
+}
+
+function get_date_from_gui() {
+	var d = get_datetime_from_gui();
+	if(d == 0) {
+		return new Date();
+	} else {
+		return new Date(substr_int(d, 0, 4), substr_int(d, 5, 2)-1, substr_int(d, 8, 2), substr_int(d, 11, 2), substr_int(d, 14, 2), 0, 0);
+	}
+}
+
+// Returns either 0 (an integer) or a string (in yyyy-MM-dd HH:MM format).   Our server functions can handle both. 
 function get_datetime_from_gui() {
-	return (is_traffictype_current() ? 0 : get_value('datetimepicker_textfield'));
+	if(SHOW_TIME_SELECTOR) {
+		return (is_traffictype_current() ? 0 : get_value('datetimepicker_textfield'));
+	} else {
+		return 0;
+	}
 }
 
 function draw_all_routes() {
@@ -748,57 +1021,141 @@ function stop_refresh_data_from_server_timer() {
 }
 
 function on_trip_mark_moved() {
-	var old_route = g_route, old_direction = g_direction;
-	callpy('routes.get_endpoint_info', 
-			g_origmark.getPosition().lat(), g_origmark.getPosition().lng(), g_destmark.getPosition().lat(), g_destmark.getPosition().lng(), 
-			function(r_) {
-				update_trip_endpoint_info(r_);
-				if(g_route!=old_route || g_direction!=old_direction) {
-					clear_traffic();
-					stop_refresh_data_from_server_timer();
-					stop_play_timer();
-					clear_vehicles();
-					if(g_route!=null) {
-						refresh_traffic_and_vehicles_from_server();
-						if(is_traffictype_current()) {
-							schedule_refresh_data_from_server();
-						}
-					} else {
-						update_trip_time();
-					}
-				} else {
-					update_trip_time();
-				}
-				if(g_route == null) {
-					show_temp_infowin('Please drag both markers onto a route eg. King street.');
-				}
+	get_google_directions();
+}
+
+function get_google_directions() {
+  var request = {origin: g_origmark.getPosition(), destination: g_destmark.getPosition(),
+    travelMode: google.maps.DirectionsTravelMode.TRANSIT,
+    provideRouteAlternatives: true,
+    transitOptions: {departureTime: get_date_from_gui()} 
+  };
+	inc_loading_get_count();
+	g_directions_service.route(request, function(response, status) {
+		dec_loading_get_count();
+		if(status == google.maps.DirectionsStatus.OK) {
+			g_directions_result = response;
+			//g_selected_route_idx = 0;
+			//render_route(g_selected_route_idx);
+			forget_data_allroutes();
+			update_fudgeroutes_from_directions_result();
+			refresh_traffic_and_vehicles_from_server_allroutes();
+		} else {
+			alert(sprintf('Could not get directions.  %s', status));
+		}
+	});
+}
+
+function forget_data_allroutes() {
+	g_fudgeroute_data.forEach(function(fudgeroute, data) {
+		data.traffic_lines.forEach(function(line) {
+			line.setMap(null);
+		});
+		data.vid_to_static_vehicle_marker.forEach(function(vid, marker) {
+			marker.setMap(null);
+		});
+		data.vid_to_heading_to_moving_vehicle_marker.forEach(function(vid, heading_to_moving_vehicle_marker) {
+			heading_to_moving_vehicle_marker.forEach(function(heading, marker) {
+				marker.setMap(null);
 			});
+		});
+	});
+	g_fudgeroute_data.clear();
+}
+
+function update_fudgeroutes_from_directions_result_test() {
+	g_fudgeroute_data.clear();
+	var routes = ['queen', 'spadina', 'bathurst', 'ossington', 'dufferin', 'lansdowne', 'king', 'dundas', 'college'];
+	var dirlatlngs = [
+		[[43.64678263020183, -79.40575404366155], [43.644608817203384, -79.41777034004826]], 
+		[[43.650819502780166, -79.39734263619084], [43.65622227685813, -79.39991755684514]], 
+		[[43.64833530560961, -79.40506739815373], [43.65392460475481, -79.4059257050385]], 
+		[[43.6462857655947, -79.4194869538178], [43.65113002020209, -79.42137522896428]], 
+		[[43.64684473798873, -79.4308166046967], [43.65193735798561, -79.43236155708928]], 
+		[[43.64541624264291, -79.43862719734807], [43.64982583624162, -79.43965716560979]], 
+		[[43.64081998366622, -79.4187144776215], [43.6390186511334, -79.42618174751897]], 
+		[[43.651813152879164, -79.4085006256928], [43.65032267156586, -79.42068858345647]], 
+		[[43.655787588878745, -79.41013140877385], [43.65435930621993, -79.42266268929143]]
+		];
+	for(var i in routes) {
+		var route = routes[i];
+		var start_latlng = dirlatlngs[i][0];
+		var end_latlng = dirlatlngs[i][1];
+
+		var new_data = new_fudgeroute_data();
+		new_data.start_latlng = start_latlng;
+		new_data.end_latlng = end_latlng;
+		g_fudgeroute_data.set(route, new_data);
+		break;
+	}
+}
+
+function update_fudgeroutes_from_directions_result() {
+	if(g_directions_result != null) {
+		for(var routei in g_directions_result.routes) {
+			var legs = g_directions_result.routes[routei].legs;
+			for(var legi in legs) {
+				var leg = legs[legi];
+				for(var stepi in leg.steps) {
+					var step = leg.steps[stepi];
+					var line = null;
+					if(step.travel_mode == google.maps.TravelMode.TRANSIT) {
+						var step_transitline_shortname = step.transit.line.short_name;
+						var step_fudgeroute = CONFIGROUTE_TO_FUDGEROUTE[step_transitline_shortname];
+						if(step_fudgeroute != undefined && !g_fudgeroute_data.containsKey(step_fudgeroute)) {
+							var new_data = new_fudgeroute_data();
+							new_data.start_latlng = step.start_location;
+							new_data.end_latlng = step.end_location;
+							g_fudgeroute_data.set(step_fudgeroute, new_data);
+						}
+					}
+				}
+			}
+		}
+	}
+	//update_fudgeroutes_from_directions_result_test();
+}
+
+function route_checkbox_id(idx_) {
+	return 'route_checkbox_'+idx_;
+}
+
+function on_route_checkbox_clicked(idx_) {
+	render_route(idx_);
+}
+
+function render_route(idx_) {
+	clear_rendered_route_objects();
+	if(!(0 <= idx_ && idx_ < g_directions_result.routes.length)) {
+		return;
+	}
+	var legs = g_directions_result.routes[idx_].legs;
+	for(var legi in legs) {
+		var leg = legs[legi];
+		for(var stepi in leg.steps) {
+			var step = leg.steps[stepi];
+			var line = null;
+			if(step.travel_mode == google.maps.TravelMode.TRANSIT) {
+				line = new google.maps.Polyline({path: step.path, strokeWeight: get_traffic_line_width()+2, strokeColor: 'rgb(134,133,247)', 
+					strokeOpacity: 0.7, map: g_map});
+			} else {
+				line = new google.maps.Polyline({path: step.path, strokeWeight: 5, strokeColor: 'rgb(140,140,140)', 
+					strokeOpacity: 0.7, map: g_map});
+			}
+			g_rendered_route_objects.add(line);
+		}
+	}
+}
+
+function clear_rendered_route_objects() {
+	g_rendered_route_objects.forEach(function(e) {
+		e.setMap(null);
+	});
+	g_rendered_route_objects.clear();
 }
 
 function on_datetime_changed() {
-	clear_traffic();
-	stop_play_timer();
-	clear_vehicles();
-	refresh_traffic_and_vehicles_from_server();
-}
-
-function update_trip_endpoint_info(info_) {
-	if(info_==null) {
-		g_route = g_direction = g_orig_stoptag = g_dest_stoptag = null;
-		set_contents('p_trip_endpoint_info', "Route and direction unknown");
-	} else {
-		g_route = info_["route"];
-		g_direction = info_["direction"];
-		g_orig_stoptag = info_["origstoptag"];
-		g_dest_stoptag = info_["deststoptag"];
-		g_orig_mofr = info_["origmofr"];
-		g_dest_mofr = info_["destmofr"];
-		var orig = info_["origlatlon"], dest = info_["destlatlon"];
-		set_contents('p_trip_endpoint_info', sprintf("Route: '%s', direction: %d.  Orig: stop %s, mofr=%d ( %f, %f )  Dest: stop %s, mofr=%d ( %f, %f ) ", 
-				g_route, g_direction, g_orig_stoptag, g_orig_mofr, orig[0], orig[1], g_dest_stoptag, g_dest_mofr, dest[0], dest[1]));
-		g_origmark.setPosition(google_LatLng(info_["origlatlon"]));
-		g_destmark.setPosition(google_LatLng(info_["destlatlon"]));
-	}
+	on_traffictype_changed();
 }
 
 function get_est_trip_time() {
@@ -818,7 +1175,6 @@ function get_est_trip_time() {
 			return -1;
 		}
 		var speed_mps = kmph_to_mps(speed_kmph);
-		//alert('adding distance '+dist_m+', speed '+speed_mps+', makes for '+(dist_m/speed_mps));
 		r_secs += dist_m/speed_mps;
 	}
 	var cur_offstep_mofr = round_up_off_step(startmofr, MOFR_STEP);
@@ -829,7 +1185,6 @@ function get_est_trip_time() {
 			return -1;
 		}
 		var speed_mps = kmph_to_mps(speed_kmph);
-		//alert('adding distance '+MOFR_STEP+', speed '+speed_mps+', makes for '+(MOFR_STEP/speed_mps));
 		r_secs += MOFR_STEP/speed_mps;
 		cur_offstep_mofr += MOFR_STEP;
 	}
@@ -840,7 +1195,6 @@ function get_est_trip_time() {
 			return -1;
 		}
 		var speed_mps = kmph_to_mps(speed_kmph);
-		//alert('adding distance '+dist_m+', speed '+speed_mps+', makes for '+(dist_m/speed_mps));
 		r_secs += dist_m/speed_mps;
 	}
 	return r_secs/60;
@@ -890,50 +1244,41 @@ function round(x_, step_) {
 	return (x_ - rd < ru - x_ ? rd : ru);
 }
 
-function update_trip_time() {
-	var text = '';
-	if(g_route!=null) {
-		var trip_time_minutes = get_est_trip_time();
-		if(trip_time_minutes >= 0) {
-			var km_to_travel = Math.abs(g_orig_mofr - g_dest_mofr)/1000.0;
-			var avg_speed_kmph = km_to_travel/(trip_time_minutes/60.0);
-			text = sprintf('Estimated trip time: %d minutes.  (%.1f kilometres, %.1f km/hour on average.)',
-					Math.round(trip_time_minutes), km_to_travel, avg_speed_kmph);
-		} else {
-			text = 'Could not estimate trip time.  No recent traffic for some parts of the trip.';
-		}
-	} else {
-		text = 'Could not estimate trip time.  Start / end markers have not selected a route.';
-	}
-	set_contents('p_trip_time_info', text);
+function get_traffic_line_width() {
+	return get_vehicle_size()/9;
 }
 
 // kmph_ == null ==> no data available. 
-function draw_traffic_line(start_latlon_, end_latlon_, kmph_, mofr_) {
-	var line_width = get_vehicle_size(g_map.getZoom())/9;
+// return: Either one or two two-point Polylines.  second one, if present, will be a background line, for the purpose of outlining.
+// 		both lines will have the same start- and end-position. 
+function make_traffic_line(start_latlon_, end_latlon_, kmph_, mofr_, visible_) {
+	var r = new buckets.LinkedList();
 	var line = new google.maps.Polyline({
 		path: [google_LatLng(start_latlon_), google_LatLng(end_latlon_)], 
 		map: g_map, 
 		strokeColor: kmph_to_color(kmph_), 
-		strokeWeight: line_width, 
-		zIndex: -5
+		strokeWeight: get_traffic_line_width(),  
+		zIndex: -5,
+		visible: visible_
 	});
-	g_traffic_lines.push(line);
+	r.add(line);
 	if(kmph_==null) {  // draw additional grey line behind, to make the white stand out. 
 		var line_behind = new google.maps.Polyline({
 			path: [google_LatLng(start_latlon_), google_LatLng(end_latlon_)], 
 			map: g_map, 
 			strokeColor: 'rgb(150,150,150)', 
-			strokeWeight: line_width+1, 
-			zIndex: -6
+			strokeWeight: get_traffic_line_width()+1, 
+			zIndex: -6, 
+			visible: visible_
 		});
-		g_traffic_lines.push(line_behind);
+		r.add(line_behind);
 	}
 
-	google.maps.event.addListener(line, 'mouseover', function() {
-		set_contents('p_marker_info', sprintf("The average speed in this direction, at %d metres along this route, is %s.", 
-				mofr_, (kmph_==null ? 'not available' : sprintf('%.1f kmph', kmph_))));
-	});
+	var infowin_text = sprintf("The average speed here, in this direction, is %s.", 
+			(kmph_==null ? 'not available' : sprintf('%.1f kmph', kmph_)));
+	add_mouseover_infowin(line, 0, infowin_text);
+
+	return r;
 }
 
 var g_vehicle_colors = [
@@ -989,6 +1334,10 @@ $(document).ready(initialize);
   <body>
 		<div id="map_canvas" style="width:100%; height:100%"></div>
 		<div>
+			<div id="div_framerate">
+				<br/><p id='p_framerate'/>
+				<br/><p id='p_worktime'/>
+			</div>
 			<br/>
 			<a href="instructions.html">Instructions.</a>
 			<hr>
@@ -1034,16 +1383,12 @@ $(document).ready(initialize);
 			<input type="button" id="back_button" onclick="on_back_clicked()" value="<" />
 			<input type="button" id="forward_button" onclick="on_forward_clicked()" value=">" />
 			<br/>
-			<p id="p_trip_time_info">&nbsp;</p>
-			<hr>
 			<font size="-1">
 			<p>Details:</p>
-			<p id="p_marker_info">(Hover your mouse (or finger) over a coloured section of the route to see the average speed there.)</p>
 			<p id="p_vid_checkboxes">&nbsp;</p>
-			<p id="p_trip_endpoint_info">&nbsp;</p>
-			<div id="time_selector_div" style="visibility:hidden">
-			<input id="current_button" type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"    checked="checked"    />Now
-			<input id="historical_button" type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()"  />Past
+			<div id="div_time_selector">
+			<input id="current_button" type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"   checked="checked"   />Now
+			<input id="historical_button" type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()"   />Past
 			<input id="datetimepicker_textfield" type="text" name="datetimepicker_textfield" value="" />
 			</div>
 			</font>

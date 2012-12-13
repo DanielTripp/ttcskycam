@@ -9,6 +9,9 @@ with open('MOFR_STEP') as f:
 
 TIME_WINDOW_MINUTES = 30
 
+def get_recent_vehicle_locations_dirfromlatlngs(fudgeroute_name_, latlng1_, latlng2_, current_, time_, log_=False):
+	return get_recent_vehicle_locations(fudgeroute_name_, routes.dir_from_latlngs(fudgeroute_name_, latlng1_, latlng2_), current_, time_, log_)
+
 def get_recent_vehicle_locations(fudgeroute_, dir_, current_, time_, log_=False):
 	time_ = massage_time_arg(time_, 15*1000)
 	mckey = mc.make_key('get_recent_vehicle_locations', fudgeroute_, dir_, current_, time_)
@@ -57,6 +60,9 @@ def get_vid_to_vis_from_db_for_traffic(fudgeroute_name_, dir_, time_, log_=False
 
 def between(bound1_, value_, bound2_):
 	return (bound1_ < value_ < bound2_) or (bound1_ > value_ > bound2_) 
+
+def get_traffics_dirfromlatlngs(fudgeroute_name_, latlng1_, latlng2_, current_, time_, log_=False):
+	return get_traffics(fudgeroute_name_, routes.dir_from_latlngs(fudgeroute_name_, latlng1_, latlng2_), current_, time_, log_)
 
 # time_ - 0 for now 
 # 

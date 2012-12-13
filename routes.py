@@ -28,6 +28,7 @@ class Stop:
 
 class RouteInfo:
 	def __init__(self, routename_):
+		self.name = routename_
 		self.init_routepts(routename_)
 		self.init_stops_bothdirs(routename_)
 
@@ -80,8 +81,8 @@ class RouteInfo:
 				self.stops[dir_].append(Stop(latlng, stoptag, self.latlon_to_mofr(latlng)))
 
 	def latlon_to_mofr(self, post_, tolerance_=0):
-		assert isinstance(post_, geom.LatLng) and (tolerance_ in (0, 1, 2))
-		snap_result = self.snaptogridcache.snap(post_, {0:50, 1:300, 2:2000}[tolerance_])
+		assert isinstance(post_, geom.LatLng) and (tolerance_ in (0, 1, 1.5, 2))
+		snap_result = self.snaptogridcache.snap(post_, {0:50, 1:300, 1.5:600, 2:2000}[tolerance_])
 		if snap_result is None:
 			return -1
 		dir = snap_result[1].polylineidx; routeptidx = snap_result[1].startptidx
@@ -137,6 +138,15 @@ class RouteInfo:
 			return self.snaptogridcache.polylines[dir_]
 		else:
 			return self.snaptogridcache.polylines[0]
+
+	def dir_from_latlngs(self, latlng1_, latlng2_):
+		mofr1 = self.latlon_to_mofr(latlng1_, tolerance_=2)
+		mofr2 = self.latlon_to_mofr(latlng2_, tolerance_=2)
+		if mofr1 == -1 or mofr2 == -1:
+			raise Exception('Invalid (off-route) latlng argument (or arguments) to dir_from_latlngs.  (%s, %s, %s)' 
+					% (self.name, latlng1_, latlng2_))
+		return (0 if mofr2 > mofr1 else 1)
+
 
 g_routename_to_info = {}
 
@@ -219,6 +229,12 @@ def get_route_to_mofr(latlon_):
 		if mofr != -1:
 			r[route] = mofr
 	return r
+
+def dir_from_latlngs(fudgeroutename_, latlng1_, latlng2_):
+	return get_routeinfo(fudgeroutename_).dir_from_latlngs(latlng1_, latlng2_)
+
+def get_configroute_to_fudgeroute_map():
+	return CONFIGROUTE_TO_FUDGEROUTE
 
 def snaptest(fudgeroutename_, pt_, tolerance_=0):
 	return get_routeinfo(fudgeroutename_).snaptest(pt_, tolerance_)

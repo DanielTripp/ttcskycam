@@ -42,16 +42,24 @@ function dec_loading_get_count() {
 	}
 }
 
-function get(url_, success_) {
+// funcs_arg_ can be a single callable (success function) or an object with 'success' and/or 'error' members. 
+function get(url_, funcs_arg_) {
 	inc_loading_get_count();
+	var success_func = funcs_arg_.success, error_func = funcs_arg_.error;
+	if(success_func == undefined && error_func == undefined) {
+		success_func = funcs_arg_;
+	}
 	$.ajax({url:url_, async:true, 
 		error: function(jqXHR_, textStatus_, errorThrown_) {
 			dec_loading_get_count();
+			if(error_func != undefined) {
+				error_func();
+			}
 			alert(sprintf("Error %s %s %s", jqXHR_, textStatus_, errorThrown_));
 		}, 
 		success: function(data_, textStatus_, jqXHR_) {
 			dec_loading_get_count();
-			success_($.parseJSON(data_));
+			success_func($.parseJSON(data_));
 		}
 	});
 }
@@ -161,6 +169,10 @@ function is_selected(checkboxname_) {
 	return $('#'+checkboxname_).is(":checked");
 }
 
+function set_selected(checkboxname_, selected_) {
+	return $('#'+checkboxname_).prop('checked', selected_);
+}
+
 function ord(char_) {
 	return char_.charCodeAt(0);
 }
@@ -183,8 +195,8 @@ function callpy(module_and_funcname_) {
 		func_args.push(arguments[i]);
 	}
 	var url = callpy_url(module_and_funcname_, func_args);
-	var success_func = arguments[arguments.length-1];
-	get(url, success_func);
+	var funcs_arg = arguments[arguments.length-1];
+	get(url, funcs_arg);
 }
 
 function callpy_sync(module_and_funcname_) {
@@ -277,6 +289,74 @@ function close_temp_infowin() {
 		g_temp_infowin = null;
 	}
 }
+
+function add_all(dest_list_, src_list_) {
+	src_list_.forEach(function(e) {
+		dest_list_.add(e);
+	});
+}
+
+function to_buckets_list(array_) {
+	var r = new buckets.LinkedList();
+	for(var i in array_) {
+		var e = array_[i];
+		r.add(e);
+	}
+	return r;
+}
+
+function to_buckets_dict(dict_) {
+	var r = new buckets.Dictionary();
+	for(var key in dict_) {
+		var value = dict_[key];
+		r.set(key, value);
+	}
+	return r;
+}
+
+function buckets_set_to_string(s_) {
+	var r = "(";
+	s_.forEach(function(e) {
+		r += sprintf("%s", e);
+		r += ", ";
+	});
+	r += ")";
+	return r;
+}
+
+function buckets_list_to_string(l_) {
+	var r = "[";
+	for(var i=0; i<l_.size(); i++) {
+		r += sprintf("%s", l_.elementAtIndex(i));
+		if(i != l_.size()-1) {
+			r += ", ";
+		}
+	}
+	r += "]";
+	return r;
+}
+
+function buckets_set_to_list(set_) {
+	var r = new buckets.LinkedList();
+	set_.forEach(function(e) {
+		r.add(e);
+	});
+	return r;
+}
+
+function sort_buckets_list(l_) {
+	var temp = [];
+	l_.forEach(function(e) {
+		temp.push(e);
+	});
+	l_.clear();
+	temp.sort();
+	for(var i in temp) {
+		var e = temp[i];
+		l_.add(e);
+	}
+}
+
 
 eval(get_sync("js/json2.js"));
 
