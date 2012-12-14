@@ -445,6 +445,9 @@ function move_vehicles_forward_one_minute() {
 }
 
 function move_vehicles_forward_one_minute_overtime() {
+	if(g_times.size() == 0) {
+		return;
+	}
 	if(g_cur_minute_idx == g_times.size()-1) {
 		g_fudgeroute_data.forEach(function(fudgeroute, data) {
 			if(data.time_to_vid_to_vi.size() > 0) {
@@ -474,6 +477,9 @@ function move_vehicles_forward_one_minute_overtime() {
 }
 
 function move_vehicles_forward_one_minute_normal() {
+	if(g_times.size() == 0) {
+		return;
+	}
 	var prev_minute_idx = g_cur_minute_idx-1;
 	if(prev_minute_idx < 0) {
 		prev_minute_idx = g_times.size()-1;
