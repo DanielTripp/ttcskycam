@@ -173,23 +173,6 @@ def fix_dirtag(vi_, dir_):
 	else:
 		raise Exception('Don\'t know how to fix dir_tag on %s' % str(vi_))
 
-# returns a list of 2-tuples - (fore VehicleInfo, stand VehicleInfo)
-# list probably has max_ elements.
-def get_recent_passing_vehicles(route_, post_, max_, end_time_em_=now_em(), dir_=None, include_unpredictables_=False):
-	vid_to_lastvi = {}
-	n = 0
-	r = []
-	for curvi in vi_select_generator((route_,), end_time_em_, 0, dir_, include_unpredictables_):
-		if len(r) >= max_:
-			break
-		vid = curvi.vehicle_id
-		if vid in vid_to_lastvi:
-			lastvi = vid_to_lastvi[vid]
-			if geom.passes(curvi.latlng, lastvi.latlng, post_):
-				r.append((curvi, lastvi))
-		vid_to_lastvi[vid] = curvi
-	return r
-
 def find_passing(route_, vid_, dir_, t_, post_):
 	assert isinstance(route_, str) and isinstance(vid_, basestring) and isinstance(t_, long) and isinstance(post_, geom.LatLng)
 	lastvi = None
@@ -496,6 +479,7 @@ def round_up_by_minute(t_em_):
 	dt = datetime.datetime.utcfromtimestamp(t_em_/1000.0)
 	dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
 	if dt.second > 0:
+		dt -= datetime.timedelta(seconds=dt.second)
 		dt += datetime.timedelta(minutes=1)
 	r = long(calendar.timegm(dt.timetuple())*1000)
 	return r
@@ -539,6 +523,23 @@ def get_nearest_time_vis(vilist_, vid_, t_):
 		 return (None, None, vis[-1])
 	else:
 		return (None, None, None)
+
+# returns a list of 2-tuples - (fore VehicleInfo, stand VehicleInfo)
+# list probably has max_ elements.
+def get_recent_passing_vehicles(route_, post_, max_, end_time_em_=now_em(), dir_=None, include_unpredictables_=False):
+	vid_to_lastvi = {}
+	n = 0
+	r = []
+	for curvi in vi_select_generator((route_,), end_time_em_, 0, dir_, include_unpredictables_):
+		if len(r) >= max_:
+			break
+		vid = curvi.vehicle_id
+		if vid in vid_to_lastvi:
+			lastvi = vid_to_lastvi[vid]
+			if geom.passes(curvi.latlng, lastvi.latlng, post_):
+				r.append((curvi, lastvi))
+		vid_to_lastvi[vid] = curvi
+	return r
 
 @trans
 def purge():
