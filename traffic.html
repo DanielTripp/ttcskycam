@@ -24,11 +24,6 @@ var DISABLE_OVERTIME = false;
 var SHOW_FRAMERATE = false;
 var SHOW_TIME_SELECTOR = true;
 
-var g_directions_service = new google.maps.DirectionsService();
-var g_directions_result = null;
-var g_selected_route_idx = -1;
-var g_rendered_route_objects = new buckets.LinkedList();
-
 function new_fudgeroute_data() {
 	return {
 		traffic_mofr2speed: new buckets.Dictionary(), 
@@ -37,7 +32,7 @@ function new_fudgeroute_data() {
 		time_to_vid_to_vi: new buckets.Dictionary(), // key: date/time string.  value: dictionary (key: vid string, value: VehicleInfo object) 
 		vid_to_static_vehicle_marker: new buckets.Dictionary(), 
 		vid_to_heading_to_moving_vehicle_marker: new buckets.Dictionary(), 
-		start_latlng: null, end_latlng: null,
+		dir: null, 
 		traffic_request_pending: false, 
 		vehicles_request_pending: false
 	};
@@ -50,7 +45,8 @@ for(var i=0; i<15; i++) {
 var g_framerate_last_epochtime = (new Date()).getTime();
 
 var g_fudgeroute_data = new buckets.Dictionary();
-var g_origmark=null, g_destmark=null;
+var g_compassdir = 'se', g_maxroutes = 5;
+var g_bounds_changed_listener_timer = null;
 var g_play_timer = null;
 /* current time location (index into g_times) of the animation. */
 var g_cur_minute_idx = 0;
@@ -118,7 +114,7 @@ function refresh_traffic_from_server(fudgeroute_) {
 	var data = g_fudgeroute_data.get(fudgeroute_);
 	if(!data.traffic_request_pending) {
 		data.traffic_request_pending = true;
-		callpy('traffic.get_traffics_dirfromlatlngs', fudgeroute_, data.start_latlng, data.end_latlng, true, get_datetime_from_gui(), 
+		callpy('traffic.get_traffics', fudgeroute_, data.dir, true, get_datetime_from_gui(), 
 			{success: function(r_) {
 				if(!g_fudgeroute_data.containsKey(fudgeroute_)) {
 					return;
@@ -140,7 +136,7 @@ function refresh_vehicles_from_server(fudgeroute_) {
 	var data = g_fudgeroute_data.get(fudgeroute_);
 	if(!data.vehicles_request_pending) {
 		data.vehicles_request_pending = true;
-		callpy('traffic.get_recent_vehicle_locations_dirfromlatlngs', fudgeroute_, data.start_latlng, data.end_latlng, true, get_datetime_from_gui(), 
+		callpy('traffic.get_recent_vehicle_locations', fudgeroute_, data.dir, true, get_datetime_from_gui(), 
 			{success: function(r_) {
 				if(!g_fudgeroute_data.containsKey(fudgeroute_)) {
 					return;
@@ -343,15 +339,19 @@ function update_last_updated_time() {
 }
 
 function refresh_data_from_server_timer_func() {
-	refresh_traffic_and_vehicles_from_server_allroutes();
+	refresh_data_from_server_allroutes();
 	schedule_refresh_data_from_server();
 }
 
-function refresh_traffic_and_vehicles_from_server_allroutes() {
+function refresh_data_from_server_allroutes() {
 	g_fudgeroute_data.forEach(function(fudgeroute, data) {
-		refresh_traffic_from_server(fudgeroute);
-		refresh_vehicles_from_server(fudgeroute);
+		refresh_data_from_server_singleroute(fudgeroute);
 	});
+}
+
+function refresh_data_from_server_singleroute(fudgeroute_) {
+	refresh_traffic_from_server(fudgeroute_);
+	refresh_vehicles_from_server(fudgeroute_);
 }
 
 function remake_static_vehicles_allroutes() {
@@ -428,7 +428,7 @@ function set_all_static_vehicle_markers_visible_allroutes(visible_) {
 	});
 }
 
-// Not 'all' really.  This function respects the currently selected directions route, and the hidden vid checkboxes. 
+// Not 'all' really.  This function respects the hidden vid checkboxes. 
 function set_all_static_vehicle_markers_visible_singleroute(fudgeroute_, visible_) {
 	var data = g_fudgeroute_data.get(fudgeroute_);
 	data.vid_to_static_vehicle_marker.forEach(function(vid, marker) {
@@ -753,28 +753,6 @@ function remake_traffic_lines_singleroute(fudgeroute_) {
 	}
 }
 
-function is_fudgeroute_part_of_selected_directions_route(fudgeroute_) {
-	assert(false);
-	if(0 <= g_selected_route_idx && g_selected_route_idx < g_directions_result.routes.length) {
-		var legs = g_directions_result.routes[g_selected_route_idx].legs;
-		for(var legi in legs) {
-			var leg = legs[legi];
-			for(var stepi in leg.steps) {
-				var step = leg.steps[stepi];
-				var line = null;
-				if(step.travel_mode == google.maps.TravelMode.TRANSIT) {
-					var step_transitline_shortname = step.transit.line.short_name;
-					var step_fudgeroute = CONFIGROUTE_TO_FUDGEROUTE[step_transitline_shortname];
-					if(step_fudgeroute == fudgeroute_) {
-						return true;
-					}
-				}
-			}
-		}
-	}
-	return false;
-}
-
 function forget_traffic_lines(fudgeroute_) {
 	var data = g_fudgeroute_data.get(fudgeroute_);
 	if(data != undefined) {
@@ -822,6 +800,7 @@ function initialize() {
 		remake_traffic_lines_allroutes();
 		redraw_vehicle_markers();
 	});
+	google.maps.event.addListener(g_map, 'bounds_changed', schedule_bounds_changed_listener);
 	var origlat, origlon, destlat, destlon;
 	if(false) { // true for dundas 
 		var westlat = 43.65078;
@@ -842,35 +821,122 @@ function initialize() {
 			destlat=43.64457; destlon=-79.4165499; origlat=43.6471199; origlon=-79.4042;
 		}
 	}
-	g_origmark = new google.maps.Marker({
-		position: new google.maps.LatLng(origlat, origlon),
-		map: g_map,
-		draggable: true
-		});
-	add_text_to_marker(g_origmark, "Starting point");
-
-	google.maps.event.addListener(g_origmark, 'dragend', function() { on_trip_mark_moved(); });
-
-	g_destmark = new google.maps.Marker({
-		position: new google.maps.LatLng(destlat, destlon),
-		map: g_map,
-		draggable: true
-		});
-	add_text_to_marker(g_destmark, "Destination");
-	google.maps.event.addListener(g_destmark, 'dragend', function() { on_trip_mark_moved(); });
-
-	//draw_all_routes();
 
 	set_play_buttons_appropriately();
 
 	g_play_timer = setTimeout('moving_vehicles_timer_func()', 0);
 
-	get_google_directions();
-
 	if(!SHOW_FRAMERATE) {
 		$('#div_framerate').remove();
 	}
 
+	init_direction_buttons();
+
+	init_max_routes_controls();
+
+	// The first 'get' of data from the server will happen due to a bounds_changed event on the map that happens to it on 
+	// initialization.  That will cause a 'get_fudgeroutes_for_map_bounds' which will cause a 'get' of traffic and vehicle 
+	// data for each route individually, right away.
+	schedule_refresh_data_from_server(); // This will cause a periodic refresh of all routes.  The first refresh 
+			// will happen not right away, but in a few seconds. 
+}
+
+function schedule_bounds_changed_listener() {
+	if(g_bounds_changed_listener_timer!=null) {
+		clearTimeout(g_bounds_changed_listener_timer);
+		g_bounds_changed_listener_timer = null;
+	}
+	g_bounds_changed_listener_timer = setTimeout('bounds_changed_listener()', 1000);
+}
+
+function bounds_changed_listener() {
+	g_bounds_changed_listener_timer = null;
+	get_fudgeroutes_for_map_bounds();
+}
+
+function init_max_routes_controls() {
+	set_contents('span_max_routes', ''+g_maxroutes);
+
+	$('#down_img').on({'click': on_maxroutes_down_clicked});
+	$('#up_img').on({'click': on_maxroutes_up_clicked});
+}
+
+function on_maxroutes_down_clicked() {
+	if(g_maxroutes > 1) {
+		g_maxroutes -= 1;
+		set_contents('span_max_routes', ''+g_maxroutes);
+		get_fudgeroutes_for_map_bounds();
+	}
+}
+
+function on_maxroutes_up_clicked() {
+	if(g_maxroutes < 99) {
+		g_maxroutes += 1;
+		set_contents('span_max_routes', ''+g_maxroutes);
+		get_fudgeroutes_for_map_bounds();
+	}
+}
+
+function get_fudgeroutes_for_map_bounds() {
+	callpy('routes.get_fudgeroutes_for_map_bounds', g_map.getBounds().getSouthWest(), g_map.getBounds().getNorthEast(), 
+			g_compassdir, g_maxroutes, 
+			function(r_) {
+				var new_routes = new buckets.LinkedList();
+				for(var i in r_) {
+					var fudgeroute_n_dir = r_[i];
+					var fudgeroute = fudgeroute_n_dir[0], dir = fudgeroute_n_dir[1];
+					new_routes.add(fudgeroute);
+					if(g_fudgeroute_data.get(fudgeroute) == undefined || g_fudgeroute_data.get(fudgeroute).dir != dir) {
+						forget_data_singleroute(fudgeroute);
+						var data = new_fudgeroute_data();
+						data.dir = dir;
+						g_fudgeroute_data.set(fudgeroute, data);
+						refresh_data_from_server_singleroute(fudgeroute);
+					}
+				}
+				var old_routes = g_fudgeroute_data.keys();
+				for(var i in old_routes) {
+					var old_route = old_routes[i];
+					if(!new_routes.contains(old_route)) {
+						forget_data_singleroute(old_route);
+					}
+				}
+			});
+}
+
+function init_direction_buttons() {
+	var dirs = ['n', 'e', 'w', 's', 'ne', 'se', 'sw', 'nw'];
+	for(var i in dirs) {
+		var dir = dirs[i];
+		var img_id = sprintf('%s_img', dir);
+		var func = function() {
+			on_dir_button_pressed(arguments.callee.dir); 
+		};
+		func.dir = dir;
+		$('#'+img_id).on({'click': func});
+	}
+	refresh_compassdir_buttons_imgs();
+}
+
+function on_dir_button_pressed(dir_) {
+	g_compassdir = dir_;
+	refresh_compassdir_buttons_imgs();
+	get_fudgeroutes_for_map_bounds();
+}
+
+function refresh_compassdir_buttons_imgs() {
+	var pressed_img_id = sprintf('%s_img', g_compassdir);
+	var pressed_img = sprintf('%s_pressed.png', g_compassdir);
+	$('#'+pressed_img_id).attr('src', pressed_img);
+	var dirs = ['n', 'e', 'w', 's', 'ne', 'se', 'sw', 'nw'];
+	for(var i in dirs) {
+		var dir = dirs[i];
+		if(dir != g_compassdir) {
+			var nonpressed_img_id = sprintf('%s_img', dir);
+			var nonpressed_img = sprintf('%s.png', dir);
+			$('#'+nonpressed_img_id).attr('src', nonpressed_img);
+		}
+	}
 }
 
 function set_play_buttons_appropriately() {
@@ -965,7 +1031,6 @@ function on_traffictype_changed() {
 	stop_refresh_data_from_server_timer();
 	forget_data_allroutes();
 	update_g_times();
-	get_google_directions();
 	if(is_traffictype_current()) {
 		schedule_refresh_data_from_server();
 	}
@@ -1033,34 +1098,15 @@ function stop_refresh_data_from_server_timer() {
 	}
 }
 
-function on_trip_mark_moved() {
-	get_google_directions();
-}
-
-function get_google_directions() {
-  var request = {origin: g_origmark.getPosition(), destination: g_destmark.getPosition(),
-    travelMode: google.maps.DirectionsTravelMode.TRANSIT,
-    provideRouteAlternatives: true,
-    transitOptions: {departureTime: get_date_from_gui()} 
-  };
-	inc_loading_get_count();
-	g_directions_service.route(request, function(response, status) {
-		dec_loading_get_count();
-		if(status == google.maps.DirectionsStatus.OK) {
-			g_directions_result = response;
-			//g_selected_route_idx = 0;
-			//render_route(g_selected_route_idx);
-			forget_data_allroutes();
-			update_fudgeroutes_from_directions_result();
-			refresh_traffic_and_vehicles_from_server_allroutes();
-		} else {
-			alert(sprintf('Could not get directions.  %s', status));
-		}
+function forget_data_allroutes() {
+	g_fudgeroute_data.forEach(function(fudgeroute, data) {
+		forget_data_singleroute(fudgeroute);
 	});
 }
 
-function forget_data_allroutes() {
-	g_fudgeroute_data.forEach(function(fudgeroute, data) {
+function forget_data_singleroute(fudgeroute_) {
+	var data = g_fudgeroute_data.get(fudgeroute_);
+	if(data != undefined) {
 		data.traffic_lines.forEach(function(line) {
 			line.setMap(null);
 		});
@@ -1072,145 +1118,12 @@ function forget_data_allroutes() {
 				marker.setMap(null);
 			});
 		});
-	});
-	g_fudgeroute_data.clear();
-}
-
-function update_fudgeroutes_from_directions_result_test() {
-	g_fudgeroute_data.clear();
-	var routes = ['queen', 'spadina', 'bathurst', 'ossington', 'dufferin', 'lansdowne', 'king', 'dundas', 'college'];
-	var dirlatlngs = [
-		[[43.64678263020183, -79.40575404366155], [43.644608817203384, -79.41777034004826]], 
-		[[43.650819502780166, -79.39734263619084], [43.65622227685813, -79.39991755684514]], 
-		[[43.64833530560961, -79.40506739815373], [43.65392460475481, -79.4059257050385]], 
-		[[43.6462857655947, -79.4194869538178], [43.65113002020209, -79.42137522896428]], 
-		[[43.64684473798873, -79.4308166046967], [43.65193735798561, -79.43236155708928]], 
-		[[43.64541624264291, -79.43862719734807], [43.64982583624162, -79.43965716560979]], 
-		[[43.64081998366622, -79.4187144776215], [43.6390186511334, -79.42618174751897]], 
-		[[43.651813152879164, -79.4085006256928], [43.65032267156586, -79.42068858345647]], 
-		[[43.655787588878745, -79.41013140877385], [43.65435930621993, -79.42266268929143]]
-		];
-	for(var i in routes) {
-		var route = routes[i];
-		var start_latlng = dirlatlngs[i][0];
-		var end_latlng = dirlatlngs[i][1];
-
-		var new_data = new_fudgeroute_data();
-		new_data.start_latlng = start_latlng;
-		new_data.end_latlng = end_latlng;
-		g_fudgeroute_data.set(route, new_data);
-		break;
+		g_fudgeroute_data.remove(fudgeroute_);
 	}
-}
-
-function update_fudgeroutes_from_directions_result() {
-	if(g_directions_result != null) {
-		for(var routei in g_directions_result.routes) {
-			var legs = g_directions_result.routes[routei].legs;
-			for(var legi in legs) {
-				var leg = legs[legi];
-				for(var stepi in leg.steps) {
-					var step = leg.steps[stepi];
-					var line = null;
-					if(step.travel_mode == google.maps.TravelMode.TRANSIT) {
-						var step_transitline_shortname = step.transit.line.short_name;
-						var step_fudgeroute = CONFIGROUTE_TO_FUDGEROUTE[step_transitline_shortname];
-						if(step_fudgeroute != undefined && !g_fudgeroute_data.containsKey(step_fudgeroute)) {
-							var new_data = new_fudgeroute_data();
-							new_data.start_latlng = step.start_location;
-							new_data.end_latlng = step.end_location;
-							g_fudgeroute_data.set(step_fudgeroute, new_data);
-						}
-					}
-				}
-			}
-		}
-	}
-	//update_fudgeroutes_from_directions_result_test();
-}
-
-function route_checkbox_id(idx_) {
-	return 'route_checkbox_'+idx_;
-}
-
-function on_route_checkbox_clicked(idx_) {
-	render_route(idx_);
-}
-
-function render_route(idx_) {
-	clear_rendered_route_objects();
-	if(!(0 <= idx_ && idx_ < g_directions_result.routes.length)) {
-		return;
-	}
-	var legs = g_directions_result.routes[idx_].legs;
-	for(var legi in legs) {
-		var leg = legs[legi];
-		for(var stepi in leg.steps) {
-			var step = leg.steps[stepi];
-			var line = null;
-			if(step.travel_mode == google.maps.TravelMode.TRANSIT) {
-				line = new google.maps.Polyline({path: step.path, strokeWeight: get_traffic_line_width()+2, strokeColor: 'rgb(134,133,247)', 
-					strokeOpacity: 0.7, map: g_map});
-			} else {
-				line = new google.maps.Polyline({path: step.path, strokeWeight: 5, strokeColor: 'rgb(140,140,140)', 
-					strokeOpacity: 0.7, map: g_map});
-			}
-			g_rendered_route_objects.add(line);
-		}
-	}
-}
-
-function clear_rendered_route_objects() {
-	g_rendered_route_objects.forEach(function(e) {
-		e.setMap(null);
-	});
-	g_rendered_route_objects.clear();
 }
 
 function on_datetime_changed() {
 	on_traffictype_changed();
-}
-
-function get_est_trip_time() {
-	var startmofr, endmofr;
-	if(g_direction == 0) {
-		startmofr = g_orig_mofr;
-		endmofr = g_dest_mofr;
-	} else {
-		startmofr = g_dest_mofr;
-		endmofr = g_orig_mofr;
-	}
-	var r_secs = 0;
-	if(startmofr != round_up_off_step(startmofr, MOFR_STEP)) {
-		var dist_m = round_up_off_step(startmofr, MOFR_STEP) - startmofr;
-		var speed_kmph = get_traffic_kmph(round(startmofr, MOFR_STEP));
-		if(speed_kmph == -1) {
-			return -1;
-		}
-		var speed_mps = kmph_to_mps(speed_kmph);
-		r_secs += dist_m/speed_mps;
-	}
-	var cur_offstep_mofr = round_up_off_step(startmofr, MOFR_STEP);
-	while(cur_offstep_mofr < round_down_off_step(endmofr, MOFR_STEP)) {
-		var mofr_with_ref_speed = round_up(cur_offstep_mofr, MOFR_STEP);
-		var speed_kmph = get_traffic_kmph(mofr_with_ref_speed);
-		if(speed_kmph == -1) {
-			return -1;
-		}
-		var speed_mps = kmph_to_mps(speed_kmph);
-		r_secs += MOFR_STEP/speed_mps;
-		cur_offstep_mofr += MOFR_STEP;
-	}
-	if(endmofr != round_down_off_step(endmofr, MOFR_STEP)) {
-		dist_m = endmofr - round_down_off_step(endmofr, MOFR_STEP);
-		var speed_kmph = get_traffic_kmph(round(endmofr, MOFR_STEP));
-		if(speed_kmph == -1) {
-			return -1;
-		}
-		var speed_mps = kmph_to_mps(speed_kmph);
-		r_secs += dist_m/speed_mps;
-	}
-	return r_secs/60;
 }
 
 // returns -1 if we have no traffic data for that mofr step. 
@@ -1354,51 +1267,50 @@ $(document).ready(initialize);
 			<br/>
 			<a href="instructions.html">Instructions.</a>
 			<hr>
-			<svg id="clock" viewBox="0 0 100 100" width="100" height="100">
-				<!-- SVG clock from https://gist.github.com/1188550 --> 
-
-				<circle id="face" cx="50" cy="50" r="45"/> <!-- the clock face -->
-
-				<g id="ticks">
-					<!-- 12 hour tick marks -->
-					<line x1='50' y1='5.000' x2='50.00' y2='10.00'/>
-					<line x1='72.50' y1='11.03' x2='70.00' y2='15.36'/>
-					<line x1='88.97' y1='27.50' x2='84.64' y2='30.00'/>
-					<line x1='95.00' y1='50.00' x2='90.00' y2='50.00'/>
-					<line x1='88.97' y1='72.50' x2='84.64' y2='70.00'/>
-					<line x1='72.50' y1='88.97' x2='70.00' y2='84.64'/>
-					<line x1='50.00' y1='95.00' x2='50.00' y2='90.00'/>
-					<line x1='27.50' y1='88.97' x2='30.00' y2='84.64'/>
-					<line x1='11.03' y1='72.50' x2='15.36' y2='70.00'/>
-					<line x1='5.000' y1='50.00' x2='10.00' y2='50.00'/>
-					<line x1='11.03' y1='27.50' x2='15.36' y2='30.00'/>
-					<line x1='27.50' y1='11.03' x2='30.00' y2='15.36'/>
-				</g>
-
-				<g id="numbers">
-					<!-- Number the cardinal directions-->
-					<text x="50" y="18">12</text><text x="85" y="53">3</text>
-					<text x="50" y="88">6</text><text x="15" y="53">9</text>
-				</g>
-
-				<!-- Draw hands pointing straight up. We rotate them in the code. -->
-				<g id="hands"> <!-- Add shadows to the hands -->
-					<line id="hourhand" x1="50" y1="50" x2="50" y2="24"/>
-					<line id="minutehand" x1="50" y1="50" x2="50" y2="20"/>
-					<!--<line id="secondhand" x1="50" y1="50" x2="50" y2="16"/>-->
-				</g>
-			</svg> <br/>
-			<span id="p_cur_time">&nbsp;</span><br/>
-			<span id="p_last_updated"></span>
-			<hr>
-			Animated vehicles: 
-			<input type="button" id="playpause_button" onclick="on_playpause_clicked()" value="" />
-			<input type="button" id="back_button" onclick="on_back_clicked()" value="<" />
-			<input type="button" id="forward_button" onclick="on_forward_clicked()" value=">" />
-			<br/>
-			<font size="-1">
-			<p>Details:</p>
-			<p id="p_vid_checkboxes">&nbsp;</p>
+			<div style="float: left;">
+				<svg id="clock" viewBox="0 0 100 100" width="100" height="100">
+					<!-- SVG clock from https://gist.github.com/1188550 --> 
+					<circle id="face" cx="50" cy="50" r="45"/> <!-- the clock face -->
+					<g id="ticks">
+						<!-- 12 hour tick marks -->
+						<line x1='50' y1='5.000' x2='50.00' y2='10.00'/> <line x1='72.50' y1='11.03' x2='70.00' y2='15.36'/> <line x1='88.97' y1='27.50' x2='84.64' y2='30.00'/> <line x1='95.00' y1='50.00' x2='90.00' y2='50.00'/> <line x1='88.97' y1='72.50' x2='84.64' y2='70.00'/> <line x1='72.50' y1='88.97' x2='70.00' y2='84.64'/> <line x1='50.00' y1='95.00' x2='50.00' y2='90.00'/> <line x1='27.50' y1='88.97' x2='30.00' y2='84.64'/> <line x1='11.03' y1='72.50' x2='15.36' y2='70.00'/> <line x1='5.000' y1='50.00' x2='10.00' y2='50.00'/> <line x1='11.03' y1='27.50' x2='15.36' y2='30.00'/> <line x1='27.50' y1='11.03' x2='30.00' y2='15.36'/>
+					</g>
+					<g id="numbers">
+						<!-- Number the cardinal directions-->
+						<text x="50" y="18">12</text><text x="85" y="53">3</text> <text x="50" y="88">6</text><text x="15" y="53">9</text>
+					</g>
+					<!-- Draw hands pointing straight up. We rotate them in the code. -->
+					<g id="hands"> <!-- Add shadows to the hands -->
+						<line id="hourhand" x1="50" y1="50" x2="50" y2="24"/> <line id="minutehand" x1="50" y1="50" x2="50" y2="20"/>
+						<!--<line id="secondhand" x1="50" y1="50" x2="50" y2="16"/>-->
+					</g>
+				</svg> <br/>
+				<span id="p_cur_time">&nbsp;</span><br/>
+				<span id="p_last_updated"></span>
+			</div>
+			<div style="float: right;">
+				<div>
+					<img id="nw_img" src="nw.png"/> <img id="n_img" src="n.png"/> <img id="ne_img" src="ne.png"/> <br/>
+					<img id="w_img" src="w.png"/> <img src="blank_32x32.png"/> <img id="e_img" src="e.png"/> <br/>
+					<img id="sw_img" src="sw.png"/> <img id="s_img" src="s.png"/> <img id="se_img" src="se.png"/> <br/>
+				</div>
+				<div style="clear: both; float: right;">
+					<br/>
+					Max routes to show:<br/><font size="+2"><span id='span_max_routes'></span></font>  
+					<img id="down_img" src="down.png"/> <img id="up_img" src="up.png"/> <br/>
+				</div>
+			</div>
+			<div style="clear: both;">
+				<hr>
+				Animated vehicles: 
+				<input type="button" id="playpause_button" onclick="on_playpause_clicked()" value="" />
+				<input type="button" id="back_button" onclick="on_back_clicked()" value="<" />
+				<input type="button" id="forward_button" onclick="on_forward_clicked()" value=">" />
+				<br/>
+				<font size="-1">
+				<p>Details:</p>
+				<p id="p_vid_checkboxes">&nbsp;</p>
+			</div>
 			<div id="div_time_selector">
 			<input id="current_button" type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"   checked="checked"   />Now
 			<input id="historical_button" type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()"   />Past

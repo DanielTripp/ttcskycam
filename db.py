@@ -461,7 +461,7 @@ def interp_latlonnheading(vi1_, vi2_, ratio_, be_clever_):
 					interped_loc_snap_result = tracks.snap(simple_interped_loc, 5000)
 					if interped_loc_snap_result is not None:
 						tracks_based_heading = tracks.heading(interped_loc_snap_result[1], interped_loc_snap_result[2])
-						if geom.diff_heading(tracks_based_heading, vi1_.latlng.heading(vi2_.latlng)) > 90:
+						if geom.diff_headings(tracks_based_heading, vi1_.latlng.heading(vi2_.latlng)) > 90:
 							tracks_based_heading = geom.normalize_heading(tracks_based_heading+180)
 						r = (interped_loc_snap_result[0], tracks_based_heading)
 

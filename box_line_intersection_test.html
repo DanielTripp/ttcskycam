@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+  <head>
+		<title>test</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <style type="text/css">
+      html { height: 100% }
+      body { height: 70%; margin: 0; padding: 0 }
+    </style>
+    <script type="text/javascript"
+		      src="http://maps.googleapis.com/maps/api/js?sensor=false">
+					    </script>
+		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
+		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
+		<script type="text/javascript" src="js/buckets-minified.js"></script>
+		<script type="text/javascript" src="common.js"></script>
+    <script type="text/javascript">
+
+var g_box_sw = new google.maps.LatLng(43.64361504791806, -79.43141741951604);
+var g_box_ne = new google.maps.LatLng(43.66311476568274, -79.39227862557073);
+
+var g_marker1 = null, g_marker2 = null;
+
+var g_constrained_marker1 = null, g_constrainted_marker2 = null;
+
+var g_line_between_markers = null;
+
+function initialize() {
+
+	init_map();
+
+	var nw = new google.maps.LatLng(g_box_ne.lat(), g_box_sw.lng());
+	var se = new google.maps.LatLng(g_box_sw.lat(), g_box_ne.lng());
+	new google.maps.Polyline({map: g_map, path: [g_box_sw, nw, g_box_ne, se, g_box_sw]});
+
+	g_marker1 = new google.maps.Marker({map: g_map, icon: get_icon(0, 0), draggable: true, position: new google.maps.LatLng(43.66466701885966, -79.39888758858342)});
+	g_marker2 = new google.maps.Marker({map: g_map, icon: get_icon(1, 0), draggable: true, position: new google.maps.LatLng(43.65466980533987, -79.38446803291936)});
+
+	g_constrained_marker1 = new google.maps.Marker({map: g_map, icon: get_icon(0, 2), draggable: false});
+	g_constrained_marker2 = new google.maps.Marker({map: g_map, icon: get_icon(1, 2), draggable: false});
+
+	g_line_between_markers = new google.maps.Polyline({map: g_map});
+
+	google.maps.event.addListener(g_marker1, 'dragend', update);
+	google.maps.event.addListener(g_marker2, 'dragend', update);
+
+}
+
+function get_icon(i_, offset_) {
+	return new google.maps.MarkerImage((i_==0 ? 'marker-0.png' : 'marker-1.png'), 
+  	null, null, new google.maps.Point(16+offset_, 16+offset_));
+}
+
+function update() {
+
+	g_line_between_markers.setPath([g_marker1.getPosition(), g_marker2.getPosition()]);
+
+	var intersects = callpy_sync('t.t', g_marker1.getPosition(), g_marker2.getPosition(), g_box_sw, g_box_ne);
+	set_contents('p1', intersects);
+	if(true) {
+	//if(intersects) {
+		var constrained_line = callpy_sync('t.constrain_line_segment_to_box', g_marker1.getPosition(), g_marker2.getPosition(), g_box_sw, g_box_ne);
+		g_constrained_marker1.setPosition(new google.maps.LatLng(constrained_line[0][0], constrained_line[0][1]));
+		g_constrained_marker1.setVisible(true);
+		g_constrained_marker2.setPosition(new google.maps.LatLng(constrained_line[1][0], constrained_line[1][1]));
+		g_constrained_marker2.setVisible(true);
+	} else {
+		g_constrained_marker1.setVisible(false);
+		g_constrained_marker2.setVisible(false);
+	}
+
+}
+
+function forget_all_drawn_objects() {
+	g_drawn_objects.forEach(function(e) {
+		e.setMap(null);
+	});
+	g_drawn_objects.clear();
+}
+
+
+    </script>
+  </head>
+  <body onload="initialize()" >
+		<div id="map_canvas" style="width:100%; height:100%"></div>
+		<div id="directions_panel" style="width:100%; height:100%"/>
+		<p id="p1">
+		<p id="p2">
+			<!--
+			<svg width="20" height="20" version="1.1">
+			<polygon points="0,0 19,0 19,19, 0,19" fill="rgb(255,200,0)" fill-opacity="1" stroke-width="0.5" />
+			</svg>
+			<svg width="20" height="20" version="1.1">
+			<polygon points="0,0 19,0 19,19, 0,19" fill="rgb(50,175,0)" fill-opacity="1" stroke-width="0.5" />
+			</svg>
+			-->
+		</p>
+  </body>
+</html>

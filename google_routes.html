@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html>
+  <head>
+		<title>test</title>
+    <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <style type="text/css">
+      html { height: 100% }
+      body { height: 70%; margin: 0; padding: 0 }
+    </style>
+    <script type="text/javascript"
+		      src="http://maps.googleapis.com/maps/api/js?sensor=false">
+					    </script>
+		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
+		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
+		<script type="text/javascript" src="js/buckets-minified.js"></script>
+		<script type="text/javascript" src="common.js"></script>
+    <script type="text/javascript">
+
+var g_orig_marker, g_dest_marker;
+
+var g_directions_service = new google.maps.DirectionsService();
+
+g_directions_result = null;
+g_rendered_route_objects = new buckets.LinkedList();
+
+
+function initialize() {
+
+	init_map();
+
+	g_orig_marker = new google.maps.Marker({position: new google.maps.LatLng(43.64206225049885, -79.43330569466252), 
+			draggable: true, map: g_map});
+	g_dest_marker = new google.maps.Marker({position: new google.maps.LatLng(43.66212130258588, -79.40146250923772), 
+			draggable: true, map: g_map});
+
+	google.maps.event.addListener(g_orig_marker, 'dragend', get_and_show_directions);
+	google.maps.event.addListener(g_dest_marker, 'dragend', get_and_show_directions);
+
+	get_and_show_directions();
+
+}
+
+function to_buckets_list(array_) {
+	var r = new buckets.LinkedList();
+	for(var i in array_) {
+		var e = array_[i];
+		r.add(e);
+	}
+	return r;
+}
+
+function to_buckets_dict(dict_) {
+	var r = new buckets.Dictionary();
+	for(var key in dict_) {
+		var value = dict_[key];
+		r.set(key, value);
+	}
+	return r;
+}
+
+
+function get_and_show_directions() {
+	var start = g_orig_marker.getPosition();
+	var end = g_dest_marker.getPosition();
+	var request = {origin: g_orig_marker.getPosition(), destination: g_dest_marker.getPosition(), 
+		travelMode: google.maps.DirectionsTravelMode.TRANSIT, 
+		provideRouteAlternatives: true, 
+		//transitOptions: new google.maps.TransitOptions({departureTime: new Date(year, month, day, hours, minutes, 0, 0)}) 
+		transitOptions: {departureTime: new Date(2012, 10, 28, 12, 0, 0, 0)}
+	};
+	g_directions_service.route(request, function(response, status) {
+		if(status == google.maps.DirectionsStatus.OK) {
+			g_directions_result = response;
+			clear_rendered_route_objects();
+			render_all_routes();
+			update_routes_html();
+		} else {
+			alert(sprintf('directions service returned %s', status));
+		}
+	});
+}
+
+function update_routes_html() {
+	var routes_html = '';
+	for(var routei in g_directions_result.routes) {
+		//routei = parseInt(routei, 10);
+		var route = g_directions_result.routes[routei];
+		routes_html += sprintf('<br>Route %s: ', routei);
+		for(var legi in route.legs) {
+			var leg = route.legs[legi];
+			for(var stepi in leg.steps) {
+				var step = leg.steps[stepi];
+				if(step.travel_mode == google.maps.TravelMode.TRANSIT) {
+					routes_html += sprintf('(%s / %s / %s), ', step.transit.line.name, step.transit.line.short_name, step.transit.headsign);
+				} else if(step.travel_mode == google.maps.TravelMode.WALKING) {
+					routes_html += 'walking, ';
+				} else {
+					routes_html += 'OTHER, ';
+				}
+			}
+		}
+	}
+	set_contents('p_routes', routes_html);
+}
+
+function render_all_routes() {
+	for(var routeidx=0; routeidx < g_directions_result.routes.length; routeidx++) {
+		render_route(routeidx);
+	}
+}
+
+function render_route(idx_) {
+	if(!(0 <= idx_ && idx_ < g_directions_result.routes.length)) {
+		return;
+	}
+	var legs = g_directions_result.routes[idx_].legs;
+	for(var legi in legs) {
+		var leg = legs[legi];
+		for(var stepi in leg.steps) {
+			var step = leg.steps[stepi];
+			var line = null;
+			if(step.travel_mode == google.maps.TravelMode.WALKING) {
+				line = new google.maps.Polyline({path: step.path, strokeWeight: 5, strokeColor: 'rgb(140,140,140)', 
+					strokeOpacity: 0.7, map: g_map});
+			} else {
+				line = new google.maps.Polyline({path: step.path, strokeWeight: 8, strokeColor: 'rgb(134,133,247)', 
+					strokeOpacity: 0.7, map: g_map});
+			}
+			g_rendered_route_objects.add(line);
+		}
+	}
+}
+
+function clear_rendered_route_objects() {
+	g_rendered_route_objects.forEach(function(e) {
+		e.setMap(null);
+	});
+	g_rendered_route_objects.clear();
+}
+
+
+    </script>
+  </head>
+  <body onload="initialize()" >
+		<div id="map_canvas" style="width:100%; height:100%"></div>
+		<div id="directions_panel" style="width:100%; height:100%"/>
+		<p id="p_routes">
+		<p id="p2">
+			<!--
+			<svg width="20" height="20" version="1.1">
+			<polygon points="0,0 19,0 19,19, 0,19" fill="rgb(255,200,0)" fill-opacity="1" stroke-width="0.5" />
+			</svg>
+			<svg width="20" height="20" version="1.1">
+			<polygon points="0,0 19,0 19,19, 0,19" fill="rgb(50,175,0)" fill-opacity="1" stroke-width="0.5" />
+			</svg>
+			-->
+		</p>
+  </body>
+</html>

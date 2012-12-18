@@ -236,11 +236,84 @@ def dir_from_latlngs(fudgeroutename_, latlng1_, latlng2_):
 def get_configroute_to_fudgeroute_map():
 	return CONFIGROUTE_TO_FUDGEROUTE
 
+def get_heading_from_compassdir(compassdir_):
+	assert compassdir_ in ('n', 'e', 's', 'w', 'ne', 'se', 'sw', 'nw')
+	r = {'n':0, 'e':90, 's':180, 'w':270, 'ne':45, 'se':135, 'sw':225, 'nw':315}[compassdir_]
+	CONSIDER_NORTH_TO_BE_THIS_HEADING = 343 # Toronto's street grid is tilted this much from north. 
+	r += CONSIDER_NORTH_TO_BE_THIS_HEADING
+	r = geom.normalize_heading(r)
+	return r
+
+class FactoredSampleScorer(object):
+	
+	def __init__(self, factor_definitions_min_max_inverse_list_):
+		self.min_max_inverse = factor_definitions_min_max_inverse_list_[:]
+
+	def get_score(self, sample_):
+		assert (len(sample_) == self.num_factors)
+		r = 1.0
+		for factoridx, factorval in enumerate(sample_):
+			min, max, inverse = self.min_max_inverse[factoridx]
+			if inverse:
+				r *= (max - factorval)/float(max - min)
+			else:
+				r *= (factorval - min)/float(max - min)
+		return r
+
+	@property 
+	def num_factors(self):
+		return len(self.min_max_inverse)
+
+def get_fudgeroutes_for_map_bounds(southwest_, northeast_, compassdir_, maxroutes_):
+	assert isinstance(southwest_, geom.LatLng) and isinstance(northeast_, geom.LatLng) and isinstance(maxroutes_, int)
+	heading = get_heading_from_compassdir(compassdir_)
+	bounds_midpt = southwest_.avg(northeast_)
+	scorer = FactoredSampleScorer([[0, southwest_.dist_m(northeast_), False], [0, 90, True], [0, bounds_midpt.dist_m(northeast_), True]])
+	fudgeroute_n_dir_to_score = {}
+	for fudgeroute in FUDGEROUTES:
+		for dir in (0, 1):
+			fudgeroute_n_dir_to_score[(fudgeroute, dir)] = 0.0
+			for routelineseg_pt1, routelineseg_pt2 in hopscotch(get_routeinfo(fudgeroute).routepts(dir)):
+				if dir == 1:
+					routelineseg_pt1, routelineseg_pt2 = routelineseg_pt2, routelineseg_pt1
+				if geom.does_line_segment_overlap_box(routelineseg_pt1, routelineseg_pt2, southwest_, northeast_):
+					routelineseg_pt1, routelineseg_pt2 = geom.constrain_line_segment_to_box(
+							routelineseg_pt1, routelineseg_pt2, southwest_, northeast_)
+					routelineseg_heading = routelineseg_pt1.heading(routelineseg_pt2)
+					routelineseg_midpt = routelineseg_pt1.avg(routelineseg_pt2)
+					headings_diff = geom.diff_headings(routelineseg_heading, heading)
+					if headings_diff < 80:
+						routelineseg_len_m = routelineseg_pt1.dist_m(routelineseg_pt2)
+						routelineseg_midpt_dist_from_bounds_centre = bounds_midpt.dist_m(routelineseg_midpt)
+						scoresample = (routelineseg_len_m, headings_diff, routelineseg_midpt_dist_from_bounds_centre)
+						fudgeroute_n_dir_to_score[(fudgeroute, dir)] += scorer.get_score(scoresample)
+						if 0: # TDR
+							printerr('fudgeroute_n_dir_to_score(%20s) - line at ( %.5f, %.5f ) - %4.0f, %2d, %4.0f ==> %.3f' % ((fudgeroute, dir), \
+									#routelineseg_midpt.lat, routelineseg_midpt.lng,  \
+									routelineseg_pt1.lat, routelineseg_pt2.lng, \
+									scoresample[0], scoresample[1], scoresample[2], scorer.get_score(scoresample)))
+			#printerr('score for '+fudgeroute+' dir '+str(dir)+' = '+str(fudgeroute_n_dir_to_score[(fudgeroute, dir)]))
+	
+	# If a single fudgeroute is represented in both 0 and 1 directions, then here remove the lower-scored direction.  
+	# Because I don't know how to show both directions of a route on a map at the same time. 
+	printerr([x for x in sorted(fudgeroute_n_dir_to_score.items(), key=lambda x: x[1], reverse=True)]) # TDR
+	top_fudgeroute_n_dirs = [x[0] for x in sorted(fudgeroute_n_dir_to_score.items(), key=lambda x: x[1], reverse=True) if x[1] > 0.02]
+	for i in range(len(top_fudgeroute_n_dirs)-1, -1, -1):
+		fudgeroute, dir = top_fudgeroute_n_dirs[i]
+		opposite_dir = int(not dir)
+		if (fudgeroute, opposite_dir) in top_fudgeroute_n_dirs[:i]:
+			top_fudgeroute_n_dirs.pop(i)
+
+	top_fudgeroute_n_dirs = top_fudgeroute_n_dirs[:maxroutes_]
+
+	return top_fudgeroute_n_dirs
+
 def snaptest(fudgeroutename_, pt_, tolerance_=0):
 	return get_routeinfo(fudgeroutename_).snaptest(pt_, tolerance_)
 
 
 if __name__ == '__main__':
 
-	get_routeinfo('spadina')
+	print get_heading_from_compassdir('nw')
+
 
