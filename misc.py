@@ -127,7 +127,7 @@ def get_range_val(p1_, p2_, domain_val_):
 	else:
 		return int(r)
 
-def avg(lo_, hi_, ratio_):
+def avg(lo_, hi_, ratio_=0.5):
 	r = lo_ + (hi_ - lo_)*ratio_
 	if type(lo_) == int and type(hi_) == int:
 		return int(r)
@@ -177,7 +177,8 @@ def get_maximal_sublists3(list_, key_):
 
 if __name__ == '__main__':
 
-	l = ['bb', 'cb', 'ac', 'bc', 'cc']
-	print get_maximal_sublists3(l, lambda x: x[-1])
+
+	pass
+
 
 

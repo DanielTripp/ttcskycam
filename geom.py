@@ -69,7 +69,7 @@ class LatLng:
 			heading = get_range_val((0, 90), (90, 0), ang)
 		return int(heading)
 
-	def avg(self, other_, ratio_):
+	def avg(self, other_, ratio_=0.5):
 		assert isinstance(other_, LatLng)
 		return LatLng(avg(self.lat, other_.lat, ratio_), avg(self.lng, other_.lng, ratio_))
 
@@ -79,6 +79,18 @@ class LatLng:
 		for polypt1, polypt2 in hopscotch(poly_ + [poly_[0]]):
 			sum_angles += angle(polypt1, self, polypt2)
 		return (2*math.pi - sum_angles) < 0.0001
+
+	def is_within_box(self, southwest_, northeast_):
+		assert isinstance(southwest_, LatLng) and isinstance(northeast_, LatLng)
+		assert (southwest_.lat < northeast_.lat) and (southwest_.lng < northeast_.lng)
+		return (southwest_.lat <= self.lat <= northeast_.lat) and (southwest_.lng <= self.lng <= northeast_.lng)
+
+	def get_normalized_vector(self):
+		# Assuming that self is a vector i.e. diff of  two positions, not a real lat/lng position itself. 
+		dist_m = LatLng(0, 0).dist_m(self)
+		if dist_m < 0.00001:
+			raise Exception("Can't normalize a vector with length of zero.")
+		return self.scale(1.0/dist_m)
 
 	def __eq__(self, other_):
 		assert isinstance(other_, LatLng)
@@ -151,12 +163,8 @@ def normalize_heading(heading_):
 		r -= 360
 	return r
 
-def diff_heading(h1_, h2_):
-	if h1_ > h2_:
-		r = h1_ - h2_
-	else:
-		r = h2_ - h1_
-	return normalize_heading(r)
+def diff_headings(h1_, h2_):
+	return min(normalize_heading(h1_ - h2_), normalize_heading(h2_ - h1_))
 
 # This is for removing buggy GPS readings (example: vehicle 4116 2012-06-15 13:30 to 14:00.)
 def remove_bad_gps_readings(vis_):
@@ -229,10 +237,79 @@ def remove_bad_gps_readings_single_vid(vis_):
 			vigroups.append([cur_vi])
 	vis_[:] = max(vigroups, key=len)
 
+
+# Finds intersection of the line segments pt1->pt2 and pt3->pt4. 
+def get_line_segment_intersection(pt1, pt2, pt3, pt4):
+	assert isinstance(pt1, LatLng) and isinstance(pt2, LatLng) and isinstance(pt3, LatLng) and isinstance(pt4, LatLng) 
+	determinant = (pt1.lng - pt2.lng)*(pt3.lat - pt4.lat) - (pt1.lat - pt2.lat)*(pt3.lng - pt4.lng)
+	# Lines don't intersect if determinant is 0. 
+	if abs(determinant) < 0.000001:
+		return None
+	else:
+		lng_numerator = (pt1.lng*pt2.lat - pt1.lat*pt2.lng)*(pt3.lng - pt4.lng) - (pt1.lng - pt2.lng)*(pt3.lng*pt4.lat - pt3.lat*pt4.lng)
+		lat_numerator = (pt1.lng*pt2.lat - pt1.lat*pt2.lng)*(pt3.lat - pt4.lat) - (pt1.lat - pt2.lat)*(pt3.lng*pt4.lat - pt3.lat*pt4.lng)
+		intersectpt = LatLng(lat_numerator/determinant, lng_numerator/determinant)
+		# Now think of these two lines (line 1->2 and line 3->4) expressed parametrically i.e. 
+		# (x,y) = ((1 - u)*pt1.x + u*pt2.x, (1 - u)*pt1.y + u*pt2.y)   (replace y with lat and x with lng.  And likewise 
+		# for line 3->4 - and a different 'u' of course). 
+		# If we're here, we already know that the lines intersect.  But the line /segments/ intersect only if 
+		# the 'u' values for both lines are between 0 and 1.  So let's find them: 
+		#find the parameter 'u', for each line, of the intersection point - when 
+		if abs(pt2.lng - pt1.lng) > 0.000001:
+			line_1_2_u = (intersectpt.lng - pt1.lng)/(pt2.lng - pt1.lng)
+		else:
+			line_1_2_u = (intersectpt.lat - pt1.lat)/(pt2.lat - pt1.lat)
+		if abs(pt4.lng - pt3.lng) > 0.000001:
+			line_3_4_u = (intersectpt.lng - pt3.lng)/(pt4.lng - pt3.lng)
+		else:
+			line_3_4_u = (intersectpt.lat - pt3.lat)/(pt4.lat - pt3.lat)
+		if (0 <= line_1_2_u <= 1.0) and (0 <= line_3_4_u <= 1.0):
+			return intersectpt
+		else:
+			return None
+
+
+def does_line_segment_overlap_box(linesegpt1_, linesegpt2_, box_sw_, box_ne_):
+	assert isinstance(linesegpt1_, LatLng) and isinstance(linesegpt2_, LatLng)
+	assert isinstance(box_sw_, LatLng) and isinstance(box_ne_, LatLng)
+	if linesegpt1_.is_within_box(box_sw_, box_ne_) or linesegpt2_.is_within_box(box_sw_, box_ne_):
+		return True
+	else:
+		box_corners = [box_ne_, LatLng(box_sw_.lat, box_ne_.lng), box_sw_, LatLng(box_ne_.lat, box_sw_.lng)]
+		for box_edge_pt1, box_edge_pt2 in hopscotch(box_corners + [box_corners[-1]]):
+			if get_line_segment_intersection(box_edge_pt1, box_edge_pt2, linesegpt1_, linesegpt2_) is not None:
+				return True
+		return False
+
+def constrain_line_segment_to_box(linesegpt1_, linesegpt2_, box_sw_, box_ne_):
+	assert isinstance(linesegpt1_, LatLng) and isinstance(linesegpt2_, LatLng)
+	assert isinstance(box_sw_, LatLng) and isinstance(box_ne_, LatLng)
+	nw = LatLng(box_ne_.lat, box_sw_.lng)
+	se = LatLng(box_sw_.lat, box_ne_.lng)
+	box_sides = ((box_sw_, nw), (nw, box_ne_), (box_ne_, se), (se, box_sw_))
+	line = [linesegpt1_, linesegpt2_]
+	for i, linept in enumerate(line):
+		if linept.is_within_box(box_sw_, box_ne_):
+			continue
+		box_side_intersections = []
+		for box_side in box_sides:
+			box_side_intersection = get_line_segment_intersection(line[0], line[1], box_side[0], box_side[1])
+			if box_side_intersection is not None:
+				box_side_intersections.append(box_side_intersection)
+		if len(box_side_intersections) > 0:
+			line[i] = min(box_side_intersections, key=lambda pt: pt.dist_m(linept))
+	return tuple(line)
+
 if __name__ == '__main__':
 
-	#print LatLng(43.65094370994158, -79.41905780037541)
-	print LatLng(43.65094, -79.41906).dist_m(LatLng(43.650941, -79.419061))
 
+	rng = sorted(range(45, 360, 90) + range(0, 361, 90) + range(1, 361, 90) + range(89, 361, 90))
+	rng = sorted(range(45, 360, 90))
+	for h1 in rng:
+		for h2 in rng:
+			if diff_headings(h1, h2) != diff_headings_orig(h1, h2):
+				print 'diff(%d,%d) - original: %d   new: %d' % (h1, h2, diff_headings_orig(h1, h2), diff_headings(h1, h2))
+
+		
 
 
