@@ -112,11 +112,13 @@ function interp_color(c1_, c2_, percent_) {
 
 function refresh_traffic_from_server(fudgeroute_) {
 	var data = g_fudgeroute_data.get(fudgeroute_);
+	var dir_to_request = data.dir;
 	if(!data.traffic_request_pending) {
 		data.traffic_request_pending = true;
-		callpy('traffic.get_traffics', fudgeroute_, data.dir, true, get_datetime_from_gui(), 
+		callpy('traffic.get_traffics', fudgeroute_, dir_to_request, true, get_datetime_from_gui(), 
 			{success: function(r_) {
-				if(!g_fudgeroute_data.containsKey(fudgeroute_)) {
+				var data = g_fudgeroute_data.get(fudgeroute_);
+				if(data == undefined || data.dir != dir_to_request) {
 					return;
 				}
 				data.traffic_request_pending = false;
@@ -126,6 +128,10 @@ function refresh_traffic_from_server(fudgeroute_) {
 				remake_traffic_lines_singleroute(fudgeroute_);
 			}, 
 			error: function() {
+				var data = g_fudgeroute_data.get(fudgeroute_);
+				if(data == undefined || data.dir != dir_to_request) {
+					return;
+				}
 				data.traffic_request_pending = false;
 			}}
 		);
@@ -134,11 +140,13 @@ function refresh_traffic_from_server(fudgeroute_) {
 
 function refresh_vehicles_from_server(fudgeroute_) {
 	var data = g_fudgeroute_data.get(fudgeroute_);
+	var dir_to_request = data.dir;
 	if(!data.vehicles_request_pending) {
 		data.vehicles_request_pending = true;
-		callpy('traffic.get_recent_vehicle_locations', fudgeroute_, data.dir, true, get_datetime_from_gui(), 
+		callpy('traffic.get_recent_vehicle_locations', fudgeroute_, dir_to_request, true, get_datetime_from_gui(), 
 			{success: function(r_) {
-				if(!g_fudgeroute_data.containsKey(fudgeroute_)) {
+				var data = g_fudgeroute_data.get(fudgeroute_);
+				if(data == undefined || data.dir != dir_to_request) {
 					return;
 				}
 				data.vehicles_request_pending = false;
@@ -158,6 +166,10 @@ function refresh_vehicles_from_server(fudgeroute_) {
 				show_cur_minute_vehicles_singleroute(fudgeroute_);
 			}, 
 			error: function() {
+				var data = g_fudgeroute_data.get(fudgeroute_);
+				if(data == undefined || data.dir != dir_to_request) {
+					return;
+				}
 				data.vehicles_request_pending = false;
 			}}
 		);
@@ -362,12 +374,15 @@ function remake_static_vehicles_allroutes() {
 
 function remake_static_vehicles_singleroute(fudgeroute_) {
 	if(g_times.size() > 0) {
-		var last_time = g_times.elementAtIndex(g_times.size()-1);
 		var data = g_fudgeroute_data.get(fudgeroute_);
-		data.time_to_vid_to_vi.get(last_time).forEach(function(vid, vi) {
-			var marker = make_vehicle_marker(vid, vi.heading, vi.lat, vi.lon, true);
-			data.vid_to_static_vehicle_marker.set(vid, marker);
-		});
+		var last_time = g_times.elementAtIndex(g_times.size()-1);
+		var time_to_vid_to_vi = data.time_to_vid_to_vi.get(last_time);
+		if(time_to_vid_to_vi != undefined) {
+			time_to_vid_to_vi.forEach(function(vid, vi) {
+				var marker = make_vehicle_marker(vid, vi.heading, vi.lat, vi.lon, true);
+				data.vid_to_static_vehicle_marker.set(vid, marker);
+			});
+		}
 	}
 }
 
@@ -1031,6 +1046,7 @@ function on_traffictype_changed() {
 	stop_refresh_data_from_server_timer();
 	forget_data_allroutes();
 	update_g_times();
+	get_fudgeroutes_for_map_bounds();
 	if(is_traffictype_current()) {
 		schedule_refresh_data_from_server();
 	}
