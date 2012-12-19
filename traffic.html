@@ -1288,9 +1288,12 @@ $(document).ready(initialize);
 			</div>
 			<div style="float: right;">
 				<div>
-					<img id="nw_img" src="nw.png"/> <img id="n_img" src="n.png"/> <img id="ne_img" src="ne.png"/> <br/>
-					<img id="w_img" src="w.png"/> <img src="blank_32x32.png"/> <img id="e_img" src="e.png"/> <br/>
-					<img id="sw_img" src="sw.png"/> <img id="s_img" src="s.png"/> <img id="se_img" src="se.png"/> <br/>
+					<!-- Setting these all to the pressed versions by default, so that those images will be cached by the 
+						browser when they're really needed.  (Before I did this, there was a noticeable delay between clicking and 
+						the image changing. --> 
+					<img id="nw_img" src="nw_pressed.png"/> <img id="n_img" src="n_pressed.png"/> <img id="ne_img" src="ne_pressed.png"/> <br/>
+					<img id="w_img" src="w_pressed.png"/> <img src="blank_32x32.png"/> <img id="e_img" src="e_pressed.png"/> <br/>
+					<img id="sw_img" src="sw_pressed.png"/> <img id="s_img" src="s_pressed.png"/> <img id="se_img" src="se_pressed.png"/> <br/>
 				</div>
 				<div style="clear: both; float: right;">
 					<br/>
