@@ -1,6 +1,7 @@
 #!/usr/bin/python2.6
 
-import re, os, urlparse
+import re, os, urlparse, tempfile, subprocess
+import mc
 
 def get_arg_strvals(vardict_):
 	r = []
@@ -26,8 +27,15 @@ def get_vehicle_svg(size_, heading_, color_, opacity_):
 			'</svg>') % (size_, size_, heading_, color_, opacity_)
 
 def get_vehicle_png(size_, heading_, color_, opacity_):
+	mckey = mc.make_key('get_vehicle_png', size_, heading_, color_, opacity_)
+	r = mc.client.get(mckey)
+	if not r:
+		r = get_vehicle_png_impl(size_, heading_, color_, opacity_)
+		mc.client.set(mckey, r)
+	return r
+
+def get_vehicle_png_impl(size_, heading_, color_, opacity_):
 	svgstr = get_vehicle_svg(size_, heading_, color_, opacity_)
-	import os, tempfile, subprocess
 	svg_fileno, svg_filename = tempfile.mkstemp('.svg', 'temp-vehicle-svg', '/tmp/dt')
 	svg_file = os.fdopen(svg_fileno, 'w')
 	svg_file.write(svgstr)
