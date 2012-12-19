@@ -296,8 +296,9 @@ def get_fudgeroutes_for_map_bounds(southwest_, northeast_, compassdir_, maxroute
 	
 	# If a single fudgeroute is represented in both 0 and 1 directions, then here remove the lower-scored direction.  
 	# Because I don't know how to show both directions of a route on a map at the same time. 
-	printerr([x for x in sorted(fudgeroute_n_dir_to_score.items(), key=lambda x: x[1], reverse=True)]) # TDR
-	top_fudgeroute_n_dirs = [x[0] for x in sorted(fudgeroute_n_dir_to_score.items(), key=lambda x: x[1], reverse=True) if x[1] > 0.02]
+	if 0:
+		printerr([x for x in sorted(fudgeroute_n_dir_to_score.items(), key=lambda x: x[1], reverse=True)])
+	top_fudgeroute_n_dirs = [x[0] for x in sorted(fudgeroute_n_dir_to_score.items(), key=lambda x: x[1], reverse=True) if x[1] > 0.05]
 	for i in range(len(top_fudgeroute_n_dirs)-1, -1, -1):
 		fudgeroute, dir = top_fudgeroute_n_dirs[i]
 		opposite_dir = int(not dir)
