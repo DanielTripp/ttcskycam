@@ -389,6 +389,11 @@ function remake_static_vehicles_singleroute(fudgeroute_) {
 function moving_vehicles_timer_func() {
 	var method_start_epochtime = (new Date()).getTime();
 
+	g_cur_minute_idx = (g_cur_minute_idx + 1) % (g_times.size() + 4);
+	if(DISABLE_OVERTIME) {
+		g_cur_minute_idx = g_cur_minute_idx % g_times.size();
+	}
+
 	var timeout = (g_cur_minute_idx >= g_times.size()-1 
 			? MOVING_VEHICLES_OVERTIME_FLASH_INTERVAL_MS : MOVING_VEHICLES_ANIM_INTERVAL_MS);
 	if(DISABLE_OVERTIME) {
@@ -400,10 +405,6 @@ function moving_vehicles_timer_func() {
 		return;
 	}
 
-	g_cur_minute_idx = (g_cur_minute_idx + 1) % (g_times.size() + 4);
-	if(DISABLE_OVERTIME) {
-		g_cur_minute_idx = g_cur_minute_idx % g_times.size();
-	}
 	update_time_display();
 	move_vehicles_forward_one_minute();
 
@@ -611,7 +612,7 @@ function set_analog_clock_hour_minute(hour_, minute_) {
 }
 
 function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
-	var color = vid_to_color(vid_);
+	var color = (static_aot_moving_ ? 'rgb(100,100,100)' : 'rgb(150,150,150)');
 	var size = get_vehicle_size();
 	var marker = new google.maps.Marker({
 			position: new google.maps.LatLng(lat_, lon_),
@@ -1222,25 +1223,6 @@ function make_traffic_line(start_latlon_, end_latlon_, kmph_, mofr_, visible_) {
 
 	return r;
 }
-
-var g_vehicle_colors = [
-	//'rgb(0,0,0)', 
-	'rgb(100,100,100)', 
-	//'rgb(0,255,0)', 
-	//'rgb(0,100,0)', 
-//	'rgb(50,50,255)', 
-//	'rgb(0,0,150)', 
-//	'rgb(100,100,0)', 
-//	'rgb(0,255,255)', 
-//	'rgb(0,100,100)', 
-//	'rgb(255,0,255)', 
-//	'rgb(100,0,100)', 
-];
-
-function vid_to_color(vid_) {
-	return g_vehicle_colors[hashCode(vid_) % g_vehicle_colors.length];
-}
-
 
 $(document).ready(initialize);
 
