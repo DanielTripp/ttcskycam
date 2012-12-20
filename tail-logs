@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
 
-tail -f /www/logs/dt.theorem.ca_error_log | sed 's/^.{56}//g'
+tail -f /www/logs/dt.theorem.ca_error_log | sed -u 's/^.{12}(.{8}).{37}/\1/g'  | sed -u 's/, referer.*//g' \
+	| sed -u 's/\/home\/www\/htdocs\/virtual\/dt.theorem.ca\/ttc-traffic-report//g'
+
 
