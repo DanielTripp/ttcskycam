@@ -612,13 +612,12 @@ function set_analog_clock_hour_minute(hour_, minute_) {
 }
 
 function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
-	var color = (static_aot_moving_ ? 'rgb(100,100,100)' : 'rgb(150,150,150)');
 	var size = get_vehicle_size();
 	var marker = new google.maps.Marker({
 			position: new google.maps.LatLng(lat_, lon_),
 			map: g_map,
 			draggable: false,
-			icon: new google.maps.MarkerImage(cgi_url('get_vehicle_image.cgi', [size, heading_, color, (static_aot_moving_ ? 0.8 : 0.3)]), 
+			icon: new google.maps.MarkerImage(get_vehicle_cgi_url(size, heading_, static_aot_moving_), 
 					null, null, new google.maps.Point(size/2, size/2)),
 			visible: false
 		});
@@ -626,6 +625,12 @@ function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
 	add_vid_mouseover_infowin(marker, size, vid_);
 	add_solo_vid_click_listener(marker, vid_);
 	return marker;
+}
+
+function get_vehicle_cgi_url(size_, heading_, static_aot_moving_) {
+	var color = (static_aot_moving_ ? 'rgb(100,100,100)' : 'rgb(150,150,150)');
+	var opacity = (static_aot_moving_ ? 0.8 : 0.3);
+	return cgi_url('get_vehicle_image.cgi', [size_, heading_, color, opacity]);
 }
 
 function add_solo_vid_click_listener(vehicle_marker_, vid_) {
@@ -917,6 +922,7 @@ function get_fudgeroutes_for_map_bounds() {
 						forget_data_singleroute(old_route);
 					}
 				}
+				refresh_vid_checkboxes_html();
 			});
 }
 
@@ -1263,7 +1269,9 @@ $(document).ready(initialize);
 				<br/><p id='p_worktime'/>
 			</div>
 			<br/>
-			<a href="instructions.html">Instructions.</a>
+			<img src="traffic-color-legend.gif"/><br/>
+			<img id="legend_static_vehicle_img" src="static-vehicle-for-legend.png"/> indicates where a streetcar or bus is right now.&nbsp;&nbsp;
+			<img id="legend_moving_vehicle_img" src="moving-vehicle-for-legend.png"/> indicates where one has been at some point in the last 30 minutes.
 			<hr>
 			<div style="float: left;">
 				<svg id="clock" viewBox="0 0 100 100" width="100" height="100">
