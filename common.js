@@ -150,7 +150,9 @@ function reposition_loading_gif_marker() {
 
 
 function set_contents(id_, contents_) {
-	document.getElementById(id_).innerHTML = contents_;
+	var dom_elem = document.getElementById(id_);
+	assert(dom_elem!=null, 'dom elem "'+id_+'" is null');
+	dom_elem.innerHTML = contents_;
 }
 
 function radio_val(groupname_) {
