@@ -46,7 +46,7 @@ var g_framerate_last_epochtime = (new Date()).getTime();
 
 var g_fudgeroute_data = new buckets.Dictionary();
 var g_routeselect_auto_aot_manual = true;
-var g_routeselectauto_compassdir = 'e', g_routeselectauto_maxroutes = 2;
+var g_routeselectauto_compassdir = 'se', g_routeselectauto_maxroutes = 2;
 var g_fudgeroute_to_compassdir_to_intdir = null;
 var g_bounds_changed_listener_timer = null;
 var g_play_timer = null;
@@ -1412,9 +1412,17 @@ $(document).ready(initialize);
 				</div>
 				<div id="routeselectauto_controls_div" style="clear: both; float: right; display: none;">
 					<div style="clear: both; float: right;">
-						<img id="nw_img" src="nw_pressed.png"/> <img id="n_img" src="n_pressed.png"/> <img id="ne_img" src="ne_pressed.png"/> <br/>
-						<img id="w_img" src="w_pressed.png"/> <img src="blank_32x32.png"/> <img id="e_img" src="e_pressed.png"/> <br/>
-						<img id="sw_img" src="sw_pressed.png"/> <img id="s_img" src="s_pressed.png"/> <img id="se_img" src="se_pressed.png"/> <br/>
+						<img id="nw_img" title="North West" src="nw_pressed.png"/> 
+						<img id="n_img" title="North" src="n_pressed.png"/> 
+						<img id="ne_img" title="North East" src="ne_pressed.png"/> <br/>
+
+						<img id="w_img" title="West" src="w_pressed.png"/> 
+						<img src="blank_32x32.png"/> 
+						<img id="e_img" title="East" src="e_pressed.png"/> <br/>
+
+						<img id="sw_img" title="South West" src="sw_pressed.png"/> 
+						<img id="s_img" title="South" src="s_pressed.png"/> 
+						<img id="se_img" title="South East" src="se_pressed.png"/> <br/>
 					</div>
 					<div style="clear: both; float: right;">
 						<br/>
