@@ -45,7 +45,9 @@ for(var i=0; i<15; i++) {
 var g_framerate_last_epochtime = (new Date()).getTime();
 
 var g_fudgeroute_data = new buckets.Dictionary();
-var g_compassdir = 'se', g_maxroutes = 5;
+var g_routeselect_auto_aot_manual = true;
+var g_routeselectauto_compassdir = 's', g_routeselectauto_maxroutes = 2;
+var g_fudgeroute_to_compassdir_to_intdir = null;
 var g_bounds_changed_listener_timer = null;
 var g_play_timer = null;
 /* current time location (index into g_times) of the animation. */
@@ -854,15 +856,115 @@ function initialize() {
 		$('#div_framerate').remove();
 	}
 
-	init_direction_buttons();
-
-	init_max_routes_controls();
+	set_selected((g_routeselect_auto_aot_manual ? 'routeselect_auto_radiobutton' : 'routeselect_manual_radiobutton'), true);
+	init_routeselect_controls();
 
 	// The first 'get' of data from the server will happen due to a bounds_changed event on the map that happens to it on 
 	// initialization.  That will cause a 'get_fudgeroutes_for_map_bounds' which will cause a 'get' of traffic and vehicle 
 	// data for each route individually, right away.
 	schedule_refresh_data_from_server(); // This will cause a periodic refresh of all routes.  The first refresh 
 			// will happen not right away, but in a few seconds. 
+
+}
+
+function init_routeselect_controls() {
+	init_routeselect_auto_controls();
+	init_routeselect_manual_controls();
+	show_appropriate_routeselect_controls();
+}
+
+function show_appropriate_routeselect_controls() {
+	if(g_routeselect_auto_aot_manual) {
+		$('#routeselectmanual_controls_div').hide();
+		$('#routeselectauto_controls_div').show();
+	} else {
+		$('#routeselectauto_controls_div').hide();
+		$('#routeselectmanual_controls_div').show();
+	}
+}
+
+function init_routeselect_auto_controls() {
+	init_routeselectauto_direction_buttons();
+	init_routeselectauto_max_routes_controls();
+}
+
+function on_routeselect_radiobutton_clicked() {
+	g_routeselect_auto_aot_manual = is_selected('routeselect_auto_radiobutton');
+	show_appropriate_routeselect_controls();
+	show_appropriate_routeselect_type();
+}
+
+function show_appropriate_routeselect_type() {
+	if(g_routeselect_auto_aot_manual) {
+		get_fudgeroutes_for_map_bounds();
+	} else {
+		routeselectmanual_on_gui_selections_changed();
+	}
+}
+
+function init_routeselect_manual_controls() {
+	get_fudgeroute_to_compassdir_to_intdir_from_server();
+
+	var html = '';
+	g_fudgeroute_to_compassdir_to_intdir.forEach(function(fudgeroute, compassdir_to_intdir) {
+		var capitalized_fudgeroute = fudgeroute.charAt(0).toUpperCase()+fudgeroute.substring(1, fudgeroute.length);
+		var checkbox_id = routeselectmanual_checkbox_id(fudgeroute);
+		html += sprintf('<input type="checkbox" id="%s" onclick="%s"/><label for="%s" onclick="">%s</label> ', 
+				checkbox_id, 'routeselectmanual_on_gui_selections_changed()', checkbox_id, capitalized_fudgeroute);
+			<!-- that onclick="" is a work-around for mobile Safari --> 
+		var radiogroup = sprintf('routeselectmanual_%s_dirs_radiogroup', fudgeroute);
+		var first_dir_found = true;
+		compassdir_to_intdir.forEach(function(compassdir, intdir) {
+			var radiobutton_id = routeselectmanual_direction_radiobutton_id(fudgeroute, intdir);
+			html += sprintf('<input type="radio" %s id="%s" name="%s" onclick="%s"/><label for="%s" onclick="">%s</label>', 
+				(first_dir_found ? 'checked="checked"' : ''), 
+				radiobutton_id, radiogroup, 'routeselectmanual_on_gui_selections_changed()', radiobutton_id, compassdir.toUpperCase());
+					<!-- that onclick="" is a work-around for mobile Safari --> 
+				first_dir_found = false;
+		});
+		html += '<br/>';
+	});
+	set_contents('routeselectmanual_controls_div', html);
+}
+
+function routeselectmanual_checkbox_id(fudgeroute_) {
+	return sprintf('routeselectmanual_checkbox_%s', fudgeroute_);
+}
+
+function routeselectmanual_direction_radiobutton_id(fudgeroute_, intdir_) {
+	return sprintf('routeselectmanual_%s_%s_radiobutton', fudgeroute_, intdir_);
+}
+
+function get_routeselectmanual_selected_fudgeroutendirs() {
+	var r = new Array();
+	g_fudgeroute_to_compassdir_to_intdir.forEach(function(fudgeroute, compassdir_to_intdir) {
+		if(is_selected(routeselectmanual_checkbox_id(fudgeroute))) {
+			if(is_selected(routeselectmanual_direction_radiobutton_id(fudgeroute, 0))) {
+				r.push([fudgeroute, 0]);
+			} else {
+				r.push([fudgeroute, 1]);
+			}
+		}
+	});
+	return r;
+}
+
+function routeselectmanual_on_gui_selections_changed() {
+	update_selected_fudgeroutendirs(get_routeselectmanual_selected_fudgeroutendirs());
+}
+
+// sets g_fudgeroute_to_compassdir_to_intdir.  will be a buckets.Dictionary of buckets.Dictionary. 
+function get_fudgeroute_to_compassdir_to_intdir_from_server() {
+	g_fudgeroute_to_compassdir_to_intdir = new buckets.Dictionary();
+	var fudgeroute_to_compassdir_to_intdir = callpy_sync('routes.get_fudgeroute_to_compassdir_to_intdir');
+	for(var fudgeroute in fudgeroute_to_compassdir_to_intdir) {
+		var compassdir_to_intdir = fudgeroute_to_compassdir_to_intdir[fudgeroute];
+		g_fudgeroute_to_compassdir_to_intdir.set(fudgeroute, new buckets.Dictionary());
+		for(var compassdir in compassdir_to_intdir) {
+			var intdir = compassdir_to_intdir[compassdir];
+			g_fudgeroute_to_compassdir_to_intdir.get(fudgeroute).set(compassdir, intdir);
+		}
+	}
 }
 
 function schedule_bounds_changed_listener() {
@@ -875,61 +977,65 @@ function schedule_bounds_changed_listener() {
 
 function bounds_changed_listener() {
 	g_bounds_changed_listener_timer = null;
-	get_fudgeroutes_for_map_bounds();
+	if(g_routeselect_auto_aot_manual) {
+		get_fudgeroutes_for_map_bounds();
+	}
 }
 
-function init_max_routes_controls() {
-	set_contents('span_max_routes', ''+g_maxroutes);
+function init_routeselectauto_max_routes_controls() {
+	set_contents('span_max_routes', ''+g_routeselectauto_maxroutes);
 
 	$('#down_img').on({'click': on_maxroutes_down_clicked});
 	$('#up_img').on({'click': on_maxroutes_up_clicked});
 }
 
 function on_maxroutes_down_clicked() {
-	if(g_maxroutes > 1) {
-		g_maxroutes -= 1;
-		set_contents('span_max_routes', ''+g_maxroutes);
+	if(g_routeselectauto_maxroutes > 1) {
+		g_routeselectauto_maxroutes -= 1;
+		set_contents('span_max_routes', ''+g_routeselectauto_maxroutes);
 		get_fudgeroutes_for_map_bounds();
 	}
 }
 
 function on_maxroutes_up_clicked() {
-	if(g_maxroutes < 99) {
-		g_maxroutes += 1;
-		set_contents('span_max_routes', ''+g_maxroutes);
+	if(g_routeselectauto_maxroutes < 99) {
+		g_routeselectauto_maxroutes += 1;
+		set_contents('span_max_routes', ''+g_routeselectauto_maxroutes);
 		get_fudgeroutes_for_map_bounds();
 	}
 }
 
 function get_fudgeroutes_for_map_bounds() {
 	callpy('routes.get_fudgeroutes_for_map_bounds', g_map.getBounds().getSouthWest(), g_map.getBounds().getNorthEast(), 
-			g_compassdir, g_maxroutes, 
-			function(r_) {
-				var new_routes = new buckets.LinkedList();
-				for(var i in r_) {
-					var fudgeroute_n_dir = r_[i];
-					var fudgeroute = fudgeroute_n_dir[0], dir = fudgeroute_n_dir[1];
-					new_routes.add(fudgeroute);
-					if(g_fudgeroute_data.get(fudgeroute) == undefined || g_fudgeroute_data.get(fudgeroute).dir != dir) {
-						forget_data_singleroute(fudgeroute);
-						var data = new_fudgeroute_data();
-						data.dir = dir;
-						g_fudgeroute_data.set(fudgeroute, data);
-						refresh_data_from_server_singleroute(fudgeroute);
-					}
-				}
-				var old_routes = g_fudgeroute_data.keys();
-				for(var i in old_routes) {
-					var old_route = old_routes[i];
-					if(!new_routes.contains(old_route)) {
-						forget_data_singleroute(old_route);
-					}
-				}
-				refresh_vid_checkboxes_html();
-			});
+			g_routeselectauto_compassdir, g_routeselectauto_maxroutes, 
+			function(r_) { update_selected_fudgeroutendirs(r_); });
 }
 
-function init_direction_buttons() {
+function update_selected_fudgeroutendirs(fudgeroutendirs_) {
+	var new_routes = new buckets.LinkedList();
+	for(var i in fudgeroutendirs_) {
+		var fudgeroute_n_dir = fudgeroutendirs_[i];
+		var fudgeroute = fudgeroute_n_dir[0], dir = fudgeroute_n_dir[1];
+		new_routes.add(fudgeroute);
+		if(g_fudgeroute_data.get(fudgeroute) == undefined || g_fudgeroute_data.get(fudgeroute).dir != dir) {
+			forget_data_singleroute(fudgeroute);
+			var data = new_fudgeroute_data();
+			data.dir = dir;
+			g_fudgeroute_data.set(fudgeroute, data);
+			refresh_data_from_server_singleroute(fudgeroute);
+		}
+	}
+	var old_routes = g_fudgeroute_data.keys();
+	for(var i in old_routes) {
+		var old_route = old_routes[i];
+		if(!new_routes.contains(old_route)) {
+			forget_data_singleroute(old_route);
+		}
+	}
+	refresh_vid_checkboxes_html();
+}
+
+function init_routeselectauto_direction_buttons() {
 	var dirs = ['n', 'e', 'w', 's', 'ne', 'se', 'sw', 'nw'];
 	for(var i in dirs) {
 		var dir = dirs[i];
@@ -944,19 +1050,19 @@ function init_direction_buttons() {
 }
 
 function on_dir_button_pressed(dir_) {
-	g_compassdir = dir_;
+	g_routeselectauto_compassdir = dir_;
 	refresh_compassdir_buttons_imgs();
 	get_fudgeroutes_for_map_bounds();
 }
 
 function refresh_compassdir_buttons_imgs() {
-	var pressed_img_id = sprintf('%s_img', g_compassdir);
-	var pressed_img = sprintf('%s_pressed.png', g_compassdir);
+	var pressed_img_id = sprintf('%s_img', g_routeselectauto_compassdir);
+	var pressed_img = sprintf('%s_pressed.png', g_routeselectauto_compassdir);
 	$('#'+pressed_img_id).attr('src', pressed_img);
 	var dirs = ['n', 'e', 'w', 's', 'ne', 'se', 'sw', 'nw'];
 	for(var i in dirs) {
 		var dir = dirs[i];
-		if(dir != g_compassdir) {
+		if(dir != g_routeselectauto_compassdir) {
 			var nonpressed_img_id = sprintf('%s_img', dir);
 			var nonpressed_img = sprintf('%s.png', dir);
 			$('#'+nonpressed_img_id).attr('src', nonpressed_img);
@@ -1276,7 +1382,7 @@ $(document).ready(initialize);
 			<img id="legend_static_vehicle_img" src="static-vehicle-for-legend.png"/> indicates where a streetcar or bus is right now.&nbsp;&nbsp;
 			<img id="legend_moving_vehicle_img" src="moving-vehicle-for-legend.png"/> indicates where one has been at some point in the last 30 minutes.
 			<hr>
-			<div style="float: left;">
+			<div style="float: left;  width: 45%;">
 				<svg id="clock" viewBox="0 0 100 100" width="100" height="100">
 					<!-- SVG clock from https://gist.github.com/1188550 --> 
 					<circle id="face" cx="50" cy="50" r="45"/> <!-- the clock face -->
@@ -1297,19 +1403,26 @@ $(document).ready(initialize);
 				<span id="p_cur_time">&nbsp;</span><br/>
 				<span id="p_last_updated"></span>
 			</div>
-			<div style="float: right;">
-				<div>
-					<!-- Setting these all to the pressed versions by default, so that those images will be cached by the 
-						browser when they're really needed.  (Before I did this, there was a noticeable delay between clicking and 
-						the image changing. --> 
-					<img id="nw_img" src="nw_pressed.png"/> <img id="n_img" src="n_pressed.png"/> <img id="ne_img" src="ne_pressed.png"/> <br/>
-					<img id="w_img" src="w_pressed.png"/> <img src="blank_32x32.png"/> <img id="e_img" src="e_pressed.png"/> <br/>
-					<img id="sw_img" src="sw_pressed.png"/> <img id="s_img" src="s_pressed.png"/> <img id="se_img" src="se_pressed.png"/> <br/>
+			<div style="float: right; width: 55%;">
+				<div style="clear: both; float: right;">Select routes:
+					<input type="radio" id="routeselect_manual_radiobutton" name="routeselect_type" onclick="on_routeselect_radiobutton_clicked()" >
+						<label for="routeselect_manual_radiobutton">manually</label></input>
+					<input type="radio" id="routeselect_auto_radiobutton" name="routeselect_type" onclick="on_routeselect_radiobutton_clicked()" >
+						<label for="routeselect_auto_radiobutton">automatically</label></input><br/>
 				</div>
-				<div style="clear: both; float: right;">
-					<br/>
-					Max routes to show:<br/><font size="+2"><span id='span_max_routes'></span></font>  
-					<img id="down_img" src="down.png"/> <img id="up_img" src="up.png"/> <br/>
+				<div id="routeselectauto_controls_div" style="clear: both; float: right; display: none;">
+					<div style="clear: both; float: right;">
+						<img id="nw_img" src="nw_pressed.png"/> <img id="n_img" src="n_pressed.png"/> <img id="ne_img" src="ne_pressed.png"/> <br/>
+						<img id="w_img" src="w_pressed.png"/> <img src="blank_32x32.png"/> <img id="e_img" src="e_pressed.png"/> <br/>
+						<img id="sw_img" src="sw_pressed.png"/> <img id="s_img" src="s_pressed.png"/> <img id="se_img" src="se_pressed.png"/> <br/>
+					</div>
+					<div style="clear: both; float: right;">
+						<br/>
+						Max routes to show:<br/><font size="+2"><span id="span_max_routes"></span></font>  
+						<img id="down_img" src="down.png"/> <img id="up_img" src="up.png"/> <br/>
+					</div>
+				</div>
+				<div id="routeselectmanual_controls_div" style="clear: both; float: right; overflow:scroll; height:150px; display: none;">
 				</div>
 			</div>
 			<div style="clear: both;">
@@ -1324,8 +1437,8 @@ $(document).ready(initialize);
 				<p id="p_vid_checkboxes">&nbsp;</p>
 			</div>
 			<div id="div_time_selector">
-			<input id="current_button" type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"   checked="checked"   />Now
-			<input id="historical_button" type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()"   />Past
+			<input id="current_button" type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"  />Now
+			<input id="historical_button" type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()" checked="checked"  />Past
 			<input id="datetimepicker_textfield" type="text" name="datetimepicker_textfield" value="" />
 			</div>
 			</font>

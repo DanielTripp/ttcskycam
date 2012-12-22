@@ -287,7 +287,7 @@ def get_fudgeroutes_for_map_bounds(southwest_, northeast_, compassdir_, maxroute
 						routelineseg_midpt_dist_from_bounds_centre = bounds_midpt.dist_m(routelineseg_midpt)
 						scoresample = (routelineseg_len_m, headings_diff, routelineseg_midpt_dist_from_bounds_centre)
 						fudgeroute_n_dir_to_score[(fudgeroute, dir)] += scorer.get_score(scoresample)
-						if 0: # TDR
+						if 0: 
 							printerr('fudgeroute_n_dir_to_score(%20s) - line at ( %.5f, %.5f ) - %4.0f, %2d, %4.0f ==> %.3f' % ((fudgeroute, dir), \
 									#routelineseg_midpt.lat, routelineseg_midpt.lng,  \
 									routelineseg_pt1.lat, routelineseg_pt2.lng, \
@@ -309,12 +309,42 @@ def get_fudgeroutes_for_map_bounds(southwest_, northeast_, compassdir_, maxroute
 
 	return top_fudgeroute_n_dirs
 
+def get_fudgeroute_to_compassdir_to_intdir():
+	r = {}
+	for fudgeroute in FUDGEROUTES:
+		r[fudgeroute] = {}
+		for intdir in (0, 1):
+			routepts = get_routeinfo(fudgeroute).routepts(intdir)
+			if intdir == 0:
+				heading = routepts[0].heading(routepts[-1])
+			else:
+				heading = routepts[-1].heading(routepts[0])
+			r[fudgeroute][heading_to_compassdir(heading)] = intdir
+	return r
+
+def heading_to_compassdir(heading_):
+	assert isinstance(heading_, int) and (0 <= heading_  < 360)
+	if heading_ <= 45 or heading_ >= 315:
+		return 'n'
+	elif heading_ <= 135:
+		return 'e'
+	elif heading_ <= 225:
+		return 's'
+	else:
+		return 'w'
+
+
 def snaptest(fudgeroutename_, pt_, tolerance_=0):
 	return get_routeinfo(fudgeroutename_).snaptest(pt_, tolerance_)
 
 
 if __name__ == '__main__':
 
-	print get_heading_from_compassdir('nw')
+	import pprint 
+
+	pprint.pprint(get_fudgeroute_to_compassdir_to_intdir())
+
+
+
 
 
