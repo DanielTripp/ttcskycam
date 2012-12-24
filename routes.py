@@ -17,9 +17,9 @@ FUDGEROUTES = FUDGEROUTE_TO_CONFIGROUTES.keys()
 CONFIGROUTES = reduce(lambda x, y: x + y, FUDGEROUTE_TO_CONFIGROUTES.values(), [])
 
 class Stop:
-	def __init__(self, latlon_, stoptag_, mofr_):
-		assert isinstance(latlon_, geom.LatLng) and isinstance(stoptag_, basestring) and isinstance(mofr_, int)
-		self.latlon = latlon_
+	def __init__(self, latlng_, stoptag_, mofr_):
+		assert isinstance(latlng_, geom.LatLng) and isinstance(stoptag_, basestring) and isinstance(mofr_, int)
+		self.latlng = latlng_
 		self.stoptag = stoptag_
 		self.mofr = mofr_
 
@@ -207,20 +207,29 @@ def configroute_to_fudgeroute(configroute_):
 			return fudgeroute
 	raise Exception('configroute %s is unknown' % (configroute_))
 
-def get_endpoint_info(origlat_, origlon_, destlat_, destlon_):
-	orig_route_to_mofr = get_route_to_mofr(geom.LatLng(origlat_, origlon_))
-	dest_route_to_mofr = get_route_to_mofr(geom.LatLng(destlat_, destlon_))
+def get_trip_endpoint_info(orig_, dest_, visible_fudgeroutendirs_):
+	assert isinstance(orig_, geom.LatLng) and isinstance(dest_, geom.LatLng)
+	assert len(set(x[0] for x in visible_fudgeroutendirs_)) == len(visible_fudgeroutendirs_) # no duplicates 
+	orig_route_to_mofr = get_route_to_mofr(orig_)
+	dest_route_to_mofr = get_route_to_mofr(dest_)
 	common_routes = set(orig_route_to_mofr.keys()).intersection(set(dest_route_to_mofr))
+	common_routes = common_routes.intersection(set([x[0] for x in visible_fudgeroutendirs_]))
 	if not common_routes:
 		return None
 	else:
-		route = list(common_routes)[0]
-		direction = (0 if orig_route_to_mofr[route] < dest_route_to_mofr[route] else 1)
-		orig_stop = get_routeinfo(route).mofr_to_stop(orig_route_to_mofr[route], direction)
-		dest_stop = get_routeinfo(route).mofr_to_stop(dest_route_to_mofr[route], direction)
-		return {'route': route, 'direction': direction, 
-				'origstoptag': orig_stop.stoptag, 'origlatlon': orig_stop.latlon, 'origmofr': orig_route_to_mofr[route], 
-				'deststoptag': dest_stop.stoptag, 'destlatlon': dest_stop.latlon, 'destmofr': dest_route_to_mofr[route]}
+		for route in common_routes:
+			direction = (0 if orig_route_to_mofr[route] < dest_route_to_mofr[route] else 1)
+			routes_dir_in_visible_list = [x for x in visible_fudgeroutendirs_ if x[0] == route][0][1]
+			if direction == routes_dir_in_visible_list:
+				ri = get_routeinfo(route)
+				orig_stop = ri.mofr_to_stop(orig_route_to_mofr[route], direction)
+				dest_stop = ri.mofr_to_stop(dest_route_to_mofr[route], direction)
+				orig_latlng = ri.mofr_to_latlon(orig_stop.mofr, direction)
+				dest_latlng = ri.mofr_to_latlon(dest_stop.mofr, direction)
+				return {'route': route, 'direction': direction, 
+						'origstoptag': orig_stop.stoptag, 'origlatlng': orig_latlng, 'origmofr': orig_stop.mofr, 
+						'deststoptag': dest_stop.stoptag, 'destlatlng': dest_latlng, 'destmofr': dest_stop.mofr}
+		return None
 
 def get_route_to_mofr(latlon_):
 	r = {}
@@ -287,7 +296,7 @@ def get_fudgeroutes_for_map_bounds(southwest_, northeast_, compassdir_, maxroute
 						routelineseg_midpt_dist_from_bounds_centre = bounds_midpt.dist_m(routelineseg_midpt)
 						scoresample = (routelineseg_len_m, headings_diff, routelineseg_midpt_dist_from_bounds_centre)
 						fudgeroute_n_dir_to_score[(fudgeroute, dir)] += scorer.get_score(scoresample)
-						if 0: 
+						if 0: # TDR
 							printerr('fudgeroute_n_dir_to_score(%20s) - line at ( %.5f, %.5f ) - %4.0f, %2d, %4.0f ==> %.3f' % ((fudgeroute, dir), \
 									#routelineseg_midpt.lat, routelineseg_midpt.lng,  \
 									routelineseg_pt1.lat, routelineseg_pt2.lng, \
