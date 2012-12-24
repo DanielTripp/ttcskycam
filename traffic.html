@@ -12,6 +12,7 @@
       src="http://maps.googleapis.com/maps/api/js?sensor=false">
     </script>
 		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
+		<script type="text/javascript" src="js/infobox_packed.js"></script>
 		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
 		<script type="text/javascript" src="js/jquery-ui-1.8.17.custom.min.js"></script>
 		<script type="text/javascript" src="js/jquery-ui-timepicker-addon.js"></script>
@@ -46,7 +47,7 @@ var g_framerate_last_epochtime = (new Date()).getTime();
 
 var g_fudgeroute_data = new buckets.Dictionary();
 var g_routeselect_auto_aot_manual = true;
-var g_routeselectauto_compassdir = 'se', g_routeselectauto_maxroutes = 2;
+var g_routeselectauto_compassdir = 'e', g_routeselectauto_maxroutes = 2;
 var g_fudgeroute_to_compassdir_to_intdir = null;
 var g_bounds_changed_listener_timer = null;
 var g_play_timer = null;
@@ -60,6 +61,12 @@ var g_playing = true;
 
 var g_mouseover_infowin = null;
 var g_mouseover_infowin_timer = null;
+
+var g_trip_orig_marker = null, g_trip_dest_marker = null;
+var g_trip_fudgeroute = null, g_trip_dir = 0;
+var g_trip_origmofr = 0, g_trip_destmofr = 0;
+var g_trip_polyline = null;
+var g_trip_infobox = null;
 
 var HEADING_ROUNDING_DEGREES = 5;
 var REFRESH_INTERVAL_MS = 15*1000;
@@ -128,6 +135,9 @@ function refresh_traffic_from_server(fudgeroute_) {
 				data.traffic_mofr2speed = to_buckets_dict(r_[1]);
 				update_last_updated_time();
 				remake_traffic_lines_singleroute(fudgeroute_);
+				if(g_trip_fudgeroute == fudgeroute_) {
+					update_trip_display();
+				}
 			}, 
 			error: function() {
 				var data = g_fudgeroute_data.get(fudgeroute_);
@@ -825,6 +835,7 @@ function initialize() {
 	google.maps.event.addListener(g_map, 'zoom_changed', function() {
 		remake_traffic_lines_allroutes();
 		redraw_vehicle_markers();
+		redraw_trip_polyline();
 	});
 	google.maps.event.addListener(g_map, 'bounds_changed', schedule_bounds_changed_listener);
 	var origlat, origlon, destlat, destlon;
@@ -859,12 +870,231 @@ function initialize() {
 	set_selected((g_routeselect_auto_aot_manual ? 'routeselect_auto_radiobutton' : 'routeselect_manual_radiobutton'), true);
 	init_routeselect_controls();
 
+	init_trip_markers();
+
 	// The first 'get' of data from the server will happen due to a bounds_changed event on the map that happens to it on 
 	// initialization.  That will cause a 'get_fudgeroutes_for_map_bounds' which will cause a 'get' of traffic and vehicle 
 	// data for each route individually, right away.
 	schedule_refresh_data_from_server(); // This will cause a periodic refresh of all routes.  The first refresh 
-			// will happen not right away, but in a few seconds. 
+			// caused by this will happen not right away, but in a few seconds. 
 
+}
+
+function redraw_trip_polyline() {
+	if(g_trip_polyline!=null) {
+		var path = g_trip_polyline.getPath();
+		g_trip_polyline.setMap(null);
+		g_trip_polyline = null;
+		make_trip_polyline(path);
+	}
+}
+
+function init_trip_markers() {
+	g_trip_orig_marker = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.64939110196153, -79.42446513374944), 
+		draggable: true});
+	g_trip_dest_marker = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.65305519238468, -79.40163417061467), 
+		draggable: true});
+
+	google.maps.event.addListener(g_trip_orig_marker, 'dragend', on_trip_marker_moved);
+	google.maps.event.addListener(g_trip_dest_marker, 'dragend', on_trip_marker_moved);
+}
+
+function on_trip_marker_moved() {
+	callpy('routes.get_trip_endpoint_info', g_trip_orig_marker.getPosition(), g_trip_dest_marker.getPosition(), get_visible_fudgeroutendirs(), 
+		function(r_) {
+			if(r_!=null && g_fudgeroute_data.containsKey(r_.route)) {
+				// TODO: more checking here, that r_.route's dir in the get_visible_fudgeroutendirs() we passed to the server above 
+				// is still a dir that we have.  
+				g_trip_fudgeroute = r_.route;
+				g_trip_origmofr = r_.origmofr;
+				g_trip_destmofr = r_.destmofr;
+				g_trip_dir = g_fudgeroute_data.get(r_.route).dir;
+				g_trip_orig_marker.setPosition(google_LatLng(r_.origlatlng));
+				g_trip_dest_marker.setPosition(google_LatLng(r_.destlatlng));
+			} else {
+				g_trip_fudgeroute = null;
+			}
+			update_trip_display();
+		}
+	);
+}
+
+function get_visible_fudgeroutendirs() {
+	var r = new buckets.LinkedList();
+	g_fudgeroute_data.forEach(function(fudgeroute, data) {
+		r.add([fudgeroute, data.dir]);
+	});
+	return r;
+}
+
+function update_trip_display() {
+	forget_trip_display();
+
+	if(!g_fudgeroute_data.containsKey(g_trip_fudgeroute) || g_fudgeroute_data.get(g_trip_fudgeroute).dir != g_trip_dir) {
+		return;
+	}
+
+	var text = '';
+	if(g_trip_fudgeroute!=null) {
+		var trip_time_minutes = get_est_trip_time();
+		if(trip_time_minutes >= 0) {
+			var km_to_travel = Math.abs(g_trip_origmofr - g_trip_destmofr)/1000.0;
+			var avg_speed_kmph = km_to_travel/(trip_time_minutes/60.0);
+			text = sprintf('Estimated trip time: %d minutes.<br/>(%.1f kilometres,<br/>%.1f km/hour on average.)',
+					Math.round(trip_time_minutes), km_to_travel, avg_speed_kmph);
+
+			draw_trip_polyline();
+		} else {
+			text = 'Could not estimate trip time.<br/>No recent traffic for some parts of the trip.';
+		}
+	} else {
+		text = 'Could not estimate trip time.<br/>Both the start and end markers need to select a currently visible route and direction.';
+	}
+	if(g_trip_infobox!=null) {
+		g_trip_infobox.close();
+		g_trip_infobox = null;
+	}
+	var infobox_width_px = Math.floor($('#map_canvas').width()/2);
+	g_trip_infobox = new InfoBox({content: text, disableAutoPan: true, position: get_trip_infowin_desired_pos(), 
+			boxStyle: { border: "1px solid black" , textAlign: "center", fontSize: "14pt", width: ''+infobox_width_px+'px', 
+				background: 'rgb(255,255,255)' }, 
+			pixelOffset: new google.maps.Size(-infobox_width_px/2, 0)
+		});
+	g_trip_infobox.open(g_map);
+}
+
+function get_trip_infowin_desired_pos() {
+	var sw = g_map.getBounds().getSouthWest(), ne = g_map.getBounds().getNorthEast();
+	var lat = (ne.lat() - sw.lat())*0.70 + sw.lat();
+	var lng = (ne.lng() - sw.lng())*0.50 + sw.lng();
+	return new google.maps.LatLng(lat, lng);
+}
+
+function forget_trip_display() {
+	if(g_trip_polyline!=null) {
+		g_trip_polyline.setMap(null);
+		g_trip_polyline = null;
+	}
+	if(g_trip_infobox!=null) {
+		g_trip_infobox.close();
+		g_trip_infobox = null;
+	}
+}
+
+function draw_trip_polyline() {
+	var data = g_fudgeroute_data.get(g_trip_fudgeroute);
+	var lo_mofr = (data.dir == 0 ? g_trip_origmofr : g_trip_destmofr);
+	var hi_mofr = (data.dir == 0 ? g_trip_destmofr : g_trip_origmofr);
+	var path = [];
+	path.push(g_trip_orig_marker.getPosition());
+	var last_endlatlng = null;
+	for(var linedefi=0; linedefi<data.traffic_linedefs.size(); linedefi++) {
+		var linedef = data.traffic_linedefs.elementAtIndex(linedefi);
+		if(lo_mofr <= linedef.start_mofr && linedef.start_mofr <= hi_mofr && 
+				lo_mofr <= linedef.end_mofr && linedef.end_mofr <= hi_mofr) {
+			path.push(google_LatLng(linedef.start_latlon));
+			last_endlatlng = google_LatLng(linedef.end_latlon);
+		}
+	}
+	if(last_endlatlng!=null) {
+		path.push(last_endlatlng);
+		path.push(g_trip_dest_marker.getPosition());
+		make_trip_polyline(path);
+	}
+}
+
+function make_trip_polyline(path_) {
+	g_trip_polyline = new google.maps.Polyline({map: g_map, path: path_, strokeWeight: get_trip_path_line_width(), 
+		strokeColor: 'rgb(0,0,255)', strokeOpacity: 0.25, zIndex: -10});
+}
+
+function get_est_trip_time() {
+	var startmofr, endmofr;
+	if(g_fudgeroute_data.get(g_trip_fudgeroute).dir == 0) {
+		startmofr = g_trip_origmofr;
+		endmofr = g_trip_destmofr;
+	} else {
+		startmofr = g_trip_destmofr;
+		endmofr = g_trip_origmofr;
+	}
+	var r_secs = 0;
+	if(startmofr != round_up_off_step(startmofr, MOFR_STEP)) {
+		var dist_m = round_up_off_step(startmofr, MOFR_STEP) - startmofr;
+		var speed_kmph = get_traffic_kmph(g_trip_fudgeroute, round(startmofr, MOFR_STEP));
+		if(speed_kmph == -1) {
+			return -1;
+		}
+		var speed_mps = kmph_to_mps(speed_kmph);
+		//alert('adding distance '+dist_m+', speed '+speed_mps+', makes for '+(dist_m/speed_mps));
+		r_secs += dist_m/speed_mps;
+	}
+	var cur_offstep_mofr = round_up_off_step(startmofr, MOFR_STEP);
+	while(cur_offstep_mofr < round_down_off_step(endmofr, MOFR_STEP)) {
+		var mofr_with_ref_speed = round_up(cur_offstep_mofr, MOFR_STEP);
+		var speed_kmph = get_traffic_kmph(g_trip_fudgeroute, mofr_with_ref_speed);
+		if(speed_kmph == -1) {
+			return -1;
+		}
+		var speed_mps = kmph_to_mps(speed_kmph);
+		//alert('adding distance '+MOFR_STEP+', speed '+speed_mps+', makes for '+(MOFR_STEP/speed_mps));
+		r_secs += MOFR_STEP/speed_mps;
+		cur_offstep_mofr += MOFR_STEP;
+	}
+	if(endmofr != round_down_off_step(endmofr, MOFR_STEP)) {
+		dist_m = endmofr - round_down_off_step(endmofr, MOFR_STEP);
+		var speed_kmph = get_traffic_kmph(g_trip_fudgeroute, round(endmofr, MOFR_STEP));
+		if(speed_kmph == -1) {
+			return -1;
+		}
+		var speed_mps = kmph_to_mps(speed_kmph);
+		//alert('adding distance '+dist_m+', speed '+speed_mps+', makes for '+(dist_m/speed_mps));
+		r_secs += dist_m/speed_mps;
+	}
+	return r_secs/60;
+}
+
+// returns -1 if we have no traffic data for that mofr step. 
+function get_traffic_kmph(fudgeroute_, mofr_) {
+	if(mofr_ % MOFR_STEP != 0 || mofr_ < 0) {
+		throw sprintf('Got %d.  We expect a multiple of %d.', mofr_, MOFR_STEP);
+	}
+	var traf = g_fudgeroute_data.get(fudgeroute_).traffic_mofr2speed.get(mofr_);
+	if(traf == undefined) {
+		return -1;
+	} else {
+		return traf.kmph;
+	}
+}
+
+function kmph_to_mps(kmph_) {
+	return kmph_*1000.0/(60*60);
+}
+
+// 'off step' means 'steps shifted in phase by half the period, if you will'  
+function round_up_off_step(x_, step_) {
+	var r = round_down_off_step(x_, step_);
+	return (r == x_ ? r : r+step_);
+}
+
+function round_down_off_step(x_, step_) {
+	// assert type(x_) == int and type(step_) == int
+	return Math.floor((x_-step_/2)/step_)*step_ + step_/2;
+}
+
+function round_up(x_, step_) {
+	var r = round_down(x_, step_);
+	return (r == x_ ? r : r+step_);
+}
+
+function round_down(x_, step_) {
+	// assert type(x_) == int and type(step_) == int
+	return (Math.floor(x_/step_)*step_);
+}
+
+function round(x_, step_) {
+	var rd = round_down(x_, step_)
+	var ru = round_up(x_, step_)
+	return (x_ - rd < ru - x_ ? rd : ru);
 }
 
 function init_routeselect_controls() {
@@ -1011,12 +1241,30 @@ function get_fudgeroutes_for_map_bounds() {
 			function(r_) { update_selected_fudgeroutendirs(r_); });
 }
 
-function update_selected_fudgeroutendirs(fudgeroutendirs_) {
+function update_selected_fudgeroutendirs(new_fudgeroutendirs_) {
+	var trip_fudgeroutendir_is_in_old_list = false, trip_fudgeroutendir_is_in_new_list = false;
+
 	var new_routes = new buckets.LinkedList();
-	for(var i in fudgeroutendirs_) {
-		var fudgeroute_n_dir = fudgeroutendirs_[i];
-		var fudgeroute = fudgeroute_n_dir[0], dir = fudgeroute_n_dir[1];
-		new_routes.add(fudgeroute);
+	for(var i in new_fudgeroutendirs_) {
+		var fudgeroutendir = new_fudgeroutendirs_[i];
+		new_routes.add(fudgeroutendir[0]);
+		if(fudgeroutendir[0] == g_trip_fudgeroute && fudgeroutendir[1] == g_trip_dir) {
+			trip_fudgeroutendir_is_in_new_list = true;
+		}
+	}
+
+	g_fudgeroute_data.forEach(function(fudgeroute, data) {
+		if(fudgeroute == g_trip_fudgeroute && data.dir == g_trip_dir) {
+			trip_fudgeroutendir_is_in_old_list = true;
+		}
+		if(!new_routes.contains(fudgeroute)) {
+			forget_data_singleroute(fudgeroute);
+		}
+	});
+
+	for(var i in new_fudgeroutendirs_) {
+		var fudgeroutendir = new_fudgeroutendirs_[i];
+		var fudgeroute = fudgeroutendir[0], dir = fudgeroutendir[1];
 		if(g_fudgeroute_data.get(fudgeroute) == undefined || g_fudgeroute_data.get(fudgeroute).dir != dir) {
 			forget_data_singleroute(fudgeroute);
 			var data = new_fudgeroute_data();
@@ -1025,13 +1273,11 @@ function update_selected_fudgeroutendirs(fudgeroutendirs_) {
 			refresh_data_from_server_singleroute(fudgeroute);
 		}
 	}
-	var old_routes = g_fudgeroute_data.keys();
-	for(var i in old_routes) {
-		var old_route = old_routes[i];
-		if(!new_routes.contains(old_route)) {
-			forget_data_singleroute(old_route);
-		}
+
+	if(trip_fudgeroutendir_is_in_old_list != trip_fudgeroutendir_is_in_new_list) {
+		update_trip_display();
 	}
+
 	refresh_vid_checkboxes_html();
 }
 
@@ -1258,52 +1504,12 @@ function on_datetime_changed() {
 	on_traffictype_changed();
 }
 
-// returns -1 if we have no traffic data for that mofr step. 
-function get_traffic_kmph(mofr_) {
-	if(mofr_ % MOFR_STEP != 0 || mofr_ < 0) {
-		throw sprintf('Got %d.  We expect a multiple of %d.', mofr_, MOFR_STEP);
-	}
-	var traf = g_traffic_mofr2speed[mofr_];
-	if(traf == undefined) {
-		return -1;
-	} else {
-		return traf.kmph;
-	}
-}
-
-function kmph_to_mps(kmph_) {
-	return kmph_*1000.0/(60*60);
-}
-
-// 'off step' means 'steps shifted in phase by half the period, if you will'  
-function round_up_off_step(x_, step_) {
-	var r = round_down_off_step(x_, step_);
-	return (r == x_ ? r : r+step_);
-}
-
-function round_down_off_step(x_, step_) {
-	// assert type(x_) == int and type(step_) == int
-	return Math.floor((x_-step_/2)/step_)*step_ + step_/2;
-}
-
-function round_up(x_, step_) {
-	var r = round_down(x_, step_);
-	return (r == x_ ? r : r+step_);
-}
-
-function round_down(x_, step_) {
-	// assert type(x_) == int and type(step_) == int
-	return (Math.floor(x_/step_)*step_);
-}
-
-function round(x_, step_) {
-	var rd = round_down(x_, step_)
-	var ru = round_up(x_, step_)
-	return (x_ - rd < ru - x_ ? rd : ru);
-}
-
 function get_traffic_line_width() {
 	return get_vehicle_size()/9;
+}
+
+function get_trip_path_line_width() {
+	return get_traffic_line_width()*4;
 }
 
 // kmph_ == null ==> no data available. 
@@ -1445,8 +1651,8 @@ $(document).ready(initialize);
 				<p id="p_vid_checkboxes">&nbsp;</p>
 			</div>
 			<div id="div_time_selector">
-			<input id="current_button" type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"  />Now
-			<input id="historical_button" type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()" checked="checked"  />Past
+			<input id="current_button" type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"   />Now
+			<input id="historical_button" type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()" checked="checked" />Past
 			<input id="datetimepicker_textfield" type="text" name="datetimepicker_textfield" value="" />
 			</div>
 			</font>

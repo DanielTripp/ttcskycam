@@ -216,6 +216,12 @@ function callpy_url(module_and_funcname_, func_args_) {
 		var argval = func_args_[i];
 		if(argval instanceof google.maps.LatLng) {
 			argval = [argval.lat(), argval.lng()];
+		} else if(argval instanceof buckets.LinkedList) {
+			new_argval = [];
+			argval.forEach(function(e) {
+				new_argval.push(e);
+			});
+			argval = new_argval;
 		}
 		var argval_json = window.JSON.stringify(argval);
 		paramstr += "&arg"+i+"="+encode_url_paramval(argval_json);

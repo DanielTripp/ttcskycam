@@ -107,7 +107,8 @@ def get_traffics_visuals(mofr_to_avgspeedandweight_, fudgeroute_name_, dir_):
 			seg_end_mofr = min(mofr_ref + MOFR_STEP/2, routept2_mofr)
 			seg_start_latlng = routept1.add(routept2.subtract(routept1).scale((seg_start_mofr-routept1_mofr)/float(route_seg_len)))
 			seg_end_latlng   = routept1.add(routept2.subtract(routept1).scale((seg_end_mofr  -routept1_mofr)/float(route_seg_len)))
-			r.append({'start_latlon': seg_start_latlng, 'end_latlon': seg_end_latlng, 'mofr': mofr_ref})
+			r.append({'start_latlon': seg_start_latlng, 'end_latlon': seg_end_latlng, 'mofr': mofr_ref, 
+					'start_mofr': routept1_mofr, 'end_mofr': routept2_mofr})
 		routept1_mofr += route_seg_len
 	return r
 
