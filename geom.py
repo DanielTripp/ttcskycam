@@ -239,11 +239,12 @@ def remove_bad_gps_readings_single_vid(vis_):
 
 
 # Finds intersection of the line segments pt1->pt2 and pt3->pt4. 
+# returns None if they don't intersect, a LatLng otherwise. 
 def get_line_segment_intersection(pt1, pt2, pt3, pt4):
 	assert isinstance(pt1, LatLng) and isinstance(pt2, LatLng) and isinstance(pt3, LatLng) and isinstance(pt4, LatLng) 
 	determinant = (pt1.lng - pt2.lng)*(pt3.lat - pt4.lat) - (pt1.lat - pt2.lat)*(pt3.lng - pt4.lng)
 	# Lines don't intersect if determinant is 0. 
-	if abs(determinant) < 0.000001:
+	if abs(determinant) < 0.000000001:
 		return None
 	else:
 		lng_numerator = (pt1.lng*pt2.lat - pt1.lat*pt2.lng)*(pt3.lng - pt4.lng) - (pt1.lng - pt2.lng)*(pt3.lng*pt4.lat - pt3.lat*pt4.lng)

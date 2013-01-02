@@ -175,10 +175,19 @@ def get_maximal_sublists3(list_, key_):
 		prev_elem_key = cur_elem_key
 	return r
 
+def uniq(seq_):
+	first_elem = True
+	last_val = None
+	r = []
+	for e in seq_:
+		if first_elem or (e != last_val):
+			r.append(e)
+		last_val = e
+		first_elem = False
+	return r
+
 if __name__ == '__main__':
 
-
-	pass
-
+	print uniq((x for x in [1, 2, 2, 3, 2, 2, 3, 3]))
 
 

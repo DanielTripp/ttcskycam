@@ -296,7 +296,7 @@ def get_fudgeroutes_for_map_bounds(southwest_, northeast_, compassdir_, maxroute
 						routelineseg_midpt_dist_from_bounds_centre = bounds_midpt.dist_m(routelineseg_midpt)
 						scoresample = (routelineseg_len_m, headings_diff, routelineseg_midpt_dist_from_bounds_centre)
 						fudgeroute_n_dir_to_score[(fudgeroute, dir)] += scorer.get_score(scoresample)
-						if 0: # TDR
+						if 0: 
 							printerr('fudgeroute_n_dir_to_score(%20s) - line at ( %.5f, %.5f ) - %4.0f, %2d, %4.0f ==> %.3f' % ((fudgeroute, dir), \
 									#routelineseg_midpt.lat, routelineseg_midpt.lng,  \
 									routelineseg_pt1.lat, routelineseg_pt2.lng, \
@@ -346,14 +346,100 @@ def heading_to_compassdir(heading_):
 def snaptest(fudgeroutename_, pt_, tolerance_=0):
 	return get_routeinfo(fudgeroutename_).snaptest(pt_, tolerance_)
 
+class Intersection:
+
+	def __init__(self, route1_, route1mofr_, route2_, route2mofr_, 
+			route1_dir0_stoptag_, route1_dir1_stoptag_, route2_dir0_stoptag_, route2_dir1_stoptag_, 
+			latlng_):
+		assert isinstance(latlng_, geom.LatLng)
+		self.route1 = route1_
+		self.route1mofr = route1mofr_
+		self.route2 = route2_
+		self.route2mofr = route2mofr_
+		self.route1_dir0_stoptag = route1_dir0_stoptag_
+		self.route1_dir1_stoptag = route1_dir1_stoptag_
+		self.route2_dir0_stoptag = route2_dir0_stoptag_
+		self.route2_dir1_stoptag = route2_dir1_stoptag_
+		self.latlng = latlng_
+
+	def __str__(self):
+		return 'Intersection(%s, %d, %s, %d, %s)' % (self.route1, self.route1mofr, self.route2, self.route2mofr, str(self.latlng))
+
+	def __repr__(self):
+		return self.__str__()
+
+def get_intersections():
+	mckey = mc.make_key('intersections')
+	r = mc.client.get(mckey)
+	if not r:
+		r = get_intersections_impl()
+		mc.client.set(mckey, r)
+	return r
+
+def get_intersections_impl():
+	r = []
+	for routei, route1 in enumerate(FUDGEROUTES[:]):
+		for route2 in FUDGEROUTES[:][routei+1:]:
+			ri1 = get_routeinfo(route1); ri2 = get_routeinfo(route2)
+			new_intersections = []
+			for route1_pt1, route1_pt2 in hopscotch(ri1.routepts(0)):
+				for route2_pt1, route2_pt2 in hopscotch(ri2.routepts(0)):
+					intersect_latlng = geom.get_line_segment_intersection(route1_pt1, route1_pt2, route2_pt1, route2_pt2)
+					if intersect_latlng is not None:
+						route1mofr = ri1.latlon_to_mofr(intersect_latlng); route2mofr = ri2.latlon_to_mofr(intersect_latlng)
+						route1_dir0_stoptag = ri1.mofr_to_stop(route1mofr, 0).stoptag
+						route1_dir1_stoptag = ri1.mofr_to_stop(route1mofr, 1).stoptag
+						route2_dir0_stoptag = ri2.mofr_to_stop(route2mofr, 0).stoptag
+						route2_dir1_stoptag = ri2.mofr_to_stop(route2mofr, 1).stoptag
+						new_intersection = Intersection(route1, route1mofr, route2, route2mofr, 
+								route1_dir0_stoptag, route1_dir1_stoptag, route2_dir0_stoptag, route2_dir1_stoptag, 
+								intersect_latlng)
+						if not new_intersections:
+							new_intersections.append(new_intersection)
+						else:
+							nearest_old_intersection = min(new_intersections, key=lambda x: x.latlng.dist_m(new_intersection.latlng))
+							dist_to_nearest_old_intersection = nearest_old_intersection.latlng.dist_m(new_intersection.latlng)
+							if dist_to_nearest_old_intersection > 1000:
+								new_intersections.append(new_intersection)
+			r += new_intersections
+	return r
+
+def get_intersections_mofr_to_crossroutenmofr(froute_):
+	r = {}
+	for i in get_intersections():
+		for this_route, this_mofr, other_route, other_mofr \
+				in [(i.route1, i.route1mofr, i.route2, i.route2mofr), (i.route2, i.route2mofr, i.route1, i.route1mofr)]:
+			if this_route == froute_:
+				r[this_mofr] = (other_route, other_mofr)
+	return r
+
+def get_paths(start_froute_, start_mofr_, dest_froute_, dest_mofr_, max_transfers_, visited_froutes_=set()):
+	assert max_transfers_ >= 1
+	visited_froutes = visited_froutes_.copy()
+	visited_froutes.add(start_froute_)
+	r = []
+	if start_froute_ == dest_froute_:
+		r.append([(start_froute_, start_mofr_), (dest_froute_, dest_mofr_)])
+	for startroutes_crossmofr, crossroutenmofr in get_intersections_mofr_to_crossroutenmofr(start_froute_).iteritems():
+		crossroute, crossroute_intersect_mofr = crossroutenmofr
+		if crossroute in visited_froutes:
+			continue
+		if crossroute == dest_froute_:
+			r.append([(start_froute_, start_mofr_), (start_froute_, startroutes_crossmofr), 
+					(dest_froute_, crossroute_intersect_mofr), (dest_froute_, dest_mofr_)])
+		else:
+			if max_transfers_ > 1:
+				for subpath in get_paths(crossroute, crossroute_intersect_mofr, dest_froute_, dest_mofr_, max_transfers_-1, visited_froutes):
+					if len(uniq([x[0] for x in subpath])) < max_transfers_+1:
+						r.append([(start_froute_, start_mofr_), (start_froute_, startroutes_crossmofr)] + subpath)
+	r.sort(key=len)
+	return r
 
 if __name__ == '__main__':
 
-	import pprint 
+	import pprint
 
-	pprint.pprint(get_fudgeroute_to_compassdir_to_intdir())
-
-
-
+	#print len(get_paths('dundas', 1, 'dupont', 7000, 7))
+	pprint.pprint(get_paths('dundas', 1, 'dupont', 7000, 7))
 
 
