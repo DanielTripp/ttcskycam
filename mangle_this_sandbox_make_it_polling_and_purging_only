@@ -9,6 +9,9 @@ function do_it_for_sure() {
 
 	echo local > HOST
 
+	chmod u+x poll_predictions.py
+	chmod u+x poll_locations.py
+
 	echo 'Done.'
 }
 
