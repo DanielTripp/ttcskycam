@@ -2,7 +2,7 @@
 
 function do_it_for_sure() {
 	for d in $(find -mindepth 1 -maxdepth 1  -type d) ; do 
-		if [ "$d" != "psycopg2" ] ; then
+		if [ "$d" != "./psycopg2" ] ; then
 			rm -r "$d"
 		fi
 	done
