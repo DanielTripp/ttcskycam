@@ -1,12 +1,13 @@
 #!/usr/bin/python2.6
 
-ROUTES = ['505', '501', '504', '301', '511', '510']
-POLL_PERIOD_SECS = 60
-
 import sys, subprocess, re, time, xml.dom, xml.dom.minidom, traceback, json
 from collections import defaultdict
-import db, vinfo
+import db, vinfo, routes
 from misc import *
+
+ADDITIONAL_ROUTES = ['512', '508', '509']
+ROUTES_TO_POLL = routes.CONFIGROUTES + ADDITIONAL_ROUTES
+POLL_PERIOD_SECS = 60
 
 def get_data_from_web_as_str(route_, time_es_=0):
 	wget_args = ['wget', '-O', '-', 'http://webservices.nextbus.com/service/publicXMLFeed?command=vehicleLocations&a=ttc&r=%s&t=%d' \
@@ -19,7 +20,6 @@ def get_data_from_web_as_xml(route_, time_es_=0):
 	return r
  
 def insert_xml_into_db(xmldoc_):
-	db.reconnect()
 	vehicles = []
 	last_time = None
 	for elem in (node for node in xmldoc_.documentElement.childNodes if isinstance(node, xml.dom.minidom.Element)):
@@ -37,21 +37,6 @@ def insert_xml_into_db(xmldoc_):
 
 	return last_time
 
-def poll_all_routes_forever():
-	while True:
-		route_to_lasttime_em = defaultdict(lambda: 0)
-		for route in ROUTES:
-			try:
-				data_xmldoc = get_data_from_web_as_xml(route, route_to_lasttime_em[route])
-				route_to_lasttime_em[route] = insert_xml_into_db(data_xmldoc)
-			except Exception, e:
-				print 'At %s: error getting route %s' % (em_to_str(now_em()), route)
-				traceback.print_exc(e)
-				#print sys.exc_info()[2]):
-				#for line in traceback.format_tb(sys.exc_info()[2]):
-				#	print line
-			time.sleep(POLL_PERIOD_SECS/len(ROUTES))
-
 def poll_once():
 	route_to_lasttime_em = defaultdict(lambda: 0)
 	try:
@@ -60,7 +45,7 @@ def poll_once():
 				route_to_lasttime_em[key] = val
 	except:
 		pass
-	for route in ROUTES:
+	for route in ROUTES_TO_POLL:
 		try:
 			#print 'Using %d for %s' % (route_to_lasttime_em[route], route)
 			data_xmldoc = get_data_from_web_as_xml(route, route_to_lasttime_em[route])
@@ -68,17 +53,14 @@ def poll_once():
 		except Exception, e:
 			print 'At %s: error getting route %s' % (em_to_str(now_em()), route)
 			traceback.print_exc(e)
-		# Prune routes that were in pollstate.json but are not (no longer) in this file's list ROUTES: 
+		# Prune routes that were in pollstate.json but are not (no longer) in this file's list ROUTES_TO_POLL: 
 		for route_in_map in route_to_lasttime_em.keys():
-			if route_in_map not in ROUTES:
+			if route_in_map not in ROUTES_TO_POLL:
 				del route_to_lasttime_em[route_in_map]
 		with open('pollstate.json', 'w') as fout:
 			json.dump(route_to_lasttime_em, fout)
 
 if __name__ == '__main__':
-	if len(sys.argv) > 1 and sys.argv[1] == '--once':
-		poll_once()
-	else:
-		poll_all_routes_forever()
-
+	assert len(sys.argv) == 1
+	poll_once()
 

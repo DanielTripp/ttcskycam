@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import sys, xml.dom, xml.dom.minidom, json
+from collections import defaultdict
 
 def child_elems(node_, elemname_=None):
 	return [node for node in node_.childNodes if isinstance(node, xml.dom.minidom.Element) and (node.nodeName==elemname_ if elemname_ else True)]
@@ -28,22 +29,39 @@ def get_stoptags_for_direction(dom_, direction_):
 				r.add(stop_elem.getAttribute('tag'))
 	return r
 
-def get_stoptag_and_latlon_list(dom_, direction_):
-	r = []
-	stoptag_to_latlon = get_stoptag_to_latlon(dom_)
-	for stoptag in get_stoptags_for_direction(dom_, direction_):
-		latlon = stoptag_to_latlon[stoptag]
-		r.append({'stoptag': stoptag, 'lat': latlon[0], 'lon': latlon[1]})
-	r.sort(key=lambda x: x['stoptag'])
+def get_stoptag_to_dirtags_serviced(dom_):
+	r = defaultdict(lambda: [])
+	for dir_elem in dom_.documentElement.getElementsByTagName('direction'):
+		dirtag = dir_elem.getAttribute('tag')
+		for stop_elem in (x for x in dir_elem.childNodes if x.nodeName == 'stop'):
+			r[stop_elem.getAttribute('tag')].append(dirtag)
 	return r
 
-if len(sys.argv) < 3:
-	sys.exit('Need two arguments: 1) a filename containing routeConfig output from NextBus, and 2) a direction (eg. "0" or "1").')
-routeconfig_filename = sys.argv[1]
-direction = sys.argv[2]
-if direction in ('0', '1'):
-	direction = int(direction)
-dom = xml.dom.minidom.parse(routeconfig_filename)
-json.dump(get_stoptag_and_latlon_list(dom, direction), sys.stdout, indent=0)
+def get_stoptag_to_stop_details(dom_, direction_):
+	r = {}
+	stoptag_to_latlon = get_stoptag_to_latlon(dom_)
+	stoptag_to_dirtags_serviced = get_stoptag_to_dirtags_serviced(dom_)
+	for stoptag in get_stoptags_for_direction(dom_, direction_):
+		latlon = stoptag_to_latlon[stoptag]
+		dirtags_serviced = stoptag_to_dirtags_serviced[stoptag]
+		if len(dirtags_serviced) > 0:
+			r[stoptag] = {'lat': latlon[0], 'lon': latlon[1], 'dirtags_serviced': dirtags_serviced}
+	return r
+
+if len(sys.argv) < 2:
+	sys.exit('Need at least one argument: one or more filenames containing routeConfig output from NextBus.')
+routeconfig_filenames = sys.argv[1:]
+r = defaultdict(lambda: {})
+for routeconfig_filename in routeconfig_filenames:
+	dom = xml.dom.minidom.parse(routeconfig_filename)
+	for direction in (0, 1):
+		for stoptag, stop_details in get_stoptag_to_stop_details(dom, direction).iteritems():
+			if stoptag in r[direction]:
+				r[direction][stoptag]['dirtags_serviced'] += stop_details['dirtags_serviced']
+			else:
+				r[direction][stoptag] = stop_details
+
+json.dump(r, sys.stdout, indent=1)
 print
+
 
