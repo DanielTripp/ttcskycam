@@ -87,7 +87,9 @@ class RouteInfo:
 				for stoptag, stopdetails in stops_file_content_json[direction_str].iteritems():
 					assert set(stopdetails.keys()) == set(['lat', 'lon', 'dirtags_serviced'])
 					latlng = geom.LatLng(stopdetails['lat'], stopdetails['lon']); dirtags_serviced = stopdetails['dirtags_serviced']
-					self.dir_to_stoptag_to_stop[direction_int][stoptag] = Stop(stoptag, latlng, self.latlon_to_mofr(latlng), dirtags_serviced)
+					mofr = self.latlon_to_mofr(latlng)
+					if mofr != -1:
+						self.dir_to_stoptag_to_stop[direction_int][stoptag] = Stop(stoptag, latlng, mofr, dirtags_serviced)
 	
 	def get_stop(self, stoptag_):
 		for direction in (0, 1):
@@ -544,7 +546,9 @@ if __name__ == '__main__':
 	#print len(get_paths('dundas', 1, 'dupont', 7000, 7))
 	#pprint.pprint(get_paths('dundas', 400, 'dupont', 7000, 4)[:5])
 	#get_routeinfo('queen')
-	for i in range(500):
-		get_intersections()
+	ri = get_routeinfo('ossington')
+	for dir in (0, 1):
+		for mofr in range(-100, ri.max_mofr()+250, 133):
+			print ri.mofr_to_stop(mofr, dir)
 
 
