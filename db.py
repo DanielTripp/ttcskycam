@@ -1,5 +1,14 @@
 #!/usr/bin/python2.6
 
+# Tables involved: 
+# 
+# create table ttc_vehicle_locations (vehicle_id varchar(100), route_tag varchar(100), dir_tag varchar(100), lat double precision, lon double precision, secs_since_report integer, time_epoch bigint, time_str varchar(100), predictable boolean, heading integer);
+# create index ttc_vehicle_locations_idx on ttc_vehicle_locations (route_tag, time_epoch desc);
+# create index ttc_vehicle_locations_idx2 on ttc_vehicle_locations (vehicle_id, time_epoch desc);
+# 
+# create table predictions (fudgeroute VARCHAR(100), configroute VARCHAR(100), stoptag VARCHAR(100), time_retrieved_str varchar(30), time_of_prediction_str varchar(30), dirtag VARCHAR(100), vehicle_id VARCHAR(100), is_departure boolean, block VARCHAR(100), triptag VARCHAR(100), branch VARCHAR(100), affected_by_layover boolean, is_schedule_based boolean, delayed boolean, time_retrieved bigint, time_of_prediction bigint, rowid serial unique);
+# create index predictions_idx on predictions (fudgeroute, stoptag, time_retrieved desc);
+
 import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket, datetime, calendar
 from collections import defaultdict, Sequence
 import vinfo, geom, traffic, routes, yards, tracks, predictions
@@ -557,6 +566,7 @@ def purge_delete():
 	curs = conn().cursor()
 	# Delete all rows older than 12 hours:
 	curs.execute('delete from ttc_vehicle_locations where time < round(extract(epoch from clock_timestamp())*1000) - 1000*60*60*12;')
+	curs.execute('delete from predictions where time_retrieved < round(extract(epoch from clock_timestamp())*1000) - 1000*60*60*12;')
 	curs.close()
 
 def purge_vacuum():

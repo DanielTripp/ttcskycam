@@ -11,6 +11,7 @@ function do_it_for_sure() {
 
 	chmod u+x poll_predictions.py
 	chmod u+x poll_locations.py
+	chmod u+x purgedb.py
 
 	echo 'Done.'
 }
