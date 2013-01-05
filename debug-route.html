@@ -247,11 +247,11 @@ function set_fudge_route_stops_singledir(route_, dir_) {
 	for(var i in stops) {
 		var stop = stops[i];
 		var stoptag = stop["stoptag"], lat = stop["lat"], lon = stop["lon"];
-		draw_stop(lat, lon, dir_);
+		draw_stop(lat, lon, dir_, stoptag);
 	}
 }
 
-function draw_stop(lat_, lon_, dir_) {
+function draw_stop(lat_, lon_, dir_, stoptag_) {
 	var mark=null;
 	if(dir_==0) {
 		mark = new google.maps.Circle({
@@ -272,6 +272,10 @@ function draw_stop(lat_, lon_, dir_) {
 		});
 	}
 	g_objects.push(mark);
+
+	google.maps.event.addListener(mark, 'click', function() {
+		alert(sprintf('stoptag: %s', stoptag_));
+	});
 }
 
 function set_fudge_route_routepts(route_) {
@@ -499,6 +503,11 @@ function redraw_buildfudgeroute_path() {
 						<input type="radio" name="fudgeroute" value="spadinadir1" />Spadina dir 1<br/>
 						<input type="radio" name="fudgeroute" value="king" />King<br/>
 						<input type="radio" name="fudgeroute" value="queen" />Queen<br/>
+						<input type="radio" name="fudgeroute" value="dufferin" />Dufferin<br/>
+						<input type="radio" name="fudgeroute" value="ossington" />Ossington<br/>
+						<input type="radio" name="fudgeroute" value="lansdowne" />Lansdowne<br/>
+						<input type="radio" name="fudgeroute" value="college" />College<br/>
+						<input type="radio" name="fudgeroute" value="dupont" />Dupont<br/>
 						<input type="radio" name="fudgeroute" value="dundas" checked="checked" />Dundas<br/>
 					</td>
 				</tr>

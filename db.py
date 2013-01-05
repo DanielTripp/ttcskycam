@@ -2,12 +2,14 @@
 
 import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket, datetime, calendar
 from collections import defaultdict, Sequence
-import vinfo, geom, traffic, routes, yards, tracks
+import vinfo, geom, traffic, routes, yards, tracks, predictions
 from misc import *
 
 HOSTMONIKER_TO_IP = {'theorem': '72.2.4.176', 'black': '24.52.231.206'}
 
 VI_COLS = ' dir_tag, heading, vehicle_id, lat, lon, predictable, route_tag, secs_since_report, time_epoch, time '
+
+PREDICTION_COLS = ' fudgeroute, configroute, stoptag, time_retrieved, time_of_prediction, vehicle_id, is_departure, block, dirtag, triptag, branch, affected_by_layover, is_schedule_based, delayed'
 
 g_conn = None
 g_forced_hostmoniker = None
@@ -554,6 +556,32 @@ def purge():
 	curs.close()
 
 
+@trans
+def insert_predictions(predictions_):
+	assert isinstance(predictions_, Sequence)
+	curs = conn().cursor()
+	if len(predictions_) > 0:
+		for p in predictions_:
+			assert isinstance(p, predictions.Prediction)
+			cols = [p.froute, p.croute, p.stoptag, em_to_str(p.time_retrieved), em_to_str(p.time), p.dirtag, p.vehicle_id, 
+					p.is_departure, p.block, p.triptag, p.branch, p.affected_by_layover, p.is_schedule_based, p.delayed, 
+					p.time_retrieved, p.time]
+			curs.execute('INSERT INTO predictions VALUES (%s)' % ', '.join(['%s']*len(cols)), cols)
+	curs.close()
+
+# returns list of Prediction 
+def get_predictions(froute_, stoptag_):
+	curs = conn().cursor()
+	sqlstr = 'select '+PREDICTION_COLS+' from predictions where fudgeroute = %s and stoptag = %s ' \
+		+ ' and time_retrieved = (select max(time_retrieved) from predictions where fudgeroute = %s and stoptag = %s) ' \
+		+ ' order by time_of_prediction'
+	curs.execute(sqlstr, [froute_, stoptag_, froute_, stoptag_])
+	r = []
+	for row in curs:
+		r.append(predictions.Prediction(*row))
+	curs.close()
+	return r
+
 def t():
 	#curs = conn().cursor('cursor_%d' % (int(time.time()*1000)))
 	curs = conn().cursor()
@@ -568,7 +596,8 @@ def t():
 if __name__ == '__main__':
 
 
+	import pprint
+	pprint.pprint(get_predictions('queen', '14701'))
 
-	connect()
 
 
