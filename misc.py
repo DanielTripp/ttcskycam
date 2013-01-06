@@ -198,6 +198,40 @@ def uniq(seq_):
 def mofrs_to_dir(start_mofr_, dest_mofr_):
 	return (0 if dest_mofr_ > start_mofr_ else 1)
 
+# param round_step_millis_ if 0, don't round down.  (Indeed, don't round at all.) 
+def massage_time_arg(time_, round_step_millis_=0):
+	if isinstance(time_, str):
+		r = str_to_em(time_)
+	elif time_==0:
+		r = now_em()
+	else:
+		r = time_
+	if round_step_millis_ != 0:
+		r = round_down(r, round_step_millis_)
+	return r
+
+# 'off step' means 'steps shifted in phase by half the period, if you will'  
+def round_up_off_step(x_, step_):
+	r = round_down_off_step(x_, step_)
+	return r if r == x_ else r+step_
+
+def round_down_off_step(x_, step_):
+	assert type(x_) == int and type(step_) == int
+	return ((x_-step_/2)/step_)*step_ + step_/2
+
+def round_up(x_, step_):
+	r = round_down(x_, step_)
+	return r if r == x_ else r+step_
+
+def round_down(x_, step_):
+	assert type(x_) in (int, long, float) and type(step_) in (int, long)
+	return (long(x_)/step_)*step_
+
+def round(x_, step_):
+	rd = round_down(x_, step_)
+	ru = round_up(x_, step_)
+	return (rd if x_ - rd < ru - x_ else ru)
+
 
 if __name__ == '__main__':
 

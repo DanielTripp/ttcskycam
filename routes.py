@@ -32,6 +32,14 @@ class Stop:
 				return False
 		return True 
 
+	# 'recorded' currently means 'at an intersection', meaning we have predictions for that stop in our database. 
+	@property 
+	def are_predictions_recorded(self):
+		for i in get_intersections():
+			if self.stoptag in (i.froute1_dir0_stoptag, i.froute1_dir1_stoptag, i.froute2_dir0_stoptag, i.froute2_dir1_stoptag):
+				return True
+		return False
+
 	def __str__(self):
 		return 'Stop %10s mofr=%d ( %f, %f )' % ('"'+self.stoptag+'"', self.mofr, self.latlng.lat, self.latlng.lng)
 
@@ -97,9 +105,8 @@ class RouteInfo:
 						self.dir_to_stoptag_to_stop[direction_int][stoptag] = new_stop
 	
 	def init_stops_dir_to_mofr_to_stop_ordereddict(self):
-		# This is a redundant data structure for fast lookups. 
-		self.dir_to_mofr_to_stop_ordereddict = {}
-		self.dir_to_mofr_to_stop_ordereddict_keys = {}
+		self.dir_to_mofr_to_stop_ordereddict = {} # This is a redundant data structure for fast lookups. 
+		self.dir_to_mofr_to_stop_ordereddict_keys = {} # This is a redundant data structure on the above redundant data structure. 
 		for direction in (0, 1):
 			mofr_to_stop_ordereddict = OrderedDict()
 			self.dir_to_mofr_to_stop_ordereddict[direction] = mofr_to_stop_ordereddict
@@ -200,13 +207,30 @@ class RouteInfo:
 					% (self.name, latlng1_, latlng2_))
 		return (0 if mofr2 > mofr1 else 1)
 
+	def dir_of_stoptag(self, stoptag_):
+		for direction in (0, 1):
+			if stoptag_ in self.dir_to_stoptag_to_stop[direction]:
+				return direction
+		raise Exception('Couldn\'t find dir of stoptag %s in route %s' % (stoptag_, self.name))
+
+	def get_next_downstream_stop_with_predictions_recorded(self, stoptag_):
+		direction = self.dir_of_stoptag(stoptag_)
+		stop_mofrs = self.dir_to_mofr_to_stop_ordereddict_keys[direction][:]
+		if direction == 1:
+			stop_mofrs = stop_mofrs[::-1]
+		begin_stoptag_mofr = self.dir_to_stoptag_to_stop[direction][stoptag_].mofr
+		begin_stoptag_idx_in_stop_mofrs = stop_mofrs.index(begin_stoptag_mofr)
+		for stop in [self.dir_to_mofr_to_stop_ordereddict[direction][mofr] for mofr in stop_mofrs[begin_stoptag_idx_in_stop_mofrs:]]:
+			if stop.are_predictions_recorded:
+				return stop
+		raise Exception('failed to find next downstream predictions-recorded stop for route %s stoptag %s' % (self.name, stoptag_))
 
 def max_mofr(route_):
-	return get_routeinfo(route_).max_mofr()
+	return routeinfo(route_).max_mofr()
 
 g_routename_to_info = {}
 
-def get_routeinfo(routename_):
+def routeinfo(routename_):
 	routename = massage_to_fudgeroute(routename_)
 	if routename not in FUDGEROUTES:
 		raise Exception('route %s is unknown' % (routename))
@@ -232,7 +256,7 @@ def get_all_routes_latlons():
 	for fudgeroute in FUDGEROUTES:
 		r_l = []
 		r.append(r_l)
-		for routept in get_routeinfo(fudgeroute).routepts(0):
+		for routept in routeinfo(fudgeroute).routepts(0):
 			r_l.append([routept.lat, routept.lng])
 	return r
 
@@ -241,13 +265,13 @@ def latlon_to_mofr(route_, latlon_, tolerance_=0):
 	if route_ not in CONFIGROUTES and route_ not in FUDGEROUTES:
 		return -1
 	else:
-		return get_routeinfo(route_).latlon_to_mofr(latlon_, tolerance_)
+		return routeinfo(route_).latlon_to_mofr(latlon_, tolerance_)
 
 def mofr_to_latlon(route_, mofr_):
-	return get_routeinfo(route_).mofr_to_latlon(mofr_)
+	return routeinfo(route_).mofr_to_latlon(mofr_)
 
 def mofr_to_latlonnheading(route_, mofr_, dir_):
-	return get_routeinfo(route_).mofr_to_latlonnheading(mofr_, dir_)
+	return routeinfo(route_).mofr_to_latlonnheading(mofr_, dir_)
 
 def fudgeroute_to_configroutes(fudgeroute_name_):
 	if fudgeroute_name_ not in FUDGEROUTE_TO_CONFIGROUTES:
@@ -274,7 +298,7 @@ def get_trip_endpoint_info(orig_, dest_, visible_fudgeroutendirs_):
 			direction = (0 if orig_route_to_mofr[route] < dest_route_to_mofr[route] else 1)
 			routes_dir_in_visible_list = [x for x in visible_fudgeroutendirs_ if x[0] == route][0][1]
 			if direction == routes_dir_in_visible_list:
-				ri = get_routeinfo(route)
+				ri = routeinfo(route)
 				orig_stop = ri.mofr_to_stop(direction, orig_route_to_mofr[route])
 				dest_stop = ri.mofr_to_stop(direction, dest_route_to_mofr[route])
 				orig_latlng = ri.mofr_to_latlon(orig_stop.mofr, direction)
@@ -291,9 +315,6 @@ def get_route_to_mofr(latlon_):
 		if mofr != -1:
 			r[route] = mofr
 	return r
-
-def dir_from_latlngs(fudgeroutename_, latlng1_, latlng2_):
-	return get_routeinfo(fudgeroutename_).dir_from_latlngs(latlng1_, latlng2_)
 
 def get_configroute_to_fudgeroute_map():
 	return CONFIGROUTE_TO_FUDGEROUTE
@@ -335,7 +356,7 @@ def get_fudgeroutes_for_map_bounds(southwest_, northeast_, compassdir_, maxroute
 	for fudgeroute in FUDGEROUTES:
 		for dir in (0, 1):
 			fudgeroute_n_dir_to_score[(fudgeroute, dir)] = 0.0
-			for routelineseg_pt1, routelineseg_pt2 in hopscotch(get_routeinfo(fudgeroute).routepts(dir)):
+			for routelineseg_pt1, routelineseg_pt2 in hopscotch(routeinfo(fudgeroute).routepts(dir)):
 				if dir == 1:
 					routelineseg_pt1, routelineseg_pt2 = routelineseg_pt2, routelineseg_pt1
 				if geom.does_line_segment_overlap_box(routelineseg_pt1, routelineseg_pt2, southwest_, northeast_):
@@ -376,7 +397,7 @@ def get_fudgeroute_to_compassdir_to_intdir():
 	for fudgeroute in FUDGEROUTES:
 		r[fudgeroute] = {}
 		for intdir in (0, 1):
-			routepts = get_routeinfo(fudgeroute).routepts(intdir)
+			routepts = routeinfo(fudgeroute).routepts(intdir)
 			if intdir == 0:
 				heading = routepts[0].heading(routepts[-1])
 			else:
@@ -397,7 +418,7 @@ def heading_to_compassdir(heading_):
 
 
 def snaptest(fudgeroutename_, pt_, tolerance_=0):
-	return get_routeinfo(fudgeroutename_).snaptest(pt_, tolerance_)
+	return routeinfo(fudgeroutename_).snaptest(pt_, tolerance_)
 
 class Intersection:
 
@@ -456,7 +477,7 @@ def get_intersections_impl():
 	r = []
 	for routei, route1 in enumerate(FUDGEROUTES[:]):
 		for route2 in FUDGEROUTES[:][routei+1:]:
-			ri1 = get_routeinfo(route1); ri2 = get_routeinfo(route2)
+			ri1 = routeinfo(route1); ri2 = routeinfo(route2)
 			new_intersections = []
 			for route1_pt1, route1_pt2 in hopscotch(ri1.routepts(0)):
 				for route2_pt1, route2_pt2 in hopscotch(ri2.routepts(0)):
@@ -497,14 +518,7 @@ if __name__ == '__main__':
 
 	import pprint
 
-	ri = get_routeinfo('ossington')
+	ri = routeinfo('queen')
 
-	if 1:
-		for direction in (0, 1):
-			for mofr in range(-100, ri.max_mofr()+250, 133):
-				if 0:
-					print mofr, '-', new_mofr_to_stop(direction, mofr)
-				else:
-					print mofr, '-', ri.mofr_to_stop(direction, mofr)
-
+	print ri.get_next_downstream_recorded_stop('10102')
 
