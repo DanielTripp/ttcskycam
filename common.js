@@ -78,7 +78,7 @@ function dict_union(dict1_, dict2_) {
 function get_sync(url_, additional_options_) {
 	var options = {url:url_, async:false, 
 			error: function(jqXHR_, textStatus_, errorThrown_) {
-				alert("Error");
+				alert("get_sync('"+url_+"') error - "+errorThrown_);
 			}
 		};
 	if(additional_options_ != undefined) {
