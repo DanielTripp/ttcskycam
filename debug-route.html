@@ -238,16 +238,14 @@ function refresh_fudge_route() {
 }
 
 function set_fudge_route_stops_bothdirs(route_) {
-	set_fudge_route_stops_singledir(route_, 0);
-	set_fudge_route_stops_singledir(route_, 1);
-}
-
-function set_fudge_route_stops_singledir(route_, dir_) {
-	var stops = $.parseJSON(get_sync(sprintf('stops_%s_dir%d.json', (route_.substr(0, 7) == 'spadina' ? 'spadina' : route_), dir_)));
-	for(var i in stops) {
-		var stop = stops[i];
-		var stoptag = stop["stoptag"], lat = stop["lat"], lon = stop["lon"];
-		draw_stop(lat, lon, dir_, stoptag);
+	var dir_to_stoptag_to_stop = $.parseJSON(get_sync(sprintf('stops_%s.json', (route_.substr(0, 7) == 'spadina' ? 'spadina' : route_))));
+	for(var dir in dir_to_stoptag_to_stop) {
+		var stoptag_to_stop = dir_to_stoptag_to_stop[dir];
+		for(var stoptag in stoptag_to_stop) {
+			var stop = stoptag_to_stop[stoptag];
+			var lat = stop["lat"], lon = stop["lon"];
+			draw_stop(lat, lon, dir, stoptag);
+		}
 	}
 }
 
@@ -288,7 +286,7 @@ function set_fudge_route_routepts(route_) {
 			add_buildfudgeroute_marker(glatlons[i]);
 		}
 	} else {
-		var route_points = $.parseJSON(get_sync(sprintf('fudge_route_%s.json', route_)));
+		var route_points = $.parseJSON(get_sync(sprintf('fudge_route_%s.json', route_), {cache: false}));
 		//draw_path_polyline(latlonfloatarrays_to_googlemaps(route_points), 'rgb(255,0,0)');
 		var glatlons = latlonfloatarrays_to_googlemaps(route_points);
 		for(var i=0; i<glatlons.length; i++) {
