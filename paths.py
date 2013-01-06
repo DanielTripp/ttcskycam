@@ -22,7 +22,6 @@ class PathLeg:
 
 	@classmethod
 	def make_transit_leg(cls, froute_, start_mofr_, start_stoptag_hints_, dest_mofr_, dest_stoptag_hints_):
-		start_stoptag_hints_, dest_stoptag_hints_ = None, None # TDR 
 		ri = routes.routeinfo(froute_)
 		direction = (0 if start_mofr_ < dest_mofr_ else 1)
 
@@ -108,7 +107,6 @@ def get_path_est_arrival_time(t0_, path_):
 				raise Exception()
 			sim_time += leg_riding_time_secs*1000
 
-	print '---', em_to_str(sim_time) # TDR 
 	return sim_time
 
 # start_stoptag_hints_ and dest_stoptag_hints_ can be None, that is okay.  These arguments exist as an optimization 
