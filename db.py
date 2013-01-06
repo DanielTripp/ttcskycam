@@ -37,8 +37,9 @@ def connect():
 		driver_module = __import__(DATABASE_DRIVER_MODULE_NAME)
 	else:
 		saved_syspath = sys.path
-		while os.getcwd() in sys.path:
-			sys.path.remove(os.getcwd())
+		for path_elem_to_remove in ('', '.', os.getcwd()):
+			while path_elem_to_remove in sys.path:
+				sys.path.remove(path_elem_to_remove)
 		driver_module = __import__(DATABASE_DRIVER_MODULE_NAME)
 		sys.path = saved_syspath
 	g_conn = getattr(driver_module, 'connect')(*DATABASE_CONNECT_POSITIONAL_ARGS, **DATABASE_CONNECT_KEYWORD_ARGS)
