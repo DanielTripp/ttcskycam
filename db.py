@@ -328,7 +328,7 @@ def add_inside_overshots_for_locations(r_vis_, direction_, time_window_end_, log
 # Vehicles that are stuck badly also, at least sometimes, have a blank dir_tag for that time.  eg. vid 4104, 2012-09-24 13:00.
 # So here we make a point of not removing those.
 def remove_unwanted_detours(r_vis_, fudgeroute_, direction_, log_=False):
-	routes_general_heading = routes.get_routeinfo(fudgeroute_).general_heading(direction_)
+	routes_general_heading = routes.routeinfo(fudgeroute_).general_heading(direction_)
 	for detour in get_blank_dirtag_stretches(r_vis_):
 		unwanted = False
 		# Keep detours with a length of 1. This might not be right but they probably won't do much harm either.  
@@ -591,7 +591,9 @@ def insert_predictions(predictions_):
 	curs.close()
 
 # returns list of Prediction 
-def get_predictions(froute_, start_stoptag_, dest_stoptag_, time_=now_em()):
+def get_predictions(froute_, start_stoptag_, dest_stoptag_, time_):
+	assert routes.routeinfo(froute_).get_stop(start_stoptag_).are_predictions_recorded
+	time_ = massage_time_arg(time_, 60*1000)
 	curs = conn().cursor()
 	where_clause = ' where fudgeroute = %s and stoptag = %s and time_retrieved between %s and %s' 
 	sqlstr = 'select '+PREDICTION_COLS+' from predictions '+where_clause\
@@ -601,7 +603,16 @@ def get_predictions(froute_, start_stoptag_, dest_stoptag_, time_=now_em()):
 	r = []
 	for row in curs:
 		prediction = predictions.Prediction(*row)
-		if prediction.dirtag in routes.get_routeinfo(froute_).get_stop(dest_stoptag_).dirtags_serviced:
+
+		if prediction.time < time_: # Not a big deal.  Case is: if predictions have been not showing up in the db for the last few 
+			continue # minutes, then we may get some predictions from towards the beginning of the 15-minute window, 
+				# and the predicted arrival time of some of these may have already passed (assuming that time_ is the current time) 
+				# so there is no point in returning them. 
+
+		if dest_stoptag_ is not None:
+			if prediction.dirtag in routes.routeinfo(froute_).get_stop(dest_stoptag_).dirtags_serviced:
+				r.append(prediction)
+		else:
 			r.append(prediction)
 	curs.close()
 	return r
@@ -621,7 +632,10 @@ if __name__ == '__main__':
 
 
 	import pprint
-	pprint.pprint(get_predictions('queen', '14701', '6830'))
+	t = now_em()
+	broadview = '10272'; spadina = '1653'; roncesvalles = '9459'
+	pprint.pprint(get_predictions('queen', broadview, None, t))
+	pprint.pprint(get_predictions('queen', spadina, None, t))
 
 
 

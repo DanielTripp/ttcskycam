@@ -1,7 +1,7 @@
 #!/usr/bin/python2.6
 
 import sys, json, os.path
-import vinfo, geom, routes, predictions, mc, c, snaptogrid
+import vinfo, geom, routes, predictions, mc, c, snaptogrid, traffic 
 from misc import *
 
 class PathLeg:
@@ -23,7 +23,7 @@ class PathLeg:
 	@classmethod
 	def make_transit_leg(cls, froute_, start_mofr_, start_stoptag_hints_, dest_mofr_, dest_stoptag_hints_):
 		start_stoptag_hints_, dest_stoptag_hints_ = None, None # TDR 
-		ri = routes.get_routeinfo(froute_)
+		ri = routes.routeinfo(froute_)
 		direction = (0 if start_mofr_ < dest_mofr_ else 1)
 
 		def get_stop(mofr_, stoptag_hints_):
@@ -46,12 +46,12 @@ class PathLeg:
 	@property
 	def start_mofr(self):
 		assert self.mode == 'transit'
-		return routes.get_routeinfo(self.froute).stoptag_to_mofr(self.dir, self.start_stoptag)
+		return routes.routeinfo(self.froute).stoptag_to_mofr(self.dir, self.start_stoptag)
 
 	@property
 	def dest_mofr(self):
 		assert self.mode == 'transit'
-		return routes.get_routeinfo(self.froute).stoptag_to_mofr(self.dir, self.dest_stoptag)
+		return routes.routeinfo(self.froute).stoptag_to_mofr(self.dir, self.dest_stoptag)
 
 	@property
 	def dist_m(self):
@@ -90,30 +90,26 @@ def get_path_rough_time_estimate_secs(path_):
 
 	return r
 
-def get_path_time_estimate_secs_2(path_):
-	r = 0
-
+def get_path_est_arrival_time(t0_, path_):
 	WALKING_SPEED_MPS = 5*(1000.0/(60*60))
-	TRANSIT_SPEED_MPS = 20*(1000.0/(60*60))
-	walking_dist_m = sum(leg.dist_m for leg in path_ if leg.mode == 'walking')
-	r += walking_dist_m/WALKING_SPEED_MPS
 
-	transit_dist_m = sum(leg.dist_m for leg in path_ if leg.mode == 'transit')
-	r += transit_dist_m/TRANSIT_SPEED_MPS
+	sim_time = t0_
 
-	t0 = now_em()
-	sim_time = t0
 	for leg in path_:
 		if leg.mode == 'walking':
-			sim_time += walking_dist_m/WALKING_SPEED_MPS
+			sim_time += (leg.dist_m/WALKING_SPEED_MPS)*1000
 		else:
-			for prediction in db.get_predictions(leg.froute, leg.start_stoptag, leg.dest_stoptag):
-				if prediction.time_em > sim_time:
-					sim_time = prediction.time_em
+			for prediction in predictions.get_extrapolated_predictions(leg.froute, leg.start_stoptag, leg.dest_stoptag, t0_):
+				if prediction.time > sim_time:
+					sim_time = prediction.time
 					break
-			sim_time += leg.dist_m/TRANSIT_SPEED_MPS
+			leg_riding_time_secs = traffic.get_est_riding_time_secs(leg.froute, leg.start_mofr, leg.dest_mofr, True, t0_)
+			if leg_riding_time_secs == -1:
+				raise Exception()
+			sim_time += leg_riding_time_secs*1000
 
-	return int((sim_time - t0)/1000.0)
+	print '---', em_to_str(sim_time) # TDR 
+	return sim_time
 
 # start_stoptag_hints_ and dest_stoptag_hints_ can be None, that is okay.  These arguments exist as an optimization 
 # (within PathLeg.make_transit_leg()) so that mofr_to_stop() doesn't need to be called in many of these recursive 
@@ -154,7 +150,7 @@ def get_transit_paths_by_mofrs(start_froute_, start_mofr_, start_stoptag_hints_,
 def find_nearby_froutenmofrs(latlng_):
 	r = []
 	for froute in routes.FUDGEROUTES:
-		ri = routes.get_routeinfo(froute)
+		ri = routes.routeinfo(froute)
 		snap_result = ri.snaptogridcache.snap(latlng_, 1000)
 		if snap_result is not None:
 			pt_on_froute = snap_result[0]
@@ -162,8 +158,9 @@ def find_nearby_froutenmofrs(latlng_):
 	return r
 			
 # return list of list of PathLeg.
-def get_paths_by_latlngs(start_latlng_, dest_latlng_):
-	r = []
+def get_pathnarrivaltime_by_latlngs(start_latlng_, dest_latlng_, time_):
+	time_ = massage_time_arg(time_)
+	paths = []
 	start_nearby_froutenmofrs = find_nearby_froutenmofrs(start_latlng_)
 	dest_nearby_froutenmofrs = find_nearby_froutenmofrs(dest_latlng_)
 	for start_froute, start_mofr in start_nearby_froutenmofrs:
@@ -172,17 +169,16 @@ def get_paths_by_latlngs(start_latlng_, dest_latlng_):
 				start_walking_leg = PathLeg.make_walking_leg(start_latlng_, transit_path[0].start_latlng)
 				dest_walking_leg = PathLeg.make_walking_leg(transit_path[-1].dest_latlng, dest_latlng_)
 				total_path = [start_walking_leg] + transit_path + [dest_walking_leg]
-				r.append(total_path)
+				paths.append(total_path)
 
-	r.sort(key=get_path_rough_time_estimate_secs)
-	r = r[:50]
-	if 0: # TDR 
-		import pprint 
-		pprint.pprint(r)
-	#r.sort(key=get_path_time_estimate_secs_2)
-	#r = r[:15]
+	paths.sort(key=get_path_rough_time_estimate_secs)
+	paths = paths[:5]
+	pathnarrivaltimes = []
+	for path in paths:
+		pathnarrivaltimes.append((path, get_path_est_arrival_time(time_, path)))
+	pathnarrivaltimes.sort(key=lambda x: x[1])
 
-	return r
+	return pathnarrivaltimes
 
 
 if __name__ == '__main__':
@@ -196,8 +192,11 @@ if __name__ == '__main__':
 	start_latlng = geom.LatLng(43.64603733174995, -79.42480845650334)
 	dest_latlng = geom.LatLng(43.67044104830969, -79.40652651985783)
 
-	#pprint.pprint(get_paths_by_latlngs(start_latlng, dest_latlng))
-	get_paths_by_latlngs(start_latlng, dest_latlng)
-
+	#pprint.pprint(get_pathnarrivaltime_by_latlngs(start_latlng, dest_latlng, '2013-01-05 18:00'))
+	for path, arrivaltime in get_pathnarrivaltime_by_latlngs(start_latlng, dest_latlng, '2013-01-05 18:30:59'):
+		print em_to_str(arrivaltime)
+		pprint.pprint(path)
+		print
+	
 
 

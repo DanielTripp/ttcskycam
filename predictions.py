@@ -2,7 +2,7 @@
 
 import sys, subprocess, re, time, xml.dom, xml.dom.minidom, traceback, json
 from collections import defaultdict
-import routes
+import routes, db, traffic
 from misc import *
 
 class Prediction:
@@ -46,6 +46,31 @@ class Prediction:
 
 	def __repr__(self):
 		return self.__str__()
+
+# param dest_stoptag_ can be None 
+def get_extrapolated_predictions(froute_, start_stoptag_, dest_stoptag_, time_):
+	assert isinstance(froute_, basestring) and isinstance(start_stoptag_, basestring)
+	time_ = massage_time_arg(time_, 60*1000)
+	recorded_stop = routes.routeinfo(froute_).get_next_downstream_stop_with_predictions_recorded(start_stoptag_)
+	predictions_from_db = db.get_predictions(froute_, recorded_stop.stoptag, dest_stoptag_, time_)
+	if recorded_stop == start_stoptag_:
+		return predictions_from_db
+	else:
+		ri = routes.routeinfo(froute_)
+		start_stop = ri.get_stop(start_stoptag_)
+		t = now_em()
+		start_to_recorded_stop_riding_time_secs = traffic.get_est_riding_time_secs(froute_, start_stop.mofr, recorded_stop.mofr, \
+				True, time_)
+		if start_to_recorded_stop_riding_time_secs == -1:
+			raise Exception()
+		r = []
+		while predictions_from_db:
+			prediction = predictions_from_db.pop(0)
+			prediction.time -= start_to_recorded_stop_riding_time_secs*1000
+			if prediction.time > time_:
+				r.append(prediction)
+		return r
+
 
 if __name__ == '__main__':
 
