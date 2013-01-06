@@ -21,10 +21,20 @@ class PathLeg:
 		return cls('walking', start_latlng_, dest_latlng_, None, None, None, None)
 
 	@classmethod
-	def make_transit_leg(cls, froute_, start_mofr_, dest_mofr_):
+	def make_transit_leg(cls, froute_, start_mofr_, start_stoptag_hints_, dest_mofr_, dest_stoptag_hints_):
+		start_stoptag_hints_, dest_stoptag_hints_ = None, None # TDR 
 		ri = routes.get_routeinfo(froute_)
 		direction = (0 if start_mofr_ < dest_mofr_ else 1)
-		start_stop = ri.mofr_to_stop(start_mofr_, direction); dest_stop = ri.mofr_to_stop(dest_mofr_, direction)
+
+		def get_stop(mofr_, stoptag_hints_):
+			if stoptag_hints_ is not None and direction in stoptag_hints_:
+				stoptag = stoptag_hints_[direction]
+				return ri.get_stop(stoptag)
+			else:
+				return ri.mofr_to_stop(direction, mofr_)
+
+		start_stop = get_stop(start_mofr_, start_stoptag_hints_)
+		dest_stop = get_stop(dest_mofr_, dest_stoptag_hints_)
 		return cls('transit', start_stop.latlng, dest_stop.latlng, froute_, direction, start_stop.stoptag, dest_stop.stoptag)
 
 	def is_walking(self):
@@ -97,7 +107,7 @@ def get_path_time_estimate_secs_2(path_):
 		if leg.mode == 'walking':
 			sim_time += walking_dist_m/WALKING_SPEED_MPS
 		else:
-			for prediction in predictions.get_predictions(leg.froute, leg.start_stoptag, leg.dest_stoptag):
+			for prediction in db.get_predictions(leg.froute, leg.start_stoptag, leg.dest_stoptag):
 				if prediction.time_em > sim_time:
 					sim_time = prediction.time_em
 					break
@@ -105,26 +115,40 @@ def get_path_time_estimate_secs_2(path_):
 
 	return int((sim_time - t0)/1000.0)
 
+# start_stoptag_hints_ and dest_stoptag_hints_ can be None, that is okay.  These arguments exist as an optimization 
+# (within PathLeg.make_transit_leg()) so that mofr_to_stop() doesn't need to be called in many of these recursive 
+# cases where we already know the stoptag, because we just got the mofr from an intersection definition. 
+# 
 # return list of list of PathLeg.
-def get_transit_paths_by_mofrs(start_froute_, start_mofr_, dest_froute_, dest_mofr_, max_transit_routes_, visited_froutes_=set()):
+def get_transit_paths_by_mofrs(start_froute_, start_mofr_, start_stoptag_hints_, dest_froute_, dest_mofr_, dest_stoptag_hints_, \
+		max_transit_routes_, visited_froutes_=set()):
 	assert max_transit_routes_ >= 1
 	visited_froutes = visited_froutes_.copy()
 	visited_froutes.add(start_froute_)
+
 	r = []
 	if start_froute_ == dest_froute_:
-		r.append(PathLeg.make_transit_leg(start_froute_, start_mofr_, dest_mofr_))
-	for startroutes_crossmofr, crossroutenmofr in routes.get_intersections_mofr_to_crossroutenmofr(start_froute_).iteritems():
-		crossroute, crossroute_intersect_mofr = crossroutenmofr
-		if crossroute in visited_froutes:
+		r.append(PathLeg.make_transit_leg(start_froute_, start_mofr_, start_stoptag_hints_, dest_mofr_, dest_stoptag_hints_))
+	for mofrndirnstoptag, halfint in routes.get_mofrndirnstoptag_to_halfintersection(start_froute_, start_mofr_).iteritems():
+		startroutes_crossmofr, direction, startroutes_crossstoptag = mofrndirnstoptag
+		if halfint.froute in visited_froutes:
 			continue
-		if crossroute == dest_froute_:
-			r.append([PathLeg.make_transit_leg(start_froute_, start_mofr_, startroutes_crossmofr), 
-					PathLeg.make_transit_leg(dest_froute_, crossroute_intersect_mofr, dest_mofr_)])
+		if halfint.froute == dest_froute_:
+			leg1_dest_stoptag_hints = {direction: startroutes_crossstoptag}
+			leg2_start_stoptag_hints = {0: halfint.dir0_stoptag, 1: halfint.dir1_stoptag}
+			r.append([PathLeg.make_transit_leg(start_froute_, start_mofr_, start_stoptag_hints_, startroutes_crossmofr, leg1_dest_stoptag_hints), 
+					PathLeg.make_transit_leg(dest_froute_, halfint.mofr, leg2_start_stoptag_hints, dest_mofr_, dest_stoptag_hints_)])
 		else:
 			if max_transit_routes_ > 1:
-				for subpath in get_transit_paths_by_mofrs(crossroute, crossroute_intersect_mofr, dest_froute_, dest_mofr_, max_transit_routes_-1, visited_froutes):
-					if len(uniq([x.froute for x in subpath])) < max_transit_routes_+1:
-						r.append([PathLeg.make_transit_leg(start_froute_, start_mofr_, startroutes_crossmofr)] + subpath)
+				halfint_stoptag_hints = {0: halfint.dir0_stoptag, 1: halfint.dir1_stoptag}
+				for subpath in get_transit_paths_by_mofrs(halfint.froute, halfint.mofr, halfint_stoptag_hints, \
+							dest_froute_, dest_mofr_, dest_stoptag_hints_, \
+							max_transit_routes_-1, visited_froutes):
+					num_transit_routes_in_subpath = len(uniq([x.froute for x in subpath]))
+					if num_transit_routes_in_subpath < max_transit_routes_+1:
+						new_leg = PathLeg.make_transit_leg(start_froute_, start_mofr_, start_stoptag_hints_, \
+								startroutes_crossmofr, {direction: startroutes_crossstoptag})
+						r.append([new_leg] + subpath)
 	return r
 
 def find_nearby_froutenmofrs(latlng_):
@@ -144,19 +168,19 @@ def get_paths_by_latlngs(start_latlng_, dest_latlng_):
 	dest_nearby_froutenmofrs = find_nearby_froutenmofrs(dest_latlng_)
 	for start_froute, start_mofr in start_nearby_froutenmofrs:
 		for dest_froute, dest_mofr in dest_nearby_froutenmofrs:
-			for transit_path in get_transit_paths_by_mofrs(start_froute, start_mofr, dest_froute, dest_mofr, 4):
+			for transit_path in get_transit_paths_by_mofrs(start_froute, start_mofr, None, dest_froute, dest_mofr, None, 4):
 				start_walking_leg = PathLeg.make_walking_leg(start_latlng_, transit_path[0].start_latlng)
 				dest_walking_leg = PathLeg.make_walking_leg(transit_path[-1].dest_latlng, dest_latlng_)
 				total_path = [start_walking_leg] + transit_path + [dest_walking_leg]
 				r.append(total_path)
 
 	r.sort(key=get_path_rough_time_estimate_secs)
-	r = r[:10]
+	r = r[:50]
 	if 0: # TDR 
 		import pprint 
 		pprint.pprint(r)
 	#r.sort(key=get_path_time_estimate_secs_2)
-	r = r[:5]
+	#r = r[:15]
 
 	return r
 
@@ -172,10 +196,8 @@ if __name__ == '__main__':
 	start_latlng = geom.LatLng(43.64603733174995, -79.42480845650334)
 	dest_latlng = geom.LatLng(43.67044104830969, -79.40652651985783)
 
-	pprint.pprint(get_paths_by_latlngs(start_latlng, dest_latlng))
-
-
-
+	#pprint.pprint(get_paths_by_latlngs(start_latlng, dest_latlng))
+	get_paths_by_latlngs(start_latlng, dest_latlng)
 
 
 

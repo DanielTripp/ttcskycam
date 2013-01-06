@@ -1,6 +1,7 @@
 #!/usr/bin/python2.6
 
-import sys, json, os.path
+import sys, json, os.path, bisect
+from backport_OrderedDict import *
 import vinfo, geom, mc, c, snaptogrid
 from misc import *
 
@@ -76,6 +77,10 @@ class RouteInfo:
 					sum(pt1.dist_m(pt2) for pt1, pt2 in hopscotch(self.routepts(1)))) < 0.01
 
 	def init_stops(self):
+		self.init_stops_dir_to_stoptag_to_stop()
+		self.init_stops_dir_to_mofr_to_stop_ordereddict()
+
+	def init_stops_dir_to_stoptag_to_stop(self):
 		self.dir_to_stoptag_to_stop = {}
 		with open('stops_%s.json' % self.name, 'r') as fin:
 			stops_file_content_json = json.load(fin)
@@ -87,10 +92,41 @@ class RouteInfo:
 				for stoptag, stopdetails in stops_file_content_json[direction_str].iteritems():
 					assert set(stopdetails.keys()) == set(['lat', 'lon', 'dirtags_serviced'])
 					latlng = geom.LatLng(stopdetails['lat'], stopdetails['lon']); dirtags_serviced = stopdetails['dirtags_serviced']
-					mofr = self.latlon_to_mofr(latlng)
-					if mofr != -1:
-						self.dir_to_stoptag_to_stop[direction_int][stoptag] = Stop(stoptag, latlng, mofr, dirtags_serviced)
+					new_stop = Stop(stoptag, latlng, self.latlon_to_mofr(latlng), dirtags_serviced)
+					if new_stop.mofr != -1 and not new_stop.is_sunday_only:
+						self.dir_to_stoptag_to_stop[direction_int][stoptag] = new_stop
 	
+	def init_stops_dir_to_mofr_to_stop_ordereddict(self):
+		# This is a redundant data structure for fast lookups. 
+		self.dir_to_mofr_to_stop_ordereddict = {}
+		self.dir_to_mofr_to_stop_ordereddict_keys = {}
+		for direction in (0, 1):
+			mofr_to_stop_ordereddict = OrderedDict()
+			self.dir_to_mofr_to_stop_ordereddict[direction] = mofr_to_stop_ordereddict
+			mofr_to_stop_unordereddict = file_under_key(self.dir_to_stoptag_to_stop[direction].values(), lambda stop: stop.mofr, True)
+			for mofr in sorted(mofr_to_stop_unordereddict.keys()):
+				stop = mofr_to_stop_unordereddict[mofr]
+				mofr_to_stop_ordereddict[mofr] = stop
+
+			# Caching the list of keys too.  This may seem like optimization overkill but even this keys() 
+			# call was cumulatively taking half a second in a simple path-finding test case. 
+			self.dir_to_mofr_to_stop_ordereddict_keys[direction] = mofr_to_stop_ordereddict.keys()
+
+	def mofr_to_stop(self, dir_, mofr_):
+		assert dir_ in (0, 1) and isinstance(mofr_, int)
+		mofr_to_stop_ordereddict = self.dir_to_mofr_to_stop_ordereddict[dir_]
+		ordered_mofrs = self.dir_to_mofr_to_stop_ordereddict_keys[dir_]
+		bisect_idx = bisect.bisect_left(ordered_mofrs, mofr_)
+
+		# So either the stop at bisect_idx or bisect_idx-1 is the closest stop that we're looking for:
+		possible_stops = []
+		def add_possible_stop_maybe(idx__):
+			if 0 <= idx__ < len(ordered_mofrs):
+				possible_stops.append(mofr_to_stop_ordereddict[ordered_mofrs[idx__]])
+		add_possible_stop_maybe(bisect_idx)
+		add_possible_stop_maybe(bisect_idx-1)
+		return min(possible_stops, key=lambda stop: abs(stop.mofr - mofr_))
+
 	def get_stop(self, stoptag_):
 		for direction in (0, 1):
 			if stoptag_ in self.dir_to_stoptag_to_stop[direction]:
@@ -138,10 +174,6 @@ class RouteInfo:
 				pt = curpt.subtract(prevpt).scale((mofr_-prevmofr)/float(curmofr-prevmofr)).add(prevpt)
 				return (pt, prevpt.heading(curpt) if dir_==0 else curpt.heading(prevpt))
 		return None
-
-	def mofr_to_stop(self, mofr_, dir_):
-		return min((stop for stoptag, stop in self.dir_to_stoptag_to_stop[dir_].iteritems() if not stop.is_sunday_only), 
-				key=lambda stop: abs(stop.mofr - mofr_))
 
 	def stoptag_to_mofr(self, dir_, stoptag_):
 		return self.dir_to_stoptag_to_stop[dir_][stoptag_].mofr
@@ -243,8 +275,8 @@ def get_trip_endpoint_info(orig_, dest_, visible_fudgeroutendirs_):
 			routes_dir_in_visible_list = [x for x in visible_fudgeroutendirs_ if x[0] == route][0][1]
 			if direction == routes_dir_in_visible_list:
 				ri = get_routeinfo(route)
-				orig_stop = ri.mofr_to_stop(orig_route_to_mofr[route], direction)
-				dest_stop = ri.mofr_to_stop(dest_route_to_mofr[route], direction)
+				orig_stop = ri.mofr_to_stop(direction, orig_route_to_mofr[route])
+				dest_stop = ri.mofr_to_stop(direction, dest_route_to_mofr[route])
 				orig_latlng = ri.mofr_to_latlon(orig_stop.mofr, direction)
 				dest_latlng = ri.mofr_to_latlon(dest_stop.mofr, direction)
 				return {'route': route, 'direction': direction, 
@@ -389,62 +421,21 @@ class Intersection:
 	def __repr__(self):
 		return self.__str__()
 
-class PathLeg:
+class HalfIntersection:
 
-	def __init__(self, mode_, start_latlng_, dest_latlng_, froute_, dir_, start_stoptag_, dest_stoptag_):
-		assert mode_ in ('walking', 'transit')
-		self.mode = mode_
-		self.start_latlng = start_latlng_
-		self.dest_latlng = dest_latlng_
+	def __init__(self, froute_, mofr_, dir0_stoptag_, dir1_stoptag_, latlng_):
 		self.froute = froute_
-		self.dir = dir_
-		self.start_stoptag = start_stoptag_
-		self.dest_stoptag = dest_stoptag_
-
-	@classmethod
-	def make_walking_leg(cls, start_latlng_, dest_latlng_):
-		return cls('walking', start_latlng_, dest_latlng_, None, None, None, None)
-
-	@classmethod
-	def make_transit_leg(cls, froute_, start_mofr_, dest_mofr_):
-		ri = get_routeinfo(froute_)
-		direction = (0 if start_mofr_ < dest_mofr_ else 1)
-		start_stop = ri.mofr_to_stop(start_mofr_, direction); dest_stop = ri.mofr_to_stop(dest_mofr_, direction)
-		return cls('transit', start_stop.latlng, dest_stop.latlng, froute_, direction, start_stop.stoptag, dest_stop.stoptag)
-
-	def is_walking(self):
-		return self.mode == 'walking'
-
-	def is_transit(self):
-		return self.mode == 'transit'
-
-	@property
-	def start_mofr(self):
-		assert self.mode == 'transit'
-		return get_routeinfo(self.froute).stoptag_to_mofr(self.dir, self.start_stoptag)
-
-	@property
-	def dest_mofr(self):
-		assert self.mode == 'transit'
-		return get_routeinfo(self.froute).stoptag_to_mofr(self.dir, self.dest_stoptag)
-
-	@property
-	def dist_m(self):
-		if self.mode == 'walking':
-			return int(self.start_latlng.dist_m(self.dest_latlng))
-		else:
-			return int(abs(self.dest_mofr-self.start_mofr))
+		self.mofr = mofr_
+		self.dir0_stoptag = dir0_stoptag_
+		self.dir1_stoptag = dir1_stoptag_
+		self.latlng = latlng_
 
 	def __str__(self):
-		dist_kms = self.dist_m/1000.0
-		if self.mode == 'walking':
-			return 'PathLeg(walking, for %.1f kms, from %s to %s)' % (dist_kms, self.start_latlng, self.dest_latlng)
-		else:
-			return 'PathLeg(transit, %s, dir=%d for %.1f kms, from stoptag %s %s to stoptag %s %s' \
-					% (self.froute, self.dir, dist_kms, self.start_stoptag, self.start_latlng, self.dest_stoptag, self.dest_latlng)
+		return 'HalfIntersection(%s, %d, %s, %s, %s)' % (self.froute, self.mofr, self.dir0_stoptag, self.dir1_stoptag, str(self.latlng))
 
 	def __repr__(self):
 		return self.__str__()
+
 		
 
 g_intersections = None
@@ -472,10 +463,10 @@ def get_intersections_impl():
 					intersect_latlng = geom.get_line_segment_intersection(route1_pt1, route1_pt2, route2_pt1, route2_pt2)
 					if intersect_latlng is not None:
 						route1mofr = ri1.latlon_to_mofr(intersect_latlng); route2mofr = ri2.latlon_to_mofr(intersect_latlng)
-						route1_dir0_stoptag = ri1.mofr_to_stop(route1mofr, 0).stoptag
-						route1_dir1_stoptag = ri1.mofr_to_stop(route1mofr, 1).stoptag
-						route2_dir0_stoptag = ri2.mofr_to_stop(route2mofr, 0).stoptag
-						route2_dir1_stoptag = ri2.mofr_to_stop(route2mofr, 1).stoptag
+						route1_dir0_stoptag = ri1.mofr_to_stop(0, route1mofr).stoptag
+						route1_dir1_stoptag = ri1.mofr_to_stop(1, route1mofr).stoptag
+						route2_dir0_stoptag = ri2.mofr_to_stop(0, route2mofr).stoptag
+						route2_dir1_stoptag = ri2.mofr_to_stop(1, route2mofr).stoptag
 						new_intersection = Intersection(route1, route1mofr, route2, route2mofr, 
 								route1_dir0_stoptag, route1_dir1_stoptag, route2_dir0_stoptag, route2_dir1_stoptag, 
 								intersect_latlng)
@@ -489,66 +480,31 @@ def get_intersections_impl():
 			r += new_intersections
 	return r
 
-def get_intersections_mofr_to_crossroutenmofr(froute_):
+def get_mofrndirnstoptag_to_halfintersection(froute_, mofr_):
 	r = {}
 	for i in get_intersections():
-		for this_route, this_mofr, other_route, other_mofr \
-				in [(i.froute1, i.froute1mofr, i.froute2, i.froute2mofr), (i.froute2, i.froute2mofr, i.froute1, i.froute1mofr)]:
-			if this_route == froute_:
-				r[this_mofr] = (other_route, other_mofr)
-	return r
-
-def get_path_rough_time_estimate_secs(path_):
-	r = 0
-
-	WALKING_SPEED_MPS = 5*(1000.0/(60*60))
-	walking_dist_m = sum(leg.dist_m for leg in path_ if leg.mode == 'walking')
-	r += walking_dist_m/WALKING_SPEED_MPS
-
-	TRANSIT_SPEED_MPS = 20*(1000.0/(60*60))
-	transit_dist_m = sum(leg.dist_m for leg in path_ if leg.mode == 'transit')
-	r += transit_dist_m/TRANSIT_SPEED_MPS
-
-	# The initial wait for the first vehicle is not really a 'transfer' but it is the same as one, for our purposes here. 
-	num_transfers = len([leg for leg in path_ if leg.mode == 'transit']) 
-	TRANSIT_TRANSFER_WAITING_TIME_SECS = 7*60
-	r += num_transfers*TRANSIT_TRANSFER_WAITING_TIME_SECS
-
-	return r
-
-# return list of list of PathLeg.
-def get_paths(start_froute_, start_mofr_, dest_froute_, dest_mofr_, max_transfers_, visited_froutes_=set()):
-	assert max_transfers_ >= 1
-	visited_froutes = visited_froutes_.copy()
-	visited_froutes.add(start_froute_)
-	r = []
-	if start_froute_ == dest_froute_:
-		r.append(PathLeg.make_transit_leg(start_froute_, start_mofr_, dest_mofr_))
-	for startroutes_crossmofr, crossroutenmofr in get_intersections_mofr_to_crossroutenmofr(start_froute_).iteritems():
-		crossroute, crossroute_intersect_mofr = crossroutenmofr
-		if crossroute in visited_froutes:
-			continue
-		if crossroute == dest_froute_:
-			r.append([PathLeg.make_transit_leg(start_froute_, start_mofr_, startroutes_crossmofr), 
-					PathLeg.make_transit_leg(dest_froute_, crossroute_intersect_mofr, dest_mofr_)])
-		else:
-			if max_transfers_ > 1:
-				for subpath in get_paths(crossroute, crossroute_intersect_mofr, dest_froute_, dest_mofr_, max_transfers_-1, visited_froutes):
-					if len(uniq([x.froute for x in subpath])) < max_transfers_+1:
-						r.append([PathLeg.make_transit_leg(start_froute_, start_mofr_, startroutes_crossmofr)] + subpath)
-	r.sort(key=get_path_rough_time_estimate_secs)
+		if i.froute1 == froute_:
+			direction = mofrs_to_dir(mofr_, i.froute1mofr)
+			stoptag = (i.froute1_dir0_stoptag if direction == 0 else i.froute1_dir1_stoptag)
+			r[(i.froute1mofr,direction,stoptag)] = HalfIntersection(i.froute2, i.froute2mofr, i.froute2_dir0_stoptag, i.froute2_dir1_stoptag, i.latlng)
+		elif i.froute2 == froute_:
+			direction = mofrs_to_dir(mofr_, i.froute2mofr)
+			stoptag = (i.froute2_dir0_stoptag if direction == 0 else i.froute2_dir1_stoptag)
+			r[(i.froute2mofr,direction,stoptag)] = HalfIntersection(i.froute1, i.froute1mofr, i.froute1_dir0_stoptag, i.froute1_dir1_stoptag, i.latlng)
 	return r
 
 if __name__ == '__main__':
 
 	import pprint
 
-	#print len(get_paths('dundas', 1, 'dupont', 7000, 7))
-	#pprint.pprint(get_paths('dundas', 400, 'dupont', 7000, 4)[:5])
-	#get_routeinfo('queen')
 	ri = get_routeinfo('ossington')
-	for dir in (0, 1):
-		for mofr in range(-100, ri.max_mofr()+250, 133):
-			print ri.mofr_to_stop(mofr, dir)
+
+	if 1:
+		for direction in (0, 1):
+			for mofr in range(-100, ri.max_mofr()+250, 133):
+				if 0:
+					print mofr, '-', new_mofr_to_stop(direction, mofr)
+				else:
+					print mofr, '-', ri.mofr_to_stop(direction, mofr)
 
 

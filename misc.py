@@ -136,12 +136,21 @@ def avg(lo_, hi_, ratio_=0.5):
 	else:
 		return r
 
-def file_under_key(list_, key_):
+def file_under_key(list_, key_, assume_no_duplicate_keys_=False):
 	assert callable(key_)
-	r = defaultdict(lambda: [])
-	for e in list_:
-		r[key_(e)].append(e)
-	return dict(r)
+	if assume_no_duplicate_keys_:
+		r = {}
+		for e in list_:
+			key = key_(e)
+			if key in r:
+				raise Exception('duplicate key "%s" found' % key)
+			r[key] = e
+		return r
+	else:
+		r = defaultdict(lambda: [])
+		for e in list_:
+			r[key_(e)].append(e)
+		return dict(r)
 
 # Return only elements for which predicate is true.  Group them as they appeared in input list as runs of trues.
 def get_maximal_sublists2(list_, predicate_):
@@ -185,6 +194,10 @@ def uniq(seq_):
 		last_val = e
 		first_elem = False
 	return r
+
+def mofrs_to_dir(start_mofr_, dest_mofr_):
+	return (0 if dest_mofr_ > start_mofr_ else 1)
+
 
 if __name__ == '__main__':
 

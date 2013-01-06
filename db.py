@@ -591,15 +591,18 @@ def insert_predictions(predictions_):
 	curs.close()
 
 # returns list of Prediction 
-def get_predictions(froute_, stoptag_):
+def get_predictions(froute_, start_stoptag_, dest_stoptag_, time_=now_em()):
 	curs = conn().cursor()
-	sqlstr = 'select '+PREDICTION_COLS+' from predictions where fudgeroute = %s and stoptag = %s ' \
-		+ ' and time_retrieved = (select max(time_retrieved) from predictions where fudgeroute = %s and stoptag = %s) ' \
+	where_clause = ' where fudgeroute = %s and stoptag = %s and time_retrieved between %s and %s' 
+	sqlstr = 'select '+PREDICTION_COLS+' from predictions '+where_clause\
+		+ ' and time_retrieved = (select max(time_retrieved) from predictions '+where_clause+') ' \
 		+ ' order by time_of_prediction'
-	curs.execute(sqlstr, [froute_, stoptag_, froute_, stoptag_])
+	curs.execute(sqlstr, [froute_, start_stoptag_, time_-1000*60*15, time_]*2)
 	r = []
 	for row in curs:
-		r.append(predictions.Prediction(*row))
+		prediction = predictions.Prediction(*row)
+		if prediction.dirtag in routes.get_routeinfo(froute_).get_stop(dest_stoptag_).dirtags_serviced:
+			r.append(prediction)
 	curs.close()
 	return r
 
@@ -618,7 +621,7 @@ if __name__ == '__main__':
 
 
 	import pprint
-	pprint.pprint(get_predictions('queen', '14701'))
+	pprint.pprint(get_predictions('queen', '14701', '6830'))
 
 
 
