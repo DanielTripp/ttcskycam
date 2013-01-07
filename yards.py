@@ -44,9 +44,8 @@ def in_a_yard_latlng(latlng_):
 		# The order here is important because the entire point of maintaining the bounding boxes is for them to
 		# act as a fail-fast pre-test for the full 'inside polygon' test.  This short-circuit boolean 'and'
 		# operator here accomplishes this.
-#		if latlng_.is_within_box(yard_bounding_box.southwest, yard_bounding_box.northeast) \
-#				and latlng_.inside_polygon(yard_polygon_pts):
-		if latlng_.inside_polygon(yard_polygon_pts): # TDR 
+		if latlng_.is_within_box(yard_bounding_box.southwest, yard_bounding_box.northeast) \
+				and latlng_.inside_polygon(yard_polygon_pts):
 			return True
 	return False
 
