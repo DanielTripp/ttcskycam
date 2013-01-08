@@ -3,6 +3,8 @@
 import geom, routes
 from misc import *
 
+DONT_USE_WRITTEN_MOFRS = os.path.exists('DONT_USE_WRITTEN_MOFRS')
+
 class VehicleInfo:
 	
 	@classmethod 
@@ -15,10 +17,11 @@ class VehicleInfo:
 			(True if elem_.getAttribute('predictable').lower() == 'true' else False),
 			str(elem_.getAttribute('routeTag')),
 			int(elem_.getAttribute('secsSinceReport')),  
-			0L, 0L)
+			0L, 0L, None, None)
 		return r
 
-	def __init__(self, dir_tag_, heading_, vehicle_id_, lat_, lon_, predictable_, route_tag_, secs_since_report_, time_epoch_, time_):
+	def __init__(self, dir_tag_, heading_, vehicle_id_, lat_, lon_, predictable_, route_tag_, secs_since_report_, time_epoch_, time_, \
+				mofr_, widemofr_):
 		assert type(dir_tag_) == str and type(heading_) == int and type(vehicle_id_) == str \
 			and type(lat_) == float and type(lon_) == float \
 			and type(predictable_) == bool and type(route_tag_) == str \
@@ -32,8 +35,8 @@ class VehicleInfo:
 		self.secs_since_report = secs_since_report_
 		self.time_epoch = time_epoch_
 		self.time = time_
-		self._mofr = None
-		self._widemofr = None
+		self._mofr = (None if DONT_USE_WRITTEN_MOFRS else mofr_)
+		self._widemofr = (None if DONT_USE_WRITTEN_MOFRS else widemofr_)
 		self.is_dir_tag_corrected = False
 
 	def calc_time(self):

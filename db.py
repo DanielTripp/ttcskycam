@@ -2,7 +2,7 @@
 
 # Tables involved: 
 # 
-# create table ttc_vehicle_locations (vehicle_id varchar(100), route_tag varchar(100), dir_tag varchar(100), lat double precision, lon double precision, secs_since_report integer, time_epoch bigint, time_str varchar(100), predictable boolean, heading integer);
+# create table ttc_vehicle_locations (vehicle_id varchar(100), route_tag varchar(100), dir_tag varchar(100), lat double precision, lon double precision, secs_since_report integer, time_epoch bigint, time_str varchar(100), predictable boolean, heading integer, rowid serial unique, mofr integer, widemofr integer);
 # create index ttc_vehicle_locations_idx on ttc_vehicle_locations (route_tag, time_epoch desc);
 # create index ttc_vehicle_locations_idx2 on ttc_vehicle_locations (vehicle_id, time_epoch desc);
 # 
@@ -16,9 +16,11 @@ from misc import *
 
 HOSTMONIKER_TO_IP = {'theorem': '72.2.4.176', 'black': '24.52.231.206'}
 
-VI_COLS = ' dir_tag, heading, vehicle_id, lat, lon, predictable, route_tag, secs_since_report, time_epoch, time '
+VI_COLS = ' dir_tag, heading, vehicle_id, lat, lon, predictable, route_tag, secs_since_report, time_epoch, time, mofr, widemofr '
 
 PREDICTION_COLS = ' fudgeroute, configroute, stoptag, time_retrieved, time_of_prediction, vehicle_id, is_departure, block, dirtag, triptag, branch, affected_by_layover, is_schedule_based, delayed'
+
+WRITE_MOFRS = os.path.exists('WRITE_MOFRS')
 
 g_conn = None
 g_forced_hostmoniker = None
@@ -95,9 +97,13 @@ def trans(f):
 @trans
 def insert_vehicle_info(vi_):
 	curs = conn().cursor()
+	if WRITE_MOFRS:
+		mofr = vi_.mofr; widemofr = vi_.widemofr
+	else:
+		mofr = None; widemofr = None
 	cols = [vi_.vehicle_id, vi_.route_tag, vi_.dir_tag, vi_.lat, vi_.lng, vi_.secs_since_report, vi_.time_epoch, \
-		vi_.predictable, vi_.heading, vi_.time, em_to_str(vi_.time)]
-	curs.execute('INSERT INTO ttc_vehicle_locations VALUES (%s)' % ', '.join(['%s']*len(cols)), cols)
+		vi_.predictable, vi_.heading, vi_.time, em_to_str(vi_.time), mofr, widemofr]
+	curs.execute('INSERT INTO ttc_vehicle_locations VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,default,%s,%s)', cols)
 	curs.close()
 
 def vi_select_generator(configroute_, end_time_em_, start_time_em_, dir_=None, include_unpredictables_=False, vid_=None, \
@@ -430,17 +436,17 @@ def interp_by_time(vilist_, be_clever_, use_db_for_heading_inference_, current_c
 						or (lo_vi.route_tag != hi_vi.route_tag):
 					continue
 				ratio = (interptime - lo_vi.time)/float(hi_vi.time - lo_vi.time)
-				i_latlon, i_heading = interp_latlonnheading(lo_vi, hi_vi, ratio, be_clever_)
+				i_latlon, i_heading, i_mofr = interp_latlonnheadingnmofr(lo_vi, hi_vi, ratio, be_clever_)
 				i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, i_heading, vid, i_latlon.lat, i_latlon.lng,
 										 lo_vi.predictable and hi_vi.predictable,
-										 lo_vi.route_tag, 0, interptime, interptime)
+										 lo_vi.route_tag, 0, interptime, interptime, i_mofr, None)
 			elif lo_vi and not hi_vi:
 				if current_conditions_:
 					if (interptime - lo_vi.time > 3*60*1000) or dirs_disagree(dir_, lo_vi.dir_tag_int):
 						continue
 					heading = (lolo_vi.latlng.heading(lo_vi.latlng) if lolo_vi is not None else lo_vi.heading)
 					i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, heading, vid, lo_vi.lat, lo_vi.lng,
-											 lo_vi.predictable, lo_vi.route_tag, 0, interptime, interptime)
+											 lo_vi.predictable, lo_vi.route_tag, 0, interptime, interptime, lo_vi.mofr, lo_vi.widemofr)
 
 			if i_vi:
 				interped_timeslice.append(i_vi)
@@ -453,7 +459,7 @@ def dirs_disagree(dir1_, dir2_):
 	return (dir1_ == 0 and dir2_ == 1) or (dir1_ == 1 and dir2_ == 0)
 
 # be_clever_ - means use routes if mofrs are valid, else use 'tracks' if a streetcar.
-def interp_latlonnheading(vi1_, vi2_, ratio_, be_clever_):
+def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, be_clever_):
 	assert isinstance(vi1_, vinfo.VehicleInfo) and isinstance(vi2_, vinfo.VehicleInfo) and (vi1_.vehicle_id == vi2_.vehicle_id)
 	assert vi1_.time < vi2_.time
 	r = None
@@ -467,7 +473,7 @@ def interp_latlonnheading(vi1_, vi2_, ratio_, be_clever_):
 				dir_tag_int = vi2_.dir_tag_int
 				if dir_tag_int == None:
 					raise Exception('Could not determine dir_tag_int of %s' % (str(vi2_)))
-				r = routes.mofr_to_latlonnheading(config_route, interp_mofr, dir_tag_int)
+				r = routes.mofr_to_latlonnheading(config_route, interp_mofr, dir_tag_int) + (interp_mofr,)
 			elif vi1_.is_a_streetcar():
 				vi1_tracks_snap_result = tracks.snap(vi1_.latlng); vi2_tracks_snap_result = tracks.snap(vi2_.latlng)
 				if vi1_tracks_snap_result is not None and vi2_tracks_snap_result is not None:
@@ -477,10 +483,10 @@ def interp_latlonnheading(vi1_, vi2_, ratio_, be_clever_):
 						tracks_based_heading = tracks.heading(interped_loc_snap_result[1], interped_loc_snap_result[2])
 						if geom.diff_headings(tracks_based_heading, vi1_.latlng.heading(vi2_.latlng)) > 90:
 							tracks_based_heading = geom.normalize_heading(tracks_based_heading+180)
-						r = (interped_loc_snap_result[0], tracks_based_heading)
+						r = (interped_loc_snap_result[0], tracks_based_heading, None)
 
 	if r is None:
-		r = (vi1_.latlng.avg(vi2_.latlng, ratio_), vi1_.latlng.heading(vi2_.latlng))
+		r = (vi1_.latlng.avg(vi2_.latlng, ratio_), vi1_.latlng.heading(vi2_.latlng), None)
 	return r
 
 def round_down_by_minute(t_em_):
