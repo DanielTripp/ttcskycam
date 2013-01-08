@@ -13,6 +13,13 @@ function do_it_for_sure() {
 	chmod u+x poll_locations.py
 	chmod u+x purgedb.py
 
+	echo 'Write MOFRs?'
+	read response
+	if [ "$response" == "y" ] ; then
+		touch WRITE_MOFRS
+	fi
+
+
 	echo 'Done.'
 }
 
