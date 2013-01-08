@@ -100,7 +100,8 @@ def insert_vehicle_info(vi_):
 	curs.execute('INSERT INTO ttc_vehicle_locations VALUES (%s)' % ', '.join(['%s']*len(cols)), cols)
 	curs.close()
 
-def vi_select_generator(configroute_, end_time_em_, start_time_em_, dir_=None, include_unpredictables_=False, vid_=None):
+def vi_select_generator(configroute_, end_time_em_, start_time_em_, dir_=None, include_unpredictables_=False, vid_=None, \
+			forward_in_time_order_=False):
 	curs = (conn().cursor('cursor_%d' % (int(time.time()*1000))) if start_time_em_ == 0 else conn().cursor())
 	dir_clause = ('and dir_tag like \'%%%%\\\\_%s\\\\_%%%%\' ' % (str(dir_)) if dir_ != None else ' ')
 	sql = 'select '+VI_COLS+' from ttc_vehicle_locations where route_tag = %s '\
@@ -108,7 +109,7 @@ def vi_select_generator(configroute_, end_time_em_, start_time_em_, dir_=None, i
 		+' and time <= %s and time >= %s '\
 		+(' and vehicle_id = %s ' if vid_ else '') \
 		+ dir_clause \
-		+' order by time desc'
+		+(' order by time' if forward_in_time_order_ else ' order by time desc')
 	curs.execute(sql, [configroute_, end_time_em_, start_time_em_] + ([vid_] if vid_ else []))
 	while True:
 		row = curs.fetchone()
@@ -185,14 +186,15 @@ def fix_dirtag(vi_, dir_):
 	else:
 		raise Exception('Don\'t know how to fix dir_tag on %s' % str(vi_))
 
-def find_passing(route_, vid_, dir_, t_, post_):
-	assert isinstance(route_, str) and isinstance(vid_, basestring) and isinstance(t_, long) and isinstance(post_, geom.LatLng)
+def find_passing(croute_, vid_, start_time_, end_time_, post_):
+	assert isinstance(croute_, str) and isinstance(vid_, basestring) and isinstance(post_, geom.LatLng)
 	lastvi = None
-	gen = vi_select_generator((route_,), t_, 0, dir_=dir_, include_unpredictables_=True, vid_=vid_)
+	gen = vi_select_generator(croute_, end_time_, start_time_, dir_=None, include_unpredictables_=True, vid_=vid_, forward_in_time_order_=True)
 	for curvi in gen:
 		if lastvi and geom.passes(curvi.latlng, lastvi.latlng, post_):
-			return (curvi, lastvi)
+			return (lastvi, curvi)
 		lastvi = curvi
+	return None
 
 def massage_whereclause_time_args(whereclause_):
 	if not whereclause_:
