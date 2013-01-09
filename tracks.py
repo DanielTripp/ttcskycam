@@ -1,16 +1,15 @@
 #!/usr/bin/python2.6
 
 import os, json
-import geom, snaptogrid
+import geom, snaptogrid, mc
 from misc import *
 from collections import Sequence
 
-g_snaptogridcache = None
+def snaptogridcache():
+	return mc.get(snaptogridcache_impl)
 
-def _init():
-	global g_snaptogridcache
-	if g_snaptogridcache is None:
-		g_snaptogridcache = snaptogrid.SnapToGridCache(_get_polylines_from_files())
+def snaptogridcache_impl():
+	return snaptogrid.SnapToGridCache(_get_polylines_from_files())
 
 def _get_polylines_from_files():
 	def get_polyline(polyline_):
@@ -40,15 +39,13 @@ def is_on_a_track(latlng_):
 # Maybe we should maintain a central constant for it somewhere.
 def snap(latlng_, searchradius_=50):
 	assert isinstance(latlng_, geom.LatLng)
-	_init()
-	return g_snaptogridcache.snap(latlng_, searchradius_)
+	return snaptogridcache().snap(latlng_, searchradius_)
 
 def heading(linesegaddr_, referencing_point_aot_lineseg_):
-	return g_snaptogridcache.heading(linesegaddr_, referencing_point_aot_lineseg_)
+	return snaptogridcache().heading(linesegaddr_, referencing_point_aot_lineseg_)
 
 def get_all_tracks_polylines():
-	_init()
-	return g_snaptogridcache.polylines
+	return snaptogridcache().polylines
 
 if __name__ == '__main__':
 

@@ -32,10 +32,8 @@ def get_predictions_from_web(froute_, stoptag_):
 	return r
 
 def poll_once():
-	for i in routes.get_intersections():
-		for froute, stoptag in ((i.froute1, i.froute1_dir0_stoptag), (i.froute1, i.froute1_dir1_stoptag), 
-				(i.froute2, i.froute2_dir0_stoptag), (i.froute2, i.froute2_dir1_stoptag)):
-			db.insert_predictions(get_predictions_from_web(froute, stoptag))
+	for froute, stoptag in routes.get_froutesnstoptags_to_record():
+		db.insert_predictions(get_predictions_from_web(froute, stoptag))
 
 	
 if __name__ == '__main__':

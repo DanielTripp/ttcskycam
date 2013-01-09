@@ -53,7 +53,7 @@ def get_extrapolated_predictions(froute_, start_stoptag_, dest_stoptag_, time_):
 	time_ = massage_time_arg(time_, 60*1000)
 	recorded_stop = routes.routeinfo(froute_).get_next_downstream_stop_with_predictions_recorded(start_stoptag_)
 	predictions_from_db = db.get_predictions(froute_, recorded_stop.stoptag, dest_stoptag_, time_)
-	if recorded_stop == start_stoptag_:
+	if recorded_stop.stoptag == start_stoptag_:
 		return predictions_from_db
 	else:
 		ri = routes.routeinfo(froute_)
@@ -62,7 +62,7 @@ def get_extrapolated_predictions(froute_, start_stoptag_, dest_stoptag_, time_):
 		start_to_recorded_stop_riding_time_secs = traffic.get_est_riding_time_secs(froute_, start_stop.mofr, recorded_stop.mofr, \
 				True, time_)
 		if start_to_recorded_stop_riding_time_secs == -1:
-			raise Exception()
+			raise Exception('found no traffic between mofrs %d and %d on %s' % (start_stop.mofr, recorded_stop.mofr, froute_))
 		r = []
 		while predictions_from_db:
 			prediction = predictions_from_db.pop(0)

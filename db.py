@@ -601,7 +601,7 @@ def insert_predictions(predictions_):
 
 # returns list of Prediction 
 def get_predictions(froute_, start_stoptag_, dest_stoptag_, time_):
-	assert routes.routeinfo(froute_).get_stop(start_stoptag_).are_predictions_recorded
+	assert routes.routeinfo(froute_).are_predictions_recorded(start_stoptag_)
 	time_ = massage_time_arg(time_, 60*1000)
 	curs = conn().cursor()
 	where_clause = ' where fudgeroute = %s and stoptag = %s and time_retrieved between %s and %s' 

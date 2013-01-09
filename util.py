@@ -54,12 +54,7 @@ def get_old_wrong_dirs(route_, start_time_, end_time_):
 	return r
 
 def get_current_wrong_dirs(start_time_ = now_em()-1000*60*30):
-	mckey = mc.make_key('get_current_wrong_dirs', start_time_)
-	r = mc.client.get(mckey)
-	if not r:
-		r = get_current_wrong_dirs_impl(start_time_)
-		mc.client.set(mckey, r)
-	return r
+	return mc.get(get_current_wrong_dirs_impl, start_time_)
 
 def get_current_wrong_dirs_impl(start_time_ = now_em()-1000*60*30):
 	end_time = start_time_ + 1000*60*30
