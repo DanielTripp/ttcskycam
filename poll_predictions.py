@@ -32,7 +32,7 @@ def get_predictions_from_web(froute_, stoptag_):
 	return r
 
 def poll_once():
-	for froute, stoptag in routes.get_froutesnstoptags_to_record():
+	for froute, stoptag in routes.get_recorded_froutenstoptags():
 		db.insert_predictions(get_predictions_from_web(froute, stoptag))
 
 	

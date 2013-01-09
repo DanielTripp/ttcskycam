@@ -89,7 +89,7 @@ def get_traffics_visuals(mofr_to_avgspeedandweight_, fudgeroute_name_, dir_):
 
 def get_mofr_to_kmph(froute_, dir_, current_, time_, log_=False):
 	time_ = massage_time_arg(time_, 60*1000)
-	return mc.get(get_traffic_mofr_to_kmph_impl, [froute_, dir_, current_, time_, log_])
+	return mc.get(get_mofr_to_kmph_impl, [froute_, dir_, current_, time_, log_])
 
 def get_mofr_to_kmph_impl(froute_, dir_, current_, time_, log_=False):
 	r = {}
