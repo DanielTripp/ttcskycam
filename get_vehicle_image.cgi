@@ -27,12 +27,7 @@ def get_vehicle_svg(size_, heading_, color_, opacity_):
 			'</svg>') % (size_, size_, heading_, color_, opacity_)
 
 def get_vehicle_png(size_, heading_, color_, opacity_):
-	mckey = mc.make_key('get_vehicle_png', size_, heading_, color_, opacity_)
-	r = mc.client.get(mckey)
-	if not r:
-		r = get_vehicle_png_impl(size_, heading_, color_, opacity_)
-		mc.client.set(mckey, r)
-	return r
+	return mc.get(get_vehicle_png_impl, [size_, heading_, color_, opacity_])
 
 def get_vehicle_png_impl(size_, heading_, color_, opacity_):
 	svgstr = get_vehicle_svg(size_, heading_, color_, opacity_)

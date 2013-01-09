@@ -15,16 +15,8 @@ class BoundingBox:
 		self.northeast = geom.LatLng(max(pt.lat for pt in polygon_pts_), max(pt.lng for pt in polygon_pts_))
 
 
-g_polygon_n_boundingboxes = None
-
 def get_polygon_n_boundingboxes():
-	global g_polygon_n_boundingboxes
-	mckey = mc.make_key('get_polygon_n_boundingboxes')
-	g_polygon_n_boundingboxes = mc.client.get(mckey)
-	if not g_polygon_n_boundingboxes:
-		g_polygon_n_boundingboxes = get_polygon_n_boundingboxes_impl()
-		mc.client.set(mckey, g_polygon_n_boundingboxes)
-	return g_polygon_n_boundingboxes
+	return mc.get(get_polygon_n_boundingboxes_impl)
 
 def get_polygon_n_boundingboxes_impl():
 	with open('yards.json') as fin:

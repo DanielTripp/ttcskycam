@@ -32,14 +32,6 @@ class Stop:
 				return False
 		return True 
 
-	# 'recorded' currently means 'at an intersection', meaning we have predictions for that stop in our database. 
-	@property 
-	def are_predictions_recorded(self):
-		for i in get_intersections():
-			if self.stoptag in (i.froute1_dir0_stoptag, i.froute1_dir1_stoptag, i.froute2_dir0_stoptag, i.froute2_dir1_stoptag):
-				return True
-		return False
-
 	def __str__(self):
 		return 'Stop %10s mofr=%d ( %f, %f )' % ('"'+self.stoptag+'"', self.mofr, self.latlng.lat, self.latlng.lng)
 
@@ -221,29 +213,30 @@ class RouteInfo:
 		begin_stoptag_mofr = self.dir_to_stoptag_to_stop[direction][stoptag_].mofr
 		begin_stoptag_idx_in_stop_mofrs = stop_mofrs.index(begin_stoptag_mofr)
 		for stop in [self.dir_to_mofr_to_stop_ordereddict[direction][mofr] for mofr in stop_mofrs[begin_stoptag_idx_in_stop_mofrs:]]:
-			if stop.are_predictions_recorded:
+			if self.are_predictions_recorded(stop.stoptag):
 				return stop
 		raise Exception('failed to find next downstream predictions-recorded stop for route %s stoptag %s' % (self.name, stoptag_))
+
+	# 'recorded' currently means 'at an intersection or at the last stop on a route (in a certain direction)'.
+	def are_predictions_recorded(self, stoptag_):
+		assert self.get_stop(stoptag_) is not None
+		try:
+			get_recorded_froutenstoptags().index((self.name, stoptag_))
+			return True
+		except ValueError:
+			return False
 
 def max_mofr(route_):
 	return routeinfo(route_).max_mofr()
 
-g_routename_to_info = {}
-
 def routeinfo(routename_):
 	routename = massage_to_fudgeroute(routename_)
-	if routename not in FUDGEROUTES:
-		raise Exception('route %s is unknown' % (routename))
-	if routename in g_routename_to_info:
-		r = g_routename_to_info[routename]
-	else:
-		mckey = mc.make_key('RouteInfo', routename)
-		r = mc.client.get(mckey)
-		if not r:
-			r = RouteInfo(routename)
-			mc.client.set(mckey, r)
-		g_routename_to_info[routename] = r
-	return r
+	return mc.get(routeinfo_impl, [routename])
+
+def routeinfo_impl(routename_):
+	if routename_ not in FUDGEROUTES:
+		raise Exception('route %s is unknown' % (routename_))
+	return RouteInfo(routename_)
 
 def massage_to_fudgeroute(route_):
 	if route_ in FUDGEROUTES:
@@ -457,21 +450,9 @@ class HalfIntersection:
 	def __repr__(self):
 		return self.__str__()
 
-		
-
-g_intersections = None
 
 def get_intersections():
-	global g_intersections
-	if g_intersections is not None:
-		return g_intersections
-	else:
-		mckey = mc.make_key('intersections')
-		g_intersections = mc.client.get(mckey)
-		if not g_intersections:
-			g_intersections = get_intersections_impl()
-			mc.client.set(mckey, g_intersections)
-		return g_intersections
+	return mc.get(get_intersections_impl)
 
 def get_intersections_impl():
 	r = []
@@ -499,6 +480,25 @@ def get_intersections_impl():
 							if dist_to_nearest_old_intersection > 2000:
 								new_intersections.append(new_intersection)
 			r += new_intersections
+	return r
+
+def get_recorded_froutenstoptags():
+	return mc.get(get_recorded_froutenstoptags_impl)
+
+# Recorded stops are intersections plus the last stop on each route, in each direction. 
+def get_recorded_froutenstoptags_impl():
+	r = []
+	for i in get_intersections():
+		r.append((i.froute1, i.froute1_dir0_stoptag))
+		r.append((i.froute1, i.froute1_dir1_stoptag))
+		r.append((i.froute2, i.froute2_dir0_stoptag))
+		r.append((i.froute2, i.froute2_dir1_stoptag))
+	for ri in [routeinfo(froute) for froute in FUDGEROUTES]:
+		ri.dir_to_mofr_to_stop_ordereddict_keys
+		dir0_last_stop = ri.dir_to_mofr_to_stop_ordereddict[0][ri.dir_to_mofr_to_stop_ordereddict_keys[0][-1]]
+		dir1_last_stop = ri.dir_to_mofr_to_stop_ordereddict[1][ri.dir_to_mofr_to_stop_ordereddict_keys[1][0]]
+		r.append((ri.name, dir0_last_stop.stoptag))
+		r.append((ri.name, dir1_last_stop.stoptag))
 	return r
 
 def get_mofrndirnstoptag_to_halfintersection(froute_, mofr_):

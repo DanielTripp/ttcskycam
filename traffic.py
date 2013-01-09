@@ -14,15 +14,7 @@ def get_recent_vehicle_locations_dirfromlatlngs(fudgeroute_name_, latlng1_, latl
 
 def get_recent_vehicle_locations(fudgeroute_, dir_, current_, time_, log_=False):
 	time_ = massage_time_arg(time_, 15*1000)
-	mckey = mc.make_key('get_recent_vehicle_locations', fudgeroute_, dir_, current_, time_)
-	r = mc.client.get(mckey)
-	if r:
-		if log_: printerr('Found in memcache.')
-	else:
-		if log_: printerr('Not found in memcache.')
-		r = get_recent_vehicle_locations_impl(fudgeroute_, dir_, current_, time_, log_)
-		mc.client.set(mckey, r)
-	return r
+	return mc.get(get_recent_vehicle_locations_impl, [fudgeroute_, dir_, current_, time_, log_])
 
 def get_recent_vehicle_locations_impl(fudgeroute_, dir_, current_, time_, log_=False):
 	return db.get_recent_vehicle_locations(fudgeroute_, TIME_WINDOW_MINUTES, dir_, current_, time_window_end_=time_, log_=log_)
@@ -61,17 +53,9 @@ def get_traffics_dirfromlatlngs(fudgeroute_name_, latlng1_, latlng2_, current_, 
 #         elem 1: speed map - {mofr1: {'kmph': kmph, 'weight': weight}, ...} 
 def get_traffics(fudgeroute_name_, dir_, current_, time_, log_=False):
 	time_ = massage_time_arg(time_, 60*1000)
-	mckey = mc.make_key('get_traffics', fudgeroute_name_, dir_, time_)
-	r = mc.client.get(mckey)
-	if r:
-		if log_: printerr('Found in memcache.')
-	else:
-		if log_: printerr('Not found in memcache.')
-		r = get_traffics_impl(fudgeroute_name_, dir_, time_, current_, log_=log_)
-		mc.client.set(mckey, r)
-	return r
+	return mc.get(get_traffics_impl, [fudgeroute_name_, dir_, current_, time_, log_])
 
-def get_traffics_impl(fudgeroute_name_, dir_, time_, current_, log_=False):
+def get_traffics_impl(fudgeroute_name_, dir_, current_, time_, log_=False):
 	mofr_to_avgspeedandweight = get_traffic_avgspeedsandweights(fudgeroute_name_, dir_, time_, current_, log_=log_)
 	return [get_traffics_visuals(mofr_to_avgspeedandweight, fudgeroute_name_, dir_), \
 			get_traffics__mofr2speed(mofr_to_avgspeedandweight)]
@@ -105,15 +89,7 @@ def get_traffics_visuals(mofr_to_avgspeedandweight_, fudgeroute_name_, dir_):
 
 def get_mofr_to_kmph(froute_, dir_, current_, time_, log_=False):
 	time_ = massage_time_arg(time_, 60*1000)
-	mckey = mc.make_key('get_traffic_mofr_to_kmph', froute_, dir_, current_, time_)
-	r = mc.client.get(mckey)
-	if r:
-		if log_: printerr('Found in memcache.')
-	else:
-		if log_: printerr('Not found in memcache.')
-		r = get_mofr_to_kmph_impl(froute_, dir_, current_, time_, log_=log_)
-		mc.client.set(mckey, r)
-	return r
+	return mc.get(get_traffic_mofr_to_kmph_impl, [froute_, dir_, current_, time_, log_])
 
 def get_mofr_to_kmph_impl(froute_, dir_, current_, time_, log_=False):
 	r = {}

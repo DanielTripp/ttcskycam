@@ -95,17 +95,32 @@ def get_path_est_arrival_time(t0_, path_):
 	sim_time = t0_
 
 	for leg in path_:
+		print leg # TDR 
 		if leg.mode == 'walking':
 			sim_time += (leg.dist_m/WALKING_SPEED_MPS)*1000
 		else:
+			matched_prediction = None
 			for prediction in predictions.get_extrapolated_predictions(leg.froute, leg.start_stoptag, leg.dest_stoptag, t0_):
 				if prediction.time > sim_time:
+					print '---------- waited', em_to_str_hm(prediction.time - sim_time) # TDR 
 					sim_time = prediction.time
+					matched_prediction = prediction
 					break
-			leg_riding_time_secs = traffic.get_est_riding_time_secs(leg.froute, leg.start_mofr, leg.dest_mofr, True, t0_)
-			if leg_riding_time_secs == -1:
-				raise Exception()
-			sim_time += leg_riding_time_secs*1000
+			else:
+				raise Exception('no prediction found for route %s stop %s to %s retrieved time = %s sim_time = %s' \
+						% (leg.froute, leg.start_stoptag, leg.dest_stoptag, em_to_str(t0_), em_to_str(sim_time)))
+			assert matched_prediction is not None
+			leg_riding_time_secs = None
+			predictions_at_dest_stop = predictions.get_extrapolated_predictions(leg.froute, leg.dest_stoptag, None, t0_)
+			prediction_of_caught_vehicle_at_dest_stop = first(predictions_at_dest_stop, lambda p: p.vehicle_id == matched_prediction.vehicle_id)
+			if prediction_of_caught_vehicle_at_dest_stop is not None:
+				printerr('-------- using predictions instead of traffic for travel time') # TDR 
+				sim_time = prediction_of_caught_vehicle_at_dest_stop.time
+			else:
+				leg_riding_time_secs = traffic.get_est_riding_time_secs(leg.froute, leg.start_mofr, leg.dest_mofr, True, t0_)
+				if leg_riding_time_secs == -1:
+					raise Exception()
+				sim_time += leg_riding_time_secs*1000
 
 	return sim_time
 
@@ -191,7 +206,7 @@ if __name__ == '__main__':
 	dest_latlng = geom.LatLng(43.67044104830969, -79.40652651985783)
 
 	#pprint.pprint(get_pathnarrivaltime_by_latlngs(start_latlng, dest_latlng, '2013-01-05 18:00'))
-	for path, arrivaltime in get_pathnarrivaltime_by_latlngs(start_latlng, dest_latlng, '2013-01-05 18:30:59'):
+	for path, arrivaltime in get_pathnarrivaltime_by_latlngs(start_latlng, dest_latlng, '2013-01-07 13:45'):
 		print em_to_str(arrivaltime)
 		pprint.pprint(path)
 		print

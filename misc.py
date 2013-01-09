@@ -232,6 +232,12 @@ def round(x_, step_):
 	ru = round_up(x_, step_)
 	return (rd if x_ - rd < ru - x_ else ru)
 
+def first(iterable_, predicate_):
+	for e in iterable_:
+		if predicate_(e):
+			return e
+		return None
+
 
 if __name__ == '__main__':
 
