@@ -127,7 +127,7 @@ function refresh_traffic_from_server(fudgeroute_) {
 		callpy('traffic.get_traffics', fudgeroute_, dir_to_request, true, get_datetime_from_gui(), 
 			{success: function(r_) {
 				var data = g_fudgeroute_data.get(fudgeroute_);
-				if(data == undefined || data.dir != dir_to_request || !g_playing) {
+				if(data == undefined || data.dir != dir_to_request) {
 					return;
 				}
 				data.traffic_request_pending = false;
@@ -158,7 +158,7 @@ function refresh_vehicles_from_server(fudgeroute_) {
 		callpy('traffic.get_recent_vehicle_locations', fudgeroute_, dir_to_request, true, get_datetime_from_gui(), 
 			{success: function(r_) {
 				var data = g_fudgeroute_data.get(fudgeroute_);
-				if(data == undefined || data.dir != dir_to_request || !g_playing) {
+				if(data == undefined || data.dir != dir_to_request) {
 					return;
 				}
 				data.vehicles_request_pending = false;
@@ -317,6 +317,12 @@ function update_g_times() {
 	new_times_sortedtree.forEach(function(e) {
 		g_times.add(e);
 	});
+
+	var old_cur_time = g_times.elementAtIndex(Math.min(g_cur_minute_idx, g_times.size()-1));
+	g_cur_minute_idx = g_times.indexOf(old_cur_time);
+	if(g_cur_minute_idx == -1) {
+		g_cur_minute_idx = 0;
+	}
 }
 
 function array_to_set(a_) {
@@ -1121,10 +1127,10 @@ function init_routeselect_auto_controls() {
 function on_routeselect_radiobutton_clicked() {
 	g_routeselect_auto_aot_manual = is_selected('routeselect_auto_radiobutton');
 	show_appropriate_routeselect_controls();
-	show_appropriate_routeselect_type();
+	show_appropriate_routes_for_routeselect_type();
 }
 
-function show_appropriate_routeselect_type() {
+function show_appropriate_routes_for_routeselect_type() {
 	if(g_routeselect_auto_aot_manual) {
 		get_fudgeroutes_for_map_bounds();
 	} else {
@@ -1651,8 +1657,8 @@ $(document).ready(initialize);
 				<p id="p_vid_checkboxes">&nbsp;</p>
 			</div>
 			<div id="div_time_selector">
-			<input id="current_button" type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"   />Now
-			<input id="historical_button" type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()" checked="checked" />Past
+			<input id="current_button" type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"  checked="checked"  />Now
+			<input id="historical_button" type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()" />Past
 			<input id="datetimepicker_textfield" type="text" name="datetimepicker_textfield" value="" />
 			</div>
 			</font>
