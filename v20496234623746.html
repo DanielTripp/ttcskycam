@@ -201,7 +201,8 @@ function make_vi_marker(vi_, add_infowin_) {
 				position: new google.maps.LatLng(vi_.lat, vi_.lon),
 				//map: g_map,
 				draggable: false, 
-				icon: new google.maps.MarkerImage(vi_.iconfile, null, null, new google.maps.Point(12, 12)), 
+				icon: new google.maps.MarkerImage(cgi_url('get_vehicle_debug_circle_image.cgi', [vi_.vehicle_id]), null, null, 
+						new google.maps.Point(15, 15)), 
 				title: txt 
 		});
 	if(add_infowin_) {
