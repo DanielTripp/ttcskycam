@@ -6,13 +6,6 @@ import vinfo, geom, db, traffic
 from misc import *
 
 
-def add_iconfiles(vis_by_timeslice_):
-	NUM_COLORS = 13
-	for timeslice in vis_by_timeslice_:
-		for vi in timeslice[1:]:
-			vid = vi['vehicle_id']
-			vi['iconfile'] = 'marker-%d.png' % (hash(vid) % NUM_COLORS)
-
 def massage(vis_by_time_):
 	r = []
 	for vilist_for_timeslice in vis_by_time_:
@@ -21,7 +14,6 @@ def massage(vis_by_time_):
 		vilist_jsondicts_for_timeslice.append(vilist_for_timeslice[0]) # first elem is a date/time string 
 		for vi in vilist_for_timeslice[1:]:
 			vilist_jsondicts_for_timeslice.append(vi.to_json_dict())
-	add_iconfiles(r)
 	return json.dumps(r)
 	
 
