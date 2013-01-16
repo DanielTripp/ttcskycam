@@ -1,7 +1,6 @@
 #!/usr/bin/python2.6
 
-import sys, json, os.path, bisect
-from backport_OrderedDict import *
+import sys, json, os.path, bisect, xml.dom, xml.dom.minidom
 import vinfo, geom, mc, c, snaptogrid
 from misc import *
 
@@ -17,11 +16,20 @@ for fudgeroute, configroutes in FUDGEROUTE_TO_CONFIGROUTES.items():
 FUDGEROUTES = FUDGEROUTE_TO_CONFIGROUTES.keys()
 CONFIGROUTES = reduce(lambda x, y: x + y, FUDGEROUTE_TO_CONFIGROUTES.values(), [])
 
+
+class Schedule(object):
+
+	def __init__(self, froute_, schedule_nextbus_xml_filename_):
+		dom = xml.dom.minidom.parse(schedule_nextbus_xml_filename_)
+		for route_elem in [x for x in dom.documentElement.childNodes if isinstance(x, xml.dom.minidom.Element)]:
+			print compassdir_string_to_dir_int(froute_, route_elem.getAttribute('direction'))
+
 class Stop:
-	def __init__(self, stoptag_, latlng_, mofr_, dirtags_serviced_):
+	def __init__(self, stoptag_, latlng_, direction_, mofr_, dirtags_serviced_):
 		assert isinstance(stoptag_, basestring) and isinstance(latlng_, geom.LatLng) and isinstance(mofr_, int)
 		self.latlng = latlng_
 		self.stoptag = stoptag_
+		self.direction = direction_
 		self.mofr = mofr_
 		self.dirtags_serviced = dirtags_serviced_
 
@@ -78,7 +86,7 @@ class RouteInfo:
 
 	def init_stops(self):
 		self.init_stops_dir_to_stoptag_to_stop()
-		self.init_stops_dir_to_mofr_to_stop_ordereddict()
+		self.init_stops_dir_to_mofr_to_stop()
 
 	def init_stops_dir_to_stoptag_to_stop(self):
 		self.dir_to_stoptag_to_stop = {}
@@ -92,36 +100,30 @@ class RouteInfo:
 				for stoptag, stopdetails in stops_file_content_json[direction_str].iteritems():
 					assert set(stopdetails.keys()) == set(['lat', 'lon', 'dirtags_serviced'])
 					latlng = geom.LatLng(stopdetails['lat'], stopdetails['lon']); dirtags_serviced = stopdetails['dirtags_serviced']
-					new_stop = Stop(stoptag, latlng, self.latlon_to_mofr(latlng), dirtags_serviced)
+					new_stop = Stop(stoptag, latlng, direction_int, self.latlon_to_mofr(latlng), dirtags_serviced)
 					if new_stop.mofr != -1 and not new_stop.is_sunday_only:
 						self.dir_to_stoptag_to_stop[direction_int][stoptag] = new_stop
-	
-	def init_stops_dir_to_mofr_to_stop_ordereddict(self):
-		self.dir_to_mofr_to_stop_ordereddict = {} # This is a redundant data structure for fast lookups. 
-		self.dir_to_mofr_to_stop_ordereddict_keys = {} # This is a redundant data structure on the above redundant data structure. 
-		for direction in (0, 1):
-			mofr_to_stop_ordereddict = OrderedDict()
-			self.dir_to_mofr_to_stop_ordereddict[direction] = mofr_to_stop_ordereddict
-			mofr_to_stop_unordereddict = file_under_key(self.dir_to_stoptag_to_stop[direction].values(), lambda stop: stop.mofr, True)
-			for mofr in sorted(mofr_to_stop_unordereddict.keys()):
-				stop = mofr_to_stop_unordereddict[mofr]
-				mofr_to_stop_ordereddict[mofr] = stop
+		assert set(self.dir_to_stoptag_to_stop[0].keys()).isdisjoint(self.dir_to_stoptag_to_stop[1].keys())
 
-			# Caching the list of keys too.  This may seem like optimization overkill but even this keys() 
-			# call was cumulatively taking half a second in a simple path-finding test case. 
-			self.dir_to_mofr_to_stop_ordereddict_keys[direction] = mofr_to_stop_ordereddict.keys()
+	def init_stops_dir_to_mofr_to_stop(self):
+		self.dir_to_mofr_to_stop = {} # This is a redundant data structure for fast lookups.
+		for direction in (0, 1):
+			all_stops = self.dir_to_stoptag_to_stop[direction].values()
+			mofr_to_stop = file_under_key(all_stops, lambda stop: stop.mofr, True)
+			self.dir_to_mofr_to_stop[direction] = sorteddict(mofr_to_stop)
 
 	def mofr_to_stop(self, dir_, mofr_):
 		assert dir_ in (0, 1) and isinstance(mofr_, int)
-		mofr_to_stop_ordereddict = self.dir_to_mofr_to_stop_ordereddict[dir_]
-		ordered_mofrs = self.dir_to_mofr_to_stop_ordereddict_keys[dir_]
-		bisect_idx = bisect.bisect_left(ordered_mofrs, mofr_)
+		if not (0 <= mofr_ < self.max_mofr()):
+			return None
+		mofr_to_stop = self.dir_to_mofr_to_stop[dir_]
+		bisect_idx = bisect.bisect_left(mofr_to_stop.sortedkeys(), mofr_)
 
 		# So either the stop at bisect_idx or bisect_idx-1 is the closest stop that we're looking for:
 		possible_stops = []
 		def add_possible_stop_maybe(idx__):
-			if 0 <= idx__ < len(ordered_mofrs):
-				possible_stops.append(mofr_to_stop_ordereddict[ordered_mofrs[idx__]])
+			if 0 <= idx__ < len(mofr_to_stop.sortedkeys()):
+				possible_stops.append(mofr_to_stop[mofr_to_stop.sortedkeys()[idx__]])
 		add_possible_stop_maybe(bisect_idx)
 		add_possible_stop_maybe(bisect_idx-1)
 		return min(possible_stops, key=lambda stop: abs(stop.mofr - mofr_))
@@ -207,12 +209,12 @@ class RouteInfo:
 
 	def get_next_downstream_stop_with_predictions_recorded(self, stoptag_):
 		direction = self.dir_of_stoptag(stoptag_)
-		stop_mofrs = self.dir_to_mofr_to_stop_ordereddict_keys[direction][:]
+		stop_mofrs = self.dir_to_mofr_to_stop[direction].sortedkeys()
 		if direction == 1:
 			stop_mofrs = stop_mofrs[::-1]
 		begin_stoptag_mofr = self.dir_to_stoptag_to_stop[direction][stoptag_].mofr
 		begin_stoptag_idx_in_stop_mofrs = stop_mofrs.index(begin_stoptag_mofr)
-		for stop in [self.dir_to_mofr_to_stop_ordereddict[direction][mofr] for mofr in stop_mofrs[begin_stoptag_idx_in_stop_mofrs:]]:
+		for stop in [self.dir_to_mofr_to_stop[direction][mofr] for mofr in stop_mofrs[begin_stoptag_idx_in_stop_mofrs:]]:
 			if self.are_predictions_recorded(stop.stoptag):
 				return stop
 		raise Exception('failed to find next downstream predictions-recorded stop for route %s stoptag %s' % (self.name, stoptag_))
@@ -385,6 +387,10 @@ def get_fudgeroutes_for_map_bounds(southwest_, northeast_, compassdir_, maxroute
 
 	return top_fudgeroute_n_dirs
 
+# For each route, tells us which way dir 0 points (eg. East or North) and which way dir 1 points (West or South).
+# For all routes that I've looked at, our dir 0 (which corresponds to NextBus's _0_ in a dirtag) is east for a
+# route that goes east-west, and south for one that goes north-south.  (1 for the other direction, of course.)
+# But I know of no guarantee for this.
 def get_fudgeroute_to_compassdir_to_intdir():
 	r = {}
 	for fudgeroute in FUDGEROUTES:
@@ -494,9 +500,8 @@ def get_recorded_froutenstoptags_impl():
 		r.append((i.froute2, i.froute2_dir0_stoptag))
 		r.append((i.froute2, i.froute2_dir1_stoptag))
 	for ri in [routeinfo(froute) for froute in FUDGEROUTES]:
-		ri.dir_to_mofr_to_stop_ordereddict_keys
-		dir0_last_stop = ri.dir_to_mofr_to_stop_ordereddict[0][ri.dir_to_mofr_to_stop_ordereddict_keys[0][-1]]
-		dir1_last_stop = ri.dir_to_mofr_to_stop_ordereddict[1][ri.dir_to_mofr_to_stop_ordereddict_keys[1][0]]
+		dir0_last_stop = ri.dir_to_mofr_to_stop[0][ri.dir_to_mofr_to_stop[0].sortedkeys()[-1]]
+		dir1_last_stop = ri.dir_to_mofr_to_stop[1][ri.dir_to_mofr_to_stop[1].sortedkeys()[0]]
 		r.append((ri.name, dir0_last_stop.stoptag))
 		r.append((ri.name, dir1_last_stop.stoptag))
 	return r
@@ -514,11 +519,29 @@ def get_mofrndirnstoptag_to_halfintersection(froute_, mofr_):
 			r[(i.froute2mofr,direction,stoptag)] = HalfIntersection(i.froute1, i.froute1mofr, i.froute1_dir0_stoptag, i.froute1_dir1_stoptag, i.latlng)
 	return r
 
+def compassdir_string_to_dir_int(froute_, compassdir_str_):
+	compassdir_str = compassdir_str_.lower()
+	assert compassdir_str in ('north', 'south', 'east', 'west')
+	heading_indicated_by_compassdir_str = {'north':0, 'south':180, 'east':90, 'west':270}[compassdir_str]
+	ri = routeinfo(froute_)
+	dir0_heading = ri.routepts(0)[0].heading(ri.routepts(0)[-1])
+	dir1_heading = ri.routepts(1)[-1].heading(ri.routepts(1)[0])
+	if geom.diff_headings(heading_indicated_by_compassdir_str, dir0_heading) < 90:
+		return 0
+	elif geom.diff_headings(heading_indicated_by_compassdir_str, dir1_heading) < 90:
+		return 1
+	else:
+		raise Exception('Could not determine direction int for froute %s, schedule direction "%s"' % (froute_, compassdir_str_))
+
 if __name__ == '__main__':
 
 	import pprint
 
-	ri = routeinfo('queen')
-
-	print ri.get_next_downstream_recorded_stop('10102')
+	for froute, stoptag in get_recorded_froutenstoptags():
+		if froute != 'lansdowne':
+			continue
+		stop = routeinfo(froute).get_stop(stoptag)
+		if stop.direction == 1:
+			print stop.mofr, stop.latlng, stoptag
+		
 

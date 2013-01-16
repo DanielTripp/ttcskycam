@@ -200,21 +200,41 @@ def kmph_to_mps(kmph_):
 def mps_to_kmph(mps_):
 	return mps_*60.0*60/1000;
 
+# Note [1]: This is to account for the small gps inaccuracies that nearly all readings seem to have.
+# One can see this by drawing many vehicle locations on a google map with satellite view on.  Otherwise
+# reasonable vehicles routinely appear in impossible places like on top of buildings.
+# I don't know if there is any pattern to these inaccuracies.  I will assume that they are random and can
+# change completely from one reading to the next.
+# The large GPS errors (which are the entire reason for the 'remove bad gps' functions) have no limit to their
+# magnitude that I can see.  The small GPS errors do, and it seems to be about 50 metres.  (That's 50 metres from one
+# extreme to the other - i.e. 25 metres on either side of the road.  Note that we don't use mofrs here, only
+# distance between latlngs.)
+# These small GPS errors, combined with scenarios where a given reading in our database has a logged time very soon
+# after the previous one (eg. 1 second or even less - as can happen in certain NextBus fluke scenarios I think, as well as
+# the couple of times when I've mistakenly been polling for vehicle locations with two processes at the same time)
+# can result in what looks like a very high speed.  This code treats a very high speed as a new 'vigroup'.  That is
+# undesirable and in a bad case previously caused this code to create some erroneous vigroups, and then at the end when it
+# picks the one containing the most vis, to throw out a lot of good vis.
+# eg. vid 1660 between 2013-01-07 12:39:59 and 12:41:09, without the 'small GPS error if clause' below, would cause this code
+# to create 2 new vigroups where it should have created no new ones.
 def is_plausible(dist_m_, speed_kmph_):
-	if dist_m_ < 1000:
+	if dist_m_ < 50: # see note [1]
+		return True
+	elif dist_m_ < 1000:
 		return speed_kmph_ < 60
 	elif dist_m_ < 5000:
 		return speed_kmph_ < 40
 	else:
 		return speed_kmph_ < 30
 
-def remove_bad_gps_readings_single_vid(vis_):
+def remove_bad_gps_readings_single_vid(vis_, log_=False):
 	assert len(set(vi.vehicle_id for vi in vis_)) <= 1
 	if not vis_:
 		return []
 	vis = vis_[:]
 	remove_consecutive_duplicates(vis, key=lambda vi: vi.time)
 	vigroups = [[vis[0]]]
+	if log_: printerr('Bad GPS - creating group 0: %s' % vis[0])
 	for cur_vi in vis[1:]:
 		def get_dist_from_vigroup(vigroup_):
 			groups_last_vi = vigroup_[-1]
@@ -230,12 +250,21 @@ def remove_bad_gps_readings_single_vid(vis_):
 		def is_plausible_vigroup(vigroup_):
 			return is_plausible(get_dist_from_vigroup(vigroup_), mps_to_kmph(get_mps_from_vigroup(vigroup_)))
 
-		vigroup = min(vigroups, key=get_dist_from_vigroup)
-		if is_plausible_vigroup(vigroup):
-			vigroup.append(cur_vi)
+		closest_vigroup = min(vigroups, key=get_dist_from_vigroup)
+		if is_plausible_vigroup(closest_vigroup):
+			if log_: printerr('Bad GPS - adding to group %d: %s' % (vigroups.index(closest_vigroup), cur_vi))
+			closest_vigroup.append(cur_vi)
 		else:
+			if log_: printerr('Bad GPS - creating group %d: %s' % (len(vigroups), cur_vi))
 			vigroups.append([cur_vi])
-	vis_[:] = max(vigroups, key=len)
+	r_vis = max(vigroups, key=len)
+	if log_:
+		if len(r_vis) != len(vis_):
+			for i, vigroup in enumerate(vigroups):
+				if vigroup is not r_vis:
+					for vi in vigroup:
+						printerr('Bad GPS - discarded (from group %d): %s' % (i, vi))
+	vis_[:] = r_vis
 
 
 # Finds intersection of the line segments pt1->pt2 and pt3->pt4. 

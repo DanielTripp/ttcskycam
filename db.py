@@ -125,14 +125,45 @@ def vi_select_generator(configroute_, end_time_em_, start_time_em_, dir_=None, i
 		yield vi
 	curs.close()
 
+# arg for_traffic_ True means intended for colour-coded traffic display.  False means for vehicle animations. 
 # return dict.  key: vid.  value: list of list of VehicleInfo.
+
+# Note [1]: Here we attempt to remove what we consider trivial and unimportant (or even misleading) stretches of vis.
+# Currently using a heuristic of greater than 5 vis, or 300 meters.  Doing this because often due to inaccurate GPS readings
+# or other things, especially after our 'dirtag fixing' (where we ignore the direction of the dirtag reported by NextBus and
+# set it to one determined by mofr changes).  This can result in a vehicle appearing to reverse direction for a short time
+# before continuing in it's original direction, but the reality is not so.
+#
+# When this function is used for vehicle locations (as opposed to color-coded traffic) and it involves vehicles taking detours,
+# a less than desirable situation can occur sometimes.  If a vehicle takes a detour and the angle of the streets in that area
+# makes the widemofrs of the vehicle appear to be reversing (for example an eastbound Dundas vehicle detouring up Ossington
+# the continuing east on College) then the dirtag will be 'fixed' via widemofr and will appear to reverse for part of the detour.
+# While going eastbound on Dundas the vehicle will have increasing mofrs (and widemofrs) but then while going up Ossington it will have
+# decreasing widemofrs until it turns onto College where it will have increasing widemofrs again.
+#
+# So we want those vis going up Ossington, but only if the vehicle is going to continue east after.  We can't tell if it is or not
+# if in the time window in question, it hasn't done that yet.  So in that case the vehicle will disappear from the vehicle locations.
+# That is undesirable but not the end of the world.  For a user watching current conditions, that situation for that vehicle will
+# usually last only a couple of minutes, until the vehicle gets onto part of the detour that is closer to parallel to the origanal route
+# (i.e. Colleg).  Then the widemofrs will increase again, and the vehicle-location-interpolating code will having something to
+# interpolate between (presumably something on Dundas right before it turned up Ossington, and something on College right after it
+# turned onto College.)  These interpolated locations will not be as accurate as if we hadn't removed them in the first place,
+# but I don't see this as a major problem right now.    Again this will only happen in a small number of cases where detours are happening
+# on streets at odd angles.  With detours on streets at right angles, the mofr while going up the first street of the detour will
+# hopefully stay pretty close to unchanged for that stretch, so hopefully the dirtag won't be fixed.  But the more I think about it,
+# the less I would count on it.  I haven't tested that.  More work is warranted here. Question for dirtag-fixing:
+# if widemofrs go like this: [0, 50, 100, 101, 100, 101, 100, 101, 100, 150, 200, ...] do we throw out the whole middle part
+# [100, 101, 100, 101, 100]?  Wouldn't it be better if we tried to keep the two 101s in there?  That would give us more accurate
+# interpolations in that area.
 def get_vid_to_vis(fudge_route_, dir_, num_minutes_, end_time_em_, for_traffic_, current_conditions_, log_=False):
 	assert dir_ in (0, 1)
+	MIN_DESIRABLE_DIR_STRETCH_LEN = 6
 	start_time = end_time_em_ - num_minutes_*60*1000
 	vi_list = []
 	for configroute in routes.fudgeroute_to_configroutes(fudge_route_):
 		vis = list(vi_select_generator(configroute, end_time_em_, start_time, None, True))
-		vis += get_outside_overshots(vis, start_time, False, 5, log_=log_)
+		# We want to get a lot of overshots, because we need a lot of samples in order to determine directions with any certainty.
+		vis += get_outside_overshots(vis, start_time, False, MIN_DESIRABLE_DIR_STRETCH_LEN-1, log_=log_)
 		if not for_traffic_:
 			if current_conditions_:
 				pass # TODO: think about whether to re-introduce the call below.
@@ -147,13 +178,14 @@ def get_vid_to_vis(fudge_route_, dir_, num_minutes_, end_time_em_, for_traffic_,
 	for vid, vis in vid_to_vis.items():
 		yards.remove_vehicles_in_yards(vis)
 		remove_time_duplicates(vis)
-		geom.remove_bad_gps_readings_single_vid(vis)
+		geom.remove_bad_gps_readings_single_vid(vis, log_=log_)
 		fix_dirtags(vis)
 		if len(vis) == 0: del vid_to_vis[vid]
 	for vid, vis in vid_to_vis.items():
-		vis_grouped_by_dir = get_maximal_sublists3(vis, lambda vi: vi.dir_tag_int)
-		vis_desirables_only = filter(lambda vis: (vis[0].dir_tag_int == dir_) and (len(vis) > 5 or abs(vis[0].widemofr - vis[-1].widemofr) > 300), \
-				vis_grouped_by_dir)
+		vis_grouped_by_dir = get_maximal_sublists3(vis, lambda vi: vi.dir_tag_int) # See note [1] above
+		def is_desirable(vis__):
+			return (vis__[0].dir_tag_int == dir_) and (len(vis__) >= MIN_DESIRABLE_DIR_STRETCH_LEN or abs(vis__[0].widemofr - vis__[-1].widemofr) > 300)
+		vis_desirables_only = filter(is_desirable, vis_grouped_by_dir)
 		vis[:] = sum(vis_desirables_only, [])
 	for vid in vid_to_vis.keys():
 		if len(vid_to_vis[vid]) == 0:
@@ -192,12 +224,13 @@ def fix_dirtag(vi_, dir_):
 	else:
 		raise Exception('Don\'t know how to fix dir_tag on %s' % str(vi_))
 
-def find_passing(croute_, vid_, start_time_, end_time_, post_):
+def find_passing(croute_, vid_, start_time_, end_time_, post_, dir_):
 	assert isinstance(croute_, str) and isinstance(vid_, basestring) and isinstance(post_, geom.LatLng)
 	lastvi = None
-	gen = vi_select_generator(croute_, end_time_, start_time_, dir_=None, include_unpredictables_=True, vid_=vid_, forward_in_time_order_=True)
+	gen = vi_select_generator(croute_, end_time_, start_time_, dir_=dir_, include_unpredictables_=True, vid_=vid_, forward_in_time_order_=True)
 	for curvi in gen:
-		if lastvi and geom.passes(curvi.latlng, lastvi.latlng, post_):
+		if lastvi and geom.passes(curvi.latlng, lastvi.latlng, post_, tolerance_=1) \
+				and lastvi.mofr != -1 and curvi.mofr != -1 and mofrs_to_dir(lastvi.mofr, curvi.mofr) == dir_:
 			return (lastvi, curvi)
 		lastvi = curvi
 	return None
@@ -217,7 +250,7 @@ def massage_whereclause_time_args(whereclause_):
 			t = int(mo_.group(1))
 			range = 15*60*1000
 			return 'time > %d and time < %d' % (t - range, t + range)
-		r = re.sub(r'time around (\d+)', repl2, r)
+		r = re.sub(r'time +around +(\d+)', repl2, r)
 
 		def repl3(mo_):
 			t = int(mo_.group(3))
@@ -228,7 +261,7 @@ def massage_whereclause_time_args(whereclause_):
 					return int(str_)*60*1000
 			lo_range = rangestr_to_em(mo_.group(1)); hi_range = rangestr_to_em(mo_.group(2))
 			return 'time > %d and time < %d' % (t - lo_range, t + hi_range)
-		r = re.sub(r'time around\((\w+),(\w+)\) (\d+)', repl3, r)
+		r = re.sub(r'time +around\((\w+),(\w+)\) +(\d+)', repl3, r)
 		return r
 
 def massage_whereclause_lat_args(whereclause_):
@@ -311,14 +344,14 @@ def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, current_
 # max time vi.  This new vi may be on a different route or direction, but it will help us show that vehicle
 # a little longer on the screen, which I think is desirable.
 # ^^ I'm not sure of the usefulness of this any more. 
-def add_inside_overshots_for_locations(r_vis_, direction_, time_window_end_, log_=False):
+def add_inside_overshots_for_locations(r_vis_, vid_, time_window_end_, log_=False):
 	assert len(set([vi.vehicle_id for vi in r_vis_])) == 1
 	new_vis = []
-	time_to_beat = max(vi.time for vi in r_vis_ if vi.vehicle_id == vid)
+	time_to_beat = max(vi.time for vi in r_vis_ if vi.vehicle_id == vid_)
 	sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations ' \
 		+ ' where vehicle_id = %s and time > %s and time <= %s order by time limit 1' 
 	curs = conn().cursor()
-	curs.execute(sqlstr, [vid, time_to_beat, time_window_end_])
+	curs.execute(sqlstr, [vid_, time_to_beat, time_window_end_])
 	row = curs.fetchone()
 	vi = None
 	if row:
@@ -326,7 +359,7 @@ def add_inside_overshots_for_locations(r_vis_, direction_, time_window_end_, log
 		if log_: printerr('Got inside overshot: %s' % (str(vi)))
 		new_vis.append(vi)
 	else:
-		if log_: printerr('No inside overshot found for vid %s.' % (vid))
+		if log_: printerr('No inside overshot found for vid %s.' % (vid_))
 	curs.close()
 	r_vis_ += new_vis
 	r_vis_.sort(key=lambda vi: vi.time, reverse=True)
@@ -489,21 +522,6 @@ def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, be_clever_):
 		r = (vi1_.latlng.avg(vi2_.latlng, ratio_), vi1_.latlng.heading(vi2_.latlng), None)
 	return r
 
-def round_down_by_minute(t_em_):
-	dt = datetime.datetime.utcfromtimestamp(t_em_/1000.0)
-	dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute)
-	r = long(calendar.timegm(dt.timetuple())*1000)
-	return r
-
-def round_up_by_minute(t_em_):
-	dt = datetime.datetime.utcfromtimestamp(t_em_/1000.0)
-	dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
-	if dt.second > 0:
-		dt -= datetime.timedelta(seconds=dt.second)
-		dt += datetime.timedelta(minutes=1)
-	r = long(calendar.timegm(dt.timetuple())*1000)
-	return r
-
 def massage_to_list(time_to_vis_, start_time_, end_time_):
 	time_to_vis = time_to_vis_.copy()
 
@@ -613,10 +631,11 @@ def get_predictions(froute_, start_stoptag_, dest_stoptag_, time_):
 	for row in curs:
 		prediction = predictions.Prediction(*row)
 
-		if prediction.time < time_: # Not a big deal.  Case is: if predictions have been not showing up in the db for the last few 
-			continue # minutes, then we may get some predictions from towards the beginning of the 15-minute window, 
-				# and the predicted arrival time of some of these may have already passed (assuming that time_ is the current time) 
-				# so there is no point in returning them. 
+		if prediction.time < time_: # Not a big deal.  Handling the case of the query above
+			continue # returning some predictions from towards the beginning of the 15-minute window,
+				# and the predicted arrival time of some of those having already passed (assuming that time_ is the current time)
+				# so there is no point in returning them.  This will tend to happen more if predictions
+				# have been not showing up in the db for the last few minutes.
 
 		if dest_stoptag_ is not None:
 			if prediction.dirtag in routes.routeinfo(froute_).get_stop(dest_stoptag_).dirtags_serviced:
@@ -625,6 +644,38 @@ def get_predictions(froute_, start_stoptag_, dest_stoptag_, time_):
 			r.append(prediction)
 	curs.close()
 	return r
+
+# a generator.  yields a Prediction.
+def get_predictions_gen(froute_, start_stoptag_, dest_stoptag_, time_retrieved_min_, time_retrieved_max_):
+	time_retrieved_min_ = massage_time_arg(time_retrieved_min_)
+	time_retrieved_max_ = massage_time_arg(time_retrieved_max_)
+	assert routes.routeinfo(froute_).are_predictions_recorded(start_stoptag_) and (time_retrieved_min_ < time_retrieved_max_)
+	curs = conn().cursor()
+	sqlstr = 'select '+PREDICTION_COLS+' from predictions where fudgeroute = %s and stoptag = %s and time_retrieved between %s and %s '\
+			+' order by time_retrieved'
+	curs.execute(sqlstr, [froute_, start_stoptag_, time_retrieved_min_, time_retrieved_max_])
+	for row in curs:
+		prediction = predictions.Prediction(*row)
+		if (dest_stoptag_ is None) or (prediction.dirtag in routes.routeinfo(froute_).get_stop(dest_stoptag_).dirtags_serviced):
+			yield prediction
+	curs.close()
+
+# a generator.  yields a list of Prediction.
+def get_predictions_group_gen(froute_, start_stoptag_, dest_stoptag_, time_retrieved_min_, time_retrieved_max_):
+	predictions = [] # build this up, yield it, clear it, repeat.
+	def sort_predictions():
+		predictions.sort(key=lambda p: p.time)
+	for prediction in get_predictions_gen(froute_, start_stoptag_, dest_stoptag_, time_retrieved_min_, time_retrieved_max_):
+		if len(predictions) == 0 or predictions[0].time_retrieved == prediction.time_retrieved:
+			predictions.append(prediction)
+		else:
+			sort_predictions()
+			yield predictions
+			del predictions[:]
+			predictions.append(prediction)
+	if len(predictions) > 0:
+		sort_predictions()
+		yield predictions
 
 def t():
 	#curs = conn().cursor('cursor_%d' % (int(time.time()*1000)))

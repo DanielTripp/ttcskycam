@@ -44,15 +44,15 @@ class VehicleInfo:
 
 	def get_pass_time_interp(self, forevi_, post_):
 		assert self.time < forevi_.time
-		assert geom.passes(self.latlng, forevi_.latlng, post_)
+		assert geom.passes(self.latlng, forevi_.latlng, post_, tolerance_=2)
 		ratio = geom.get_pass_ratio(self.latlng, forevi_.latlng, post_)
 		r = long(self.time + ratio*(forevi_.time - self.time))
 		return r
 
 	def __str__(self):
 		return 'route: %s, vehicle: %s, dir: %-12s, (  %f, %f  )  , mofr: %5d, heading: %3d, time: %s %s' \
-			% (self.route_tag, self.vehicle_id, self.dir_tag, self.latlng.lat, self.latlng.lng, self.mofr, self.heading, \
-				em_to_str(self.time), ('' if self.predictable else 'UNPREDICTABLE'))
+			% (self.route_tag, self.vehicle_id, self.dir_tag, self.latlng.lat, self.latlng.lng, self.mofr, self.heading,\
+			   self.timestr, ('' if self.predictable else 'UNPREDICTABLE'))
 
 	def __repr__(self):
 		return self.__str__()
@@ -73,7 +73,7 @@ class VehicleInfo:
 
 	@property
 	def timestr(self):
-		return em_to_str(self.time)
+		return em_to_str_millis(self.time)
 
 	@property
 	def mofr(self):

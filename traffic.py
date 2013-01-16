@@ -1,6 +1,6 @@
 #!/usr/bin/python2.6
 
-from collections import defaultdict
+from collections import *
 import vinfo, db, routes, geom, mc, yards, c
 from misc import *
 
@@ -35,10 +35,10 @@ def get_recent_vehicle_locations_impl(fudgeroute_, dir_, current_, time_, log_=F
 # Then it also appears to go west briefly between 01:07 and 01:08, but that's a fluke of the mofr reading as it gets bask onto queen
 # there.  Then it stands still for a few minutes there.  Then it continues eastward.  I don't want that to mess things up.
 # TODO: improve this comment.
-def get_vid_to_vis_from_db_for_traffic(fudgeroute_name_, dir_, time_, log_=False):
-	r = db.get_vid_to_vis(fudgeroute_name_, dir_, TIME_WINDOW_MINUTES, time_, True, False, log_=log_)
+def get_vid_to_vis_from_db_for_traffic(fudgeroute_name_, dir_, time_, window_minutes_, usewidemofr_=False, log_=False):
+	r = db.get_vid_to_vis(fudgeroute_name_, dir_, window_minutes_, time_, True, False, log_=log_)
 	for vid, vis in r.items():
-		filter_in_place(vis, lambda vi: vi.mofr != -1)
+		filter_in_place(vis, lambda vi: (vi.widemofr if usewidemofr_ else vi.mofr) != -1)
 	return r
 
 def between(bound1_, value_, bound2_):
@@ -51,12 +51,12 @@ def get_traffics_dirfromlatlngs(fudgeroute_name_, latlng1_, latlng2_, current_, 
 # 
 # returns elem 0: visuals list - [[timestamp, vi dict, vi dict, ...], ...] 
 #         elem 1: speed map - {mofr1: {'kmph': kmph, 'weight': weight}, ...} 
-def get_traffics(fudgeroute_name_, dir_, current_, time_, log_=False):
+def get_traffics(fudgeroute_name_, dir_, current_, time_, window_minutes_=TIME_WINDOW_MINUTES, log_=False):
 	time_ = massage_time_arg(time_, 60*1000)
-	return mc.get(get_traffics_impl, [fudgeroute_name_, dir_, current_, time_, log_])
+	return mc.get(get_traffics_impl, [fudgeroute_name_, dir_, current_, time_, window_minutes_, log_])
 
-def get_traffics_impl(fudgeroute_name_, dir_, current_, time_, log_=False):
-	mofr_to_avgspeedandweight = get_traffic_avgspeedsandweights(fudgeroute_name_, dir_, time_, current_, log_=log_)
+def get_traffics_impl(fudgeroute_name_, dir_, current_, time_, window_minutes_, log_=False):
+	mofr_to_avgspeedandweight = get_traffic_avgspeedsandweights(fudgeroute_name_, dir_, time_, current_, window_minutes_, log_=log_)
 	return [get_traffics_visuals(mofr_to_avgspeedandweight, fudgeroute_name_, dir_), \
 			get_traffics__mofr2speed(mofr_to_avgspeedandweight)]
 
@@ -87,42 +87,44 @@ def get_traffics_visuals(mofr_to_avgspeedandweight_, fudgeroute_name_, dir_):
 		routept1_mofr += route_seg_len
 	return r
 
-def get_mofr_to_kmph(froute_, dir_, current_, time_, log_=False):
+def get_mofr_to_kmph(froute_, dir_, current_, time_, window_minutes_=TIME_WINDOW_MINUTES, log_=False):
 	time_ = massage_time_arg(time_, 60*1000)
-	return mc.get(get_mofr_to_kmph_impl, [froute_, dir_, current_, time_, log_])
+	return mc.get(get_mofr_to_kmph_impl, [froute_, dir_, current_, time_, window_minutes_, log_])
 
-def get_mofr_to_kmph_impl(froute_, dir_, current_, time_, log_=False):
+def get_mofr_to_kmph_impl(froute_, dir_, current_, time_, window_minutes_, log_=False):
 	r = {}
-	for mofr, avgspeedandweight in get_traffic_avgspeedsandweights(froute_, dir_, time_, current_, log_=log_).iteritems():
+	for mofr, avgspeedandweight in get_traffic_avgspeedsandweights(froute_, dir_, time_, current_, window_minutes_, log_=log_).iteritems():
 		if avgspeedandweight is not None:
 			r[mofr] = avgspeedandweight['kmph']
 		else:
 			r[mofr] = None
 	return r
 
-def get_traffic_avgspeedsandweights(fudgeroute_name_, dir_, time_, current_, log_=False):
+def get_traffic_avgspeedsandweights(fudgeroute_name_, dir_, time_, current_, window_minutes_, log_=False):
 	r = {}
-	mofr_to_rawtraffics = get_traffic_rawspeeds(fudgeroute_name_, dir_, time_, log_=log_)
+	mofr_to_rawtraffics = get_traffic_rawspeeds(fudgeroute_name_, dir_, time_, window_minutes_, log_=log_)
 	for mofr, rawtraffics in sorted(mofr_to_rawtraffics.iteritems()): # Here we iterate in sorted key order only to print easier-to-read log msgs.
 		if log_: printerr('mofr=%d:' % mofr)
 		if not rawtraffics:
 			if log_: printerr('\tNo raw traffics.')
 			r[mofr] = None
 		else:
-			for rawtraffic in rawtraffics:
-				rawtraffic['weight'] = (time_to_weight(rawtraffic['time'], time_) if current_ else 1.0)
-				if log_: printerr('\tInterpolated time %s ==> weight %.3f' % (em_to_str_hms(rawtraffic['time']), rawtraffic['weight']))
+			for rawtraf in rawtraffics:
+				rawtraf['weight'] = (time_to_weight(rawtraf['time'], time_, window_minutes_) if current_ else 1.0)
+				if log_: printerr('\tInterpolated time %s (kmph=%.1f, vid=%s) ==> weight %.3f' \
+						% (em_to_str_hms(rawtraf['time']), rawtraf['speed_kmph'], rawtraf['vid'], rawtraf['weight']))
 			weights_total = sum([x['weight'] for x in rawtraffics])
 			if weights_total >= 0.01:
 				weighted_avg_speed = abs(sum([x['speed_kmph']*x['weight']/weights_total for x in rawtraffics]))
 				r[mofr] = {'kmph': weighted_avg_speed, 'weight': weights_total}
+				if log_: printerr('\tWeight speed: %.1f kmph.' % weighted_avg_speed)
 			else:
-				if log_: printerr('\tZero or negligible weight tally at this mofr.  Will treat as though there is no traffic here.')
+				if log_: printerr('\tWeighted speed: none.  (Due to zero or negligible weight tally at this mofr.')
 				r[mofr] = None
 	return r
 
-def time_to_weight(time_, now_):
-	window = TIME_WINDOW_MINUTES*60*1000
+def time_to_weight(time_, now_, window_minutes_):
+	window = window_minutes_*60*1000
 	window_begin = now_ - window
 	if time_ >= now_: # must be an extrapolation 
 		return 1.0
@@ -132,32 +134,54 @@ def time_to_weight(time_, now_):
 		# I believe this is a quarter circle: 
 		return (1 - ((float(time_ - now_))/window)**2)**0.5
 
-def get_traffic_rawspeeds(fudgeroute_name_, dir_, time_=now_em(), log_=False):
+def get_traffic_rawspeeds(fudgeroute_name_, dir_, time_, window_minutes_, usewidemofr_=False, singlemofr_=None, log_=False):
 	assert dir_ in (0, 1)
 	mofr_to_rawtraffics = {}
-	for mofr in range(0, routes.max_mofr(fudgeroute_name_), MOFR_STEP):
+	mofrs_to_get = (range(0, routes.max_mofr(fudgeroute_name_), MOFR_STEP) if singlemofr_ is None else [singlemofr_])
+	for mofr in mofrs_to_get:
 		mofr_to_rawtraffics[mofr] = []
-	for vid, vis in get_vid_to_vis_from_db_for_traffic(fudgeroute_name_, dir_, time_=time_, log_=log_).items():
+	for vid, vis in get_vid_to_vis_from_db_for_traffic(fudgeroute_name_, dir_, time_, window_minutes_, usewidemofr_=usewidemofr_, log_=log_).items():
 		if log_: printerr('For vid "%s":' % (vid))
 		if log_:
 			for vi in vis[::-1]:
 				printerr('\traw vinfo: %s' % (str(vi)))
 		if len(vis) < 2:
 			continue
-		for interp_mofr in range(0, routes.max_mofr(fudgeroute_name_), MOFR_STEP):
+		def mofr(vi__): return (vi__.widemofr if usewidemofr_ else vi__.mofr)
+		assert all(mofr(vi) != -1 for vi in vis)
+		for interp_mofr in mofrs_to_get:
 			if log_: printerr('\tFor mofr %d:' % (interp_mofr))
-			vi_lo, vi_hi = get_bounding_mofr_vis(interp_mofr, vis)
+			vi_lo, vi_hi = get_bounding_mofr_vis(interp_mofr, vis, usewidemofr_)
 			if vi_lo and vi_hi:
-				if log_: printerr('\t\tFound bounding vis at mofrs %d and %d (%s and %s).' % (vi_lo.mofr, vi_hi.mofr, vi_lo.timestr, vi_hi.timestr))
-				interp_ratio = (interp_mofr - vi_lo.mofr)/float(vi_hi.mofr - vi_lo.mofr)
+				if log_: printerr('\t\tFound bounding vis at mofrs %d and %d (%s and %s).' % (mofr(vi_lo), mofr(vi_hi), vi_lo.timestr, vi_hi.timestr))
+				interp_ratio = (interp_mofr - mofr(vi_lo))/float(mofr(vi_hi) - mofr(vi_lo))
 				interp_t = int(vi_lo.time + interp_ratio*(vi_hi.time - vi_lo.time))
-				speed_kmph = ((vi_hi.mofr - vi_lo.mofr)/1000.0)/((vi_hi.time - vi_lo.time)/(1000.0*60*60))
+				speed_kmph = ((mofr(vi_hi) - mofr(vi_lo))/1000.0)/((vi_hi.time - vi_lo.time)/(1000.0*60*60))
 				if log_: printerr('\t\tSpeed: %.1f.  Interpolated time at this mofr: %s' % (speed_kmph, em_to_str_hms(interp_t)))
 				# TODO: fix buggy negative speeds a better way, maybe.
 				mofr_to_rawtraffics[interp_mofr].append({'speed_kmph': speed_kmph, 'time':interp_t, 'vid': vid})
 			else:
 				if log_: printerr('\t\tNo bounding vis found for this mofr step / vid.')
-	return mofr_to_rawtraffics
+	return (mofr_to_rawtraffics if singlemofr_ is None else mofr_to_rawtraffics.values()[0])
+
+# return a tuple - (headway in millis, time of earlier passing vehicle, time of later passing vehicle)
+# 	or None if no headway could be found from the vehicles that passed the stop in the given window-minutes.
+def get_observed_headway(froute_, stoptag_, time_, window_minutes_, usewidemofr_=False, log_=False):
+	stop = routes.routeinfo(froute_).get_stop(stoptag_)
+	mofr = stop.mofr
+	rawtraffics = get_traffic_rawspeeds(froute_, stop.direction, time_+(window_minutes_*60*1000/2), window_minutes_, usewidemofr_=False,
+			singlemofr_=mofr, log_=log_)
+	if not rawtraffics:
+		return None
+	earlier_rawtraffics = [rawtraffic for rawtraffic in rawtraffics if rawtraffic['time'] <= time_]
+	later_rawtraffics = [rawtraffic for rawtraffic in rawtraffics if rawtraffic['time'] >= time_]
+	if earlier_rawtraffics and later_rawtraffics:
+		lo_time = max(earlier_rawtraffics, key=lambda rawtraffic: rawtraffic['time'])['time']
+		hi_time = min(later_rawtraffics,   key=lambda rawtraffic: rawtraffic['time'])['time']
+		return (hi_time - lo_time, lo_time, hi_time)
+	else:
+		return None
+
 
 # [1] Here I am trying to implement the following judgement call:
 # It is better to show no traffic at all (white) than a misleading orange
@@ -168,30 +192,30 @@ def get_traffic_rawspeeds(fudgeroute_name_, dir_, time_=now_em(), log_=False):
 # between 13:05 and 13:35, and how this could result in vid 4087 single-handedly causing a
 # decent-looking traffic report for that stretch of road.  I would rather show white (or whatever
 # I'm showing to signify 'no traffic data' now) and thus encourage the user to look for the detour.
-def get_bounding_mofr_vis(mofr_, vis_):
+def get_bounding_mofr_vis(mofr_, vis_, usewidemofr_):
+	assert isinstance(mofr_, int) and isinstance(vis_, Sequence) and isinstance(usewidemofr_, bool)
 	assert all(vi1.vehicle_id == vi2.vehicle_id for vi1, vi2 in hopscotch(vis_))
-	assert all(vi.mofr != -1 for vi in vis_)
 
-	mofr_key = lambda x: x.mofr
+	get_mofr = lambda vi: (vi.widemofr if usewidemofr_ else vi.mofr)
 
-	prev_step_vis = filter(lambda x: mofr_ - MOFR_STEP < x.mofr < mofr_, vis_)
+	prev_step_vis = filter(lambda vi: mofr_ - MOFR_STEP < get_mofr(vi) < mofr_, vis_)
 	if prev_step_vis:
-		vi_lo = min(prev_step_vis, key=mofr_key)
+		vi_lo = min(prev_step_vis, key=get_mofr)
 	else:
-		lesser_vis = filter(lambda x: x.mofr < mofr_, vis_)
+		lesser_vis = filter(lambda vi: get_mofr(vi) < mofr_, vis_)
 		if lesser_vis:
-			vi_lo = max(lesser_vis, key=mofr_key)
+			vi_lo = max(lesser_vis, key=get_mofr)
 		else:
 			vi_lo = None
 
-	greater_vis = filter(lambda x: x.mofr > mofr_, vis_)
+	greater_vis = filter(lambda vi: get_mofr(vi) > mofr_, vis_)
 	if greater_vis:
-		vi_hi = min(greater_vis, key=mofr_key)
+		vi_hi = min(greater_vis, key=get_mofr)
 	else:
 		vi_hi = None
 
 	if vi_lo and vi_hi:
-		assert vi_lo.mofr < vi_hi.mofr
+		assert get_mofr(vi_lo) < get_mofr(vi_hi)
 
 	if vi_lo and vi_hi and (abs(vi_hi.time - vi_lo.time) > 1000*60*8): # see [1] above.
 		return (None, None)
