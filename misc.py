@@ -1,10 +1,16 @@
 #!/usr/bin/python2.6
 
-import sys, os, time, math
+import sys, os, time, math, datetime, calendar
 from collections import MutableSequence, defaultdict
 
 def em_to_str(t_):
 	return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t_/1000))
+
+def em_to_str_millis(t_):
+	format = '%Y-%m-%d %H:%M:%S'
+	secs_formatted = time.strftime(format, time.localtime(t_/1000))
+	millis = t_ - time.mktime(time.strptime(secs_formatted, format))*1000  # Hack.
+	return '%s.%03d' % (secs_formatted, millis)
 
 def em_to_str_hm(t_):
 	return time.strftime('%H:%M', time.localtime(t_/1000))
@@ -136,6 +142,14 @@ def avg(lo_, hi_, ratio_=0.5):
 	else:
 		return r
 
+def average(seq_):
+	num_elems = 0
+	sum = 0
+	for e in seq_:
+		sum += e
+		num_elems += 1
+	return sum/float(num_elems)
+
 def file_under_key(list_, key_, assume_no_duplicate_keys_=False):
 	assert callable(key_)
 	if assume_no_duplicate_keys_:
@@ -196,7 +210,14 @@ def uniq(seq_):
 	return r
 
 def mofrs_to_dir(start_mofr_, dest_mofr_):
-	return (0 if dest_mofr_ > start_mofr_ else 1)
+	if start_mofr_ == -1 or dest_mofr_ == -1:
+		return None
+	elif dest_mofr_ > start_mofr_:
+		return 0
+	elif dest_mofr_ < start_mofr_:
+		return 1
+	else:
+		return None
 
 # param round_step_millis_ if 0, don't round down.  (Indeed, don't round at all.) 
 def massage_time_arg(time_, round_step_millis_=0):
@@ -238,9 +259,95 @@ def first(iterable_, predicate_):
 			return e
 		return None
 
+def round_down_by_minute(t_em_):
+	dt = datetime.datetime.utcfromtimestamp(t_em_/1000.0)
+	dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute) # Omitting second on purpose.  That's what
+			# does the rounding down.
+	r = long(calendar.timegm(dt.timetuple())*1000)
+	return r
+
+def round_down_by_minute_step(t_em_, step_):
+	dt = datetime.datetime.utcfromtimestamp(t_em_/1000.0)
+	dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, round_down(dt.minute, step_)) # Omitting second on purpose.  That's what
+			# does the rounding down by minute.
+	r = long(calendar.timegm(dt.timetuple())*1000)
+	return r
+
+def round_up_by_minute(t_em_):
+	dt = datetime.datetime.utcfromtimestamp(t_em_/1000.0)
+	dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
+	if dt.second > 0:
+		dt -= datetime.timedelta(seconds=dt.second)
+		dt += datetime.timedelta(minutes=1)
+	r = long(calendar.timegm(dt.timetuple())*1000)
+	return r
+
+# maintains a list of sorted keys available through sortedkeys().  also a floor*() method. 
+class sorteddict(dict):
+
+	_pop_default_arg_not_supplied_sentinel_object = object()
+
+	def __init__(self, *args, **kwargs):
+		dict.__init__(self, *args, **kwargs)
+		self.refresh_sortedkeys()
+
+	# Making this a tuple because we don't want to have to make and return a copy in sortedkeys(), 
+	# because that was too slow (took cumulatively half a second in a simple path-finding test case.)
+	def refresh_sortedkeys(self):
+		self._sortedkeys = tuple(sorted(self.keys()))
+
+	def __setitem__(self, key, value):
+		dict.__setitem__(self, key, value)
+		self.refresh_sortedkeys()
+
+	def __delitem__(self, key):
+		dict.__delitem__(self, key)
+		self.refresh_sortedkeys()
+
+	def clear(self):
+		dict.clear(self)
+		self.refresh_sortedkeys()
+
+	def copy(self):
+		return sorteddict([(k, v) for k, v in self.iteritems()])
+
+	def pop(self, key, default=_pop_default_arg_not_supplied_sentinel_object):
+		try:
+			return dict.pop(self, key)
+		finally:
+			self.refresh_sortedkeys()
+
+	def popitem(self):
+		try:
+			return dict.popitem(self)
+		finally:
+			self.refresh_sortedkeys()
+
+	def setdefault(self, key, default=None):
+		try:
+			return dict.setdefault(key, default)
+		finally:
+			self.refresh_sortedkeys()
+
+	def sortedkeys(self):
+		return self._sortedkeys
+
+	
+
+
 
 if __name__ == '__main__':
 
-	print uniq((x for x in [1, 2, 2, 3, 2, 2, 3, 3]))
+	d = sorteddict()
+	#d = {}
+	for i in range(10):
+		d[i] = str(i)*5
+
+
+	print sorteddict({1: 2, 3: 4})
+
+
+
+
 
 

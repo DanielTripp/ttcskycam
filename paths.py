@@ -207,7 +207,7 @@ if __name__ == '__main__':
 
 	#pprint.pprint(get_pathnarrivaltime_by_latlngs(start_latlng, dest_latlng, '2013-01-05 18:00'))
 	for path, arrivaltime in get_pathnarrivaltime_by_latlngs(start_latlng, dest_latlng, '2013-01-07 13:45'):
-		print em_to_str(arrivaltime)
+		print 'arrival time:', em_to_str(arrivaltime)
 		pprint.pprint(path)
 		print
 	
