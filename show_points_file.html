@@ -33,16 +33,35 @@ function initialize() {
 				g_latlngs.clear();
 				g_i = 0;
 
-				var contents_latlng_list = $.parseJSON(get_sync(get_value('filename_field'), {cache: false}));
-				for(var i in contents_latlng_list) {
-					var raw_latlng = contents_latlng_list[i];
-					var glatlng = new google.maps.LatLng(raw_latlng[0], raw_latlng[1]);
-					g_latlngs.add(glatlng);
-				}
-				if(false) {
-					draw_one_point_at_a_time();
-				} else {
-					draw_all_points();
+				var contents_str = get_sync(get_value('filename_field'), {cache: false});
+				if(contents_str != null) {
+					var contents_latlng_list = null;
+					try {
+						contents_latlng_list = $.parseJSON(contents_str);
+					} catch(e if e instanceof SyntaxError) {
+						// So it wasn't JSON.    Maybe it's XML: 
+						var dom = $.parseXML(contents_str);
+						contents_latlng_list = [];
+
+						$(dom).find('*').each(function() {
+							var lat = $(this).attr('lat'), lng = $(this).attr('lon');
+							if(lat != undefined && lng != undefined) {
+								contents_latlng_list.push([lat, lng]);
+							}
+						});
+					}
+					if(contents_latlng_list != null) {
+						for(var i in contents_latlng_list) {
+							var raw_latlng = contents_latlng_list[i];
+							var glatlng = new google.maps.LatLng(raw_latlng[0], raw_latlng[1]);
+							g_latlngs.add(glatlng);
+						}
+						if(false) {
+							draw_one_point_at_a_time();
+						} else {
+							draw_all_points();
+						}
+					}
 				}
       }
     });
