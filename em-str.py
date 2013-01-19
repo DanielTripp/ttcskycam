@@ -1,12 +1,15 @@
 #!/usr/bin/python2.6
 
 import sys, time, re
-import misc
+from misc import *
 
-arg = sys.argv[1]
-if re.match('^\\d+$', arg):
-	print misc.em_to_str(int(arg))
+if len(sys.argv) == 1:
+	print now_em()
 else:
-	print misc.str_to_em(arg)
+	arg = sys.argv[1]
+	if re.match('^\\d+$', arg):
+		print em_to_str(int(arg))
+	else:
+		print str_to_em(arg)
 	
 

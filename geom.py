@@ -209,6 +209,7 @@ def mps_to_kmph(mps_):
 # magnitude that I can see.  The small GPS errors do, and it seems to be about 50 metres.  (That's 50 metres from one
 # extreme to the other - i.e. 25 metres on either side of the road.  Note that we don't use mofrs here, only
 # distance between latlngs.)
+# (newer comment - 50 metres may not be enough.  eg. 2013-01-16 00:02:00.000 route: 505, vehicle: 4040, dir: '505_0_505' , ( 43.65366, -79.44915 ) , mofr: -1, heading: 140 
 # These small GPS errors, combined with scenarios where a given reading in our database has a logged time very soon
 # after the previous one (eg. 1 second or even less - as can happen in certain NextBus fluke scenarios I think, as well as
 # the couple of times when I've mistakenly been polling for vehicle locations with two processes at the same time)

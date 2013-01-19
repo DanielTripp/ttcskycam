@@ -16,20 +16,26 @@
     <script type="text/javascript">
 
 
+var g_marker = null;
+
 function initialize() {
 
 	init_map();
 
-	var marker = new google.maps.Marker({
+	g_marker = new google.maps.Marker({
 		position: new google.maps.LatLng(43.650757399103135, -79.413822128378385),
 		map: g_map,
 		title:"",
 		draggable: true
 		});
 
-	google.maps.event.addListener(marker, 'dragend', function() {
-		set_contents('p1', sprintf("%f, %f", marker.getPosition().lat(), marker.getPosition().lng()));
-	});
+	google.maps.event.addListener(g_marker, 'dragend', show_latlng());
+
+	show_latlng();
+}
+
+function show_latlng() {
+	set_contents('p1', sprintf("%f, %f", g_marker.getPosition().lat(), g_marker.getPosition().lng()));
 }
 
 

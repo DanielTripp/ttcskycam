@@ -21,45 +21,13 @@
 var g_map;
 var g_objects = new Array();
 var g_resnapped_markers = [null, null];
+var g_buildfudgeroute_markers = new Array();
+var g_buildfudgeroute_polyline = null;
+var g_stops_dir_to_stoptag_to_latlng = null;
+
 
 function add_info_win(mark_, text_) {
 	(new google.maps.InfoWindow({content: text_, disableAutoPan: true})).open(g_map, mark_);
-}
-
-function draw_path_marker(lat_, lon_, color_) {
-	if(false) {
-		return new google.maps.Marker({
-			position: new google.maps.LatLng(lat_, lon_),
-			map: g_map,
-			title:"Starting point",
-			draggable: false
-			});
-	}
-	var radius = 5;
-	var marker1 = new RichMarker({
-		position: new google.maps.LatLng(lat_, lon_), 
-		map: g_map,
-		draggable: false,
-		flat: true, 
-		anchor: new google.maps.Size(-radius, -2*radius), 
-		content: sprintf('<svg width="%d" height="%d" version="1.1">' +
-				'<line x1="0" y1="0" x2="%d" y2="%d" style="stroke:'+color_+';stroke-width:1"/>' + 
-				'</svg>', 
-				radius*2, radius*2, radius*2, radius*2)
-		});
-	var marker2 = new RichMarker({
-		position: new google.maps.LatLng(lat_, lon_), 
-		map: g_map,
-		draggable: false,
-		flat: true, 
-		anchor: new google.maps.Size(-radius, -2*radius), 
-		content: sprintf('<svg width="%d" height="%d" version="1.1">' +
-				'<line x1="0" y1="%d" x2="%d" y2="0" style="stroke:'+color_+';stroke-width:1"/>' + 
-				'</svg>', 
-				radius*2, radius*2, radius*2, radius*2)
-		});
-	g_objects.push(marker1);
-	g_objects.push(marker2);
 }
 
 function int_to_rgbstr(int_) {
@@ -112,6 +80,36 @@ function initialize() {
 	document.onkeypress = keypress_handler;
 	if (document.layers) {
 		document.captureEvents(Event.KEYPRESS); 
+	}
+
+
+/*
+  $('#stoptag_field').keydown(function (e){
+			if(e.keyCode == 13) {
+				$('#stoptag_submit_button').trigger('click');
+			}
+		});
+*/
+
+}
+
+function show_stoptag(stoptag_) {
+	if(g_stops_dir_to_stoptag_to_latlng==null) {
+		alert('You need to load a fudgeroute before searching for a stoptag.');
+		return;
+	}
+	for(var dir=0; dir<=1; dir++) {
+		var latlng = g_stops_dir_to_stoptag_to_latlng[dir][stoptag_];
+		if(latlng != undefined) {
+			break;
+		}
+	}
+	if(latlng == undefined) {
+		alert('stoptag not found.');
+	} else {
+		var infowin = new google.maps.InfoWindow({content: sprintf('stoptag %s<br>%f, %f', stoptag_, latlng[0], latlng[1]), 
+				position: new google.maps.LatLng(latlng[0], latlng[1])});
+		infowin.open(g_map);
 	}
 }
 
@@ -233,41 +231,52 @@ function refresh_config_route() {
 
 function refresh_fudge_route() {
 	remove_existing_objects();
+	forget_built_fudgeroute();
 	set_fudge_route_routepts(radio_val('fudgeroute'));
 	set_fudge_route_stops_bothdirs(radio_val('fudgeroute'));
 }
 
 function set_fudge_route_stops_bothdirs(route_) {
-	var dir_to_stoptag_to_stop = $.parseJSON(get_sync(sprintf('stops_%s.json', (route_.substr(0, 7) == 'spadina' ? 'spadina' : route_))));
-	for(var dir in dir_to_stoptag_to_stop) {
-		var stoptag_to_stop = dir_to_stoptag_to_stop[dir];
-		for(var stoptag in stoptag_to_stop) {
-			var stop = stoptag_to_stop[stoptag];
-			var lat = stop["lat"], lon = stop["lon"];
-			draw_stop(lat, lon, dir, stoptag);
+	var froute = (route_.substr(0, 7) == 'spadina' ? 'spadina' : route_);
+	g_stops_dir_to_stoptag_to_latlng = null;
+	g_stops_dir_to_stoptag_to_latlng = callpy_sync('routes.get_stops_dir_to_stoptag_to_latlng', froute);
+	for(var dir=0; dir<=1; dir++) {
+		var stoptag_to_latlng = g_stops_dir_to_stoptag_to_latlng[dir];
+		for(var stoptag in stoptag_to_latlng) {
+			var latlng = stoptag_to_latlng[stoptag];
+			draw_stop(latlng, dir, stoptag);
 		}
 	}
 }
 
-function draw_stop(lat_, lon_, dir_, stoptag_) {
+function draw_stop(latlng_, dir_, stoptag_) {
+	var size = 20;
+
 	var mark=null;
 	if(dir_==0) {
-		mark = new google.maps.Circle({
-			center: new google.maps.LatLng(lat_, lon_),
+		mark = new RichMarker({
+			position: new google.maps.LatLng(latlng_[0], latlng_[1]), 
 			map: g_map,
-			radius: 15, 
-			//fillOpacity: 0.7, 
-			fillColor: 'rgb(0,255,0)', 
-			strokeWeight: 0
-		});
+			draggable: false,
+			flat: true, 
+			anchor: new google.maps.Size(-size/2, -size/2), 
+			content: sprintf('<svg width="%d" height="%d" viewBox="0 0 100 100" version="1.1">' +
+					'<polygon points="100,0 100,100 0,100" fill="rgb(0,255,0)" fill-opacity="0.5" stroke-width="0.5" />' +
+					'<circle cx="50" cy="50" r="20" fill="rgb(0,255,0)" fill-opacity="1" stroke-width="1" stroke="rgb(0,0,0)" />' +
+					'</svg>', size, size)
+			});
 	} else {
-		var latoff = 0.0001, lonoff = 0.00015;
-		mark = new google.maps.Rectangle({
-			bounds: new google.maps.LatLngBounds(new google.maps.LatLng(lat_-latoff, lon_-lonoff), new google.maps.LatLng(lat_+latoff, lon_+lonoff)),
+		mark = new RichMarker({
+			position: new google.maps.LatLng(latlng_[0], latlng_[1]), 
 			map: g_map,
-			fillColor: 'rgb(0,0,255)', 
-			strokeWeight: 0
-		});
+			draggable: false,
+			flat: true, 
+			anchor: new google.maps.Size(-size/2, -size/2), 
+			content: sprintf('<svg width="%d" height="%d" viewBox="0 0 100 100" version="1.1">' +
+					'<polygon points="100,0 0,100 0,0" fill="rgb(0,0,255)" fill-opacity="0.5" stroke-width="0.5" />' +
+					'<circle cx="50" cy="50" r="20" fill="rgb(0,0,255)" fill-opacity="1" stroke-width="1" stroke="rgb(0,0,0)" />' +
+					'</svg>', size, size)
+			});
 	}
 	g_objects.push(mark);
 
@@ -334,7 +343,6 @@ function set_config_route(route_, direction_) {
 			});
 			var color = int_to_rgbstr(pathnum);
 			draw_path_polyline(path_points, color);
-			//draw_path_markers(path_points, color);
 			pathnum += 1;
 		}
 	});
@@ -344,13 +352,6 @@ function set_config_route(route_, direction_) {
 		make_path_marker(lat, lon);
 	});
 	*/
-}
-
-function draw_path_markers(path_points_, color_) {
-	for(var i=0; i<path_points_.length; i++) {
-		var point = path_points_[i];
-		draw_path_marker(point.lat(), point.lng(), color_);
-	}
 }
 
 function draw_path_polyline(path_points_, color_) {
@@ -367,9 +368,6 @@ function draw_path_polyline(path_points_, color_) {
 function radio_val(groupname_) {
 	return $('input[name='+groupname_+']:checked').val();
 }
-
-var g_buildfudgeroute_markers = new Array();
-var g_buildfudgeroute_polyline = null;
 
 function add_buildfudgeroute_marker(glatlon_) {
 	var glatlon = glatlon_;
@@ -427,6 +425,14 @@ function constrain_latlng_by_map_bounds(latlng_) {
 		r = new google.maps.LatLng(latlng_.lat(), margin_right);
 	}
 	return r;
+}
+
+function forget_built_fudgeroute() {
+	if(g_buildfudgeroute_polyline != null) {
+		g_buildfudgeroute_polyline.setMap(null);
+		g_buildfudgeroute_polyline = null;
+	}
+	g_buildfudgeroute_markers = new Array();
 }
 
 function redraw_buildfudgeroute_path() {
@@ -497,16 +503,16 @@ function redraw_buildfudgeroute_path() {
 				</tr>
 				<tr>
 					<td>
-						<input type="radio" name="fudgeroute" value="spadinadir0" />Spadina dir 0<br/>
-						<input type="radio" name="fudgeroute" value="spadinadir1" />Spadina dir 1<br/>
-						<input type="radio" name="fudgeroute" value="king" />King<br/>
-						<input type="radio" name="fudgeroute" value="queen" />Queen<br/>
-						<input type="radio" name="fudgeroute" value="dufferin" />Dufferin<br/>
-						<input type="radio" name="fudgeroute" value="ossington" />Ossington<br/>
-						<input type="radio" name="fudgeroute" value="lansdowne" />Lansdowne<br/>
-						<input type="radio" name="fudgeroute" value="college" />College<br/>
-						<input type="radio" name="fudgeroute" value="dupont" />Dupont<br/>
-						<input type="radio" name="fudgeroute" value="dundas" checked="checked" />Dundas<br/>
+						<input id="collegeradiobutton" type="radio" name="fudgeroute" value="college" /><label for="collegeradiobutton">College</label><br/>
+						<input id="dufferinradiobutton" type="radio" name="fudgeroute" value="dufferin" /><label for="dufferinradiobutton">Dufferin</label><br/>
+						<input id="dundasradiobutton" type="radio" name="fudgeroute" value="dundas" checked="checked" /><label for="dundasradiobutton">Dundas</label><br/>
+						<input id="dupontradiobutton" type="radio" name="fudgeroute" value="dupont" /><label for="dupontradiobutton">Dupont</label><br/>
+						<input id="kingradiobutton" type="radio" name="fudgeroute" value="king" /><label for="kingradiobutton">King</label><br/>
+						<input id="lansdowneradiobutton" type="radio" name="fudgeroute" value="lansdowne" /><label for="lansdowneradiobutton">Lansdowne</label><br/>
+						<input id="ossingtonradiobutton" type="radio" name="fudgeroute" value="ossington" /><label for="ossingtonradiobutton">Ossington</label><br/>
+						<input id="queenradiobutton" type="radio" name="fudgeroute" value="queen" /><label for="queenradiobutton">Queen</label><br/>
+						<input id="spadinadir0radiobutton" type="radio" name="fudgeroute" value="spadinadir0" /><label for="spadinadir0radiobutton">Spadina dir 0</label><br/>
+						<input id="spadinadir1radiobutton" type="radio" name="fudgeroute" value="spadinadir1" /><label for="spadinadir1radiobutton">Spadina dir 1</label><br/>
 					</td>
 				</tr>
 				<tr>
@@ -531,6 +537,10 @@ function redraw_buildfudgeroute_path() {
 		<br/>
 		<br/>
 		<div>
+			<form name="form1">
+				stoptag:<input type="text" size="15" name="stoptag_field" id="stoptag_field" /> 
+				<input type="button" onclick="show_stoptag(this.form.stoptag_field.value)" value="Submit" id="stoptag_submit_button" /><br/>
+			</form>
 			<p id="snaptest_arg_pt">...</p>
 			<p id="snaptest_result_snappedpt">...</p>
 			<p id="snaptest_result_mofr">...</p>

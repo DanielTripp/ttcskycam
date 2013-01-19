@@ -224,6 +224,21 @@ def fix_dirtag(vi_, dir_):
 	else:
 		raise Exception('Don\'t know how to fix dir_tag on %s' % str(vi_))
 
+def fix_dirtag_str(dir_tag_, dir_, route_tag_):
+	assert isinstance(dir_tag_, basestring) and dir_ in (0, 1)
+	dir_tag_int = get_dir_tag_int(dir_tag_)
+	if dir_ == dir_tag_int:
+		return dir_tag_
+	elif dir_tag_int == 1 and dir_ == 0:
+		return dir_tag_.replace('_1_', '_0_')
+	elif dir_tag_int == 0 and dir_ == 1:
+		return dir_tag_.replace('_0_', '_1_')
+	elif dir_tag_int is None:
+		assert dir_tag_ == ''
+		return '%s_%d_%s' % (route_tag_, dir_, route_tag_)
+	else:
+		raise Exception('Don\'t know how to fix dir_tag "%s"' % dir_tag_)
+
 def find_passing(croute_, vid_, start_time_, end_time_, post_, dir_):
 	assert isinstance(croute_, str) and isinstance(vid_, basestring) and isinstance(post_, geom.LatLng)
 	lastvi = None
@@ -688,14 +703,88 @@ def t():
 			break
 		#print row[0]
 
+def routes_clause(froute_):
+	return 'route_tag in ('+(','.join(["'%s'" % croute for croute in routes.FUDGEROUTE_TO_CONFIGROUTES[froute_]]))+')'
+
+# Scenario - waiting at startmofr_ at time_ for the next vehicle to come.
+# Return map containing keys 'time_caught', 'time_arrived', and 'vid'.
+# Times are absolute epoch times in millis, not a relative time spent travelling.
+def get_observed_arrival_time(froute_, startstoptag_, deststoptag_, time_):
+	assert startstoptag_ != deststoptag_
+	time_ = massage_time_arg(time_)
+	ri = routes.routeinfo(froute_)
+	assert ri.get_stop(startstoptag_).direction == ri.get_stop(deststoptag_).direction
+	startmofr = ri.get_stop(startstoptag_).mofr; destmofr = ri.get_stop(deststoptag_).mofr
+	startvi1, startvi2 = _get_observed_arrival_time_caught_vehicle_passing_vis(froute_, startstoptag_, deststoptag_, time_)
+	assert startvi1.vehicle_id == startvi2.vehicle_id
+
+	time_caught = startvi1.get_pass_time_interp(startvi2, startmofr)
+	time_arrived = _get_observed_arrival_time_arrival_time(startvi1, startstoptag_, deststoptag_)
+	return {'time_caught': time_caught, 'time_arrived': time_arrived, 'vid': startvi1.vehicle_id}
+
+def _get_observed_arrival_time_arrival_time(startvi1_, startstoptag_, deststoptag_):
+	assert isinstance(startvi1_, vinfo.VehicleInfo) and isinstance(startstoptag_, basestring) and isinstance(deststoptag_, basestring)
+	ri = routes.routeinfo(routes.CONFIGROUTE_TO_FUDGEROUTE[startvi1_.route_tag])
+	startmofr = ri.get_stop(startstoptag_).mofr; destmofr = ri.get_stop(deststoptag_).mofr
+	direction = mofrs_to_dir(startmofr, destmofr)
+	curs = conn().cursor()
+	curs.execute('select '+VI_COLS+' from ttc_vehicle_locations where vehicle_id = %s and time > %s and time < %s order by time',
+			[startvi1_.vehicle_id, startvi1_.time, startvi1_.time + 1000*60*60*2])
+	lastvi = startvi1_
+	for row in curs:
+		curvi = vinfo.VehicleInfo(*row)
+		if curvi.mofr != -1 and (curvi.mofr >= destmofr if direction==0 else curvi.mofr <= destmofr):
+			assert lastvi.mofr != -1 # Apparently a detour, or a large gap in GPS readings.  Not sure what to do with this.
+			return lastvi.get_pass_time_interp(curvi, destmofr)
+		lastvi = curvi
+	curs.close()
+
+# note [1] - TODO: do more here.  Handle cases of caught vehicle being stuck and rescued by another vehicle. three sub-cases:
+# 1) rescue from behind (must be a bus),
+# 2) rescue by vehicle in front (i.e. caught vehicle short turns, passengers transfer onto vehicle in front)
+# 3) rescue from the side (i.e rescue bus shows up not from behind.  I have never seen this, in person or in the data.)
+def _get_observed_arrival_time_caught_vehicle_passing_vis(froute_, startstoptag_, deststoptag_, time_):
+	ri = routes.routeinfo(froute_)
+	startmofr = ri.get_stop(startstoptag_).mofr; destmofr = ri.get_stop(deststoptag_).mofr
+	direction = mofrs_to_dir(startmofr, destmofr)
+	curs = conn().cursor()
+	try:
+		curs.execute('select '+VI_COLS+' from ttc_vehicle_locations where '+routes_clause(froute_)+' and time >= %s and time < %s order by time',
+					 [time_ - 1000*60*5, time_ + 1000*60*60])
+		candidate_vid_to_lastvi = {}
+		for row in curs:
+			curvi = vinfo.VehicleInfo(*row)
+			#curvi_fixed_dirtag = fix_dirtag_str(curvi.dir_tag, direction, curvi.route_tag)
+			if 0:
+				if curvi.dir_tag != curvi_fixed_dirtag:
+					print curvi.dir_tag, curvi_fixed_dirtag   # TDR
+				else:
+					print '--------- dirtag not fixed '
+			#if 0:
+			#print curvi_fixed_dirtag # TDR
+			#if curvi_fixed_dirtag not in ri.get_stop(deststoptag_).dirtags_serviced: # see note [1]
+			#	continue
+			if curvi.vehicle_id in candidate_vid_to_lastvi:
+				lastvi = candidate_vid_to_lastvi[curvi.vehicle_id]
+				if lastvi.mofr != -1 and curvi.mofr != -1 \
+						and (lastvi.mofr <= startmofr <= curvi.mofr if direction == 0 else lastvi.mofr >= startmofr >= curvi.mofr)\
+						and fix_dirtag_str(curvi.dir_tag, direction, curvi.route_tag) in ri.get_stop(deststoptag_).dirtags_serviced \
+						and lastvi.get_pass_time_interp(curvi, startmofr) >= time_:
+					#print 'fixed:', fix_dirtag_str(curvi.dir_tag, direction, curvi.route_tag)# in ri.get_stop(deststoptag_).dirtags_serviced\
+					return (lastvi, curvi)
+			candidate_vid_to_lastvi[curvi.vehicle_id] = curvi
+		else:
+			raise Exception('No passing vehicle found at start point within reasonable time frame.')
+	finally:
+		curs.close()
+
 if __name__ == '__main__':
 
-
-	import pprint
-	t = now_em()
-	broadview = '10272'; spadina = '1653'; roncesvalles = '9459'
-	pprint.pprint(get_predictions('queen', broadview, None, t))
-	pprint.pprint(get_predictions('queen', spadina, None, t))
+	# lansdowne: 5294     east of humber (kingsway): 3374     west of humber (mimico creek): 6830
+	for deststoptag in ('3374', '6830'):
+		r = get_observed_arrival_time('queen', '5294', deststoptag, '2012-01-07 12:00')
+		print 'vid = %s    %s -> %s ' % (r['vid'], em_to_str(r['time_caught']), em_to_str(r['time_arrived']))
+		#break
 
 
 
