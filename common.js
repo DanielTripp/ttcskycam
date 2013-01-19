@@ -76,16 +76,22 @@ function dict_union(dict1_, dict2_) {
 }
 
 function get_sync(url_, additional_options_) {
+	var error = false;
 	var options = {url:url_, async:false, 
 			error: function(jqXHR_, textStatus_, errorThrown_) {
 				alert("get_sync('"+url_+"') error - "+errorThrown_);
+				error = true;
 			}
 		};
 	if(additional_options_ != undefined) {
 		options = dict_union(options, additional_options_);
 	}
-	r = $.ajax(options).responseText;
-	return r;
+	var jqXHR = $.ajax(options);
+	if(error) {
+		return null;
+	} else {
+		return jqXHR.responseText;
+	}
 }
 
 function get_v1(url_) {
