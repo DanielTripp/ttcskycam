@@ -1,10 +1,13 @@
 #!/usr/bin/python2.6
 
-import sys, os, time, math, datetime, calendar
+import sys, os, time, math, datetime, calendar, bisect
 from collections import MutableSequence, defaultdict
 
 def em_to_str(t_):
-	return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t_/1000))
+	if t_ is None or t_ == 0:
+		return None
+	else:
+		return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t_/1000))
 
 def em_to_str_millis(t_):
 	format = '%Y-%m-%d %H:%M:%S'
@@ -282,7 +285,10 @@ def round_up_by_minute(t_em_):
 	r = long(calendar.timegm(dt.timetuple())*1000)
 	return r
 
-# maintains a list of sorted keys available through sortedkeys().  also a floor*() method. 
+def betweenii(a_, b_, c_):
+	return (a_ <= b_ <= c_) or (c_ <= b_ <= a_)
+
+# maintains a list of sorted keys available through sortedkeys().  also a floor*() method.
 class sorteddict(dict):
 
 	_pop_default_arg_not_supplied_sentinel_object = object()
@@ -332,22 +338,102 @@ class sorteddict(dict):
 	def sortedkeys(self):
 		return self._sortedkeys
 
-	
+	def ceilitem(self, key_):
+		assert len(self) == len(self._sortedkeys)
+		if not self:
+			raise KeyError('Can\'t call ceilitem on an empty sorteddict.')
+		idx = bisect.bisect_left(self._sortedkeys, key_)
+		if idx == len(self):
+			raise KeyError('No key greater than or equal to "%s" was found in this sorteddict.' % key_)
+		rkey = self._sortedkeys[idx]
+		rval = self[rkey]
+		return (rkey, rval)
 
+	def flooritem(self, key_):
+		assert len(self) == len(self._sortedkeys)
+		if not self:
+			raise KeyError('Can\'t call flooritem on an empty sorteddict.')
+		idx = bisect.bisect_right(self._sortedkeys, key_)-1
+		if idx < 0:
+			raise KeyError('No key less than or equal to "%s" was found in this sorteddict.' % key_)
+		rkey = self._sortedkeys[idx]
+		rval = self[rkey]
+		return (rkey, rval)
+
+	def boundingitems(self, key_):
+		assert len(self) == len(self._sortedkeys)
+		if len(self) == 0:
+			return (None, None)
+		if key_ in self:
+			raise Exception('Can\'t call boundingitems for a key (%s) that exists in this dict.' % key_)
+		idx = bisect.bisect_left(self._sortedkeys, key_)
+		if idx == len(self):
+			hi_key = None
+		else:
+			hi_key = self._sortedkeys[idx]
+		if idx-1 >= 0:
+			lo_key = self._sortedkeys[idx-1]
+		else:
+			lo_key = None
+		def get_item(key__):
+			return ((key__, self[key__]) if key__ is not None else None)
+		return (get_item(lo_key), get_item(hi_key))
+
+
+def get_dir_tag_int(dir_tag_str_):
+	assert isinstance(dir_tag_str_, basestring)
+	is0 = '_0_' in dir_tag_str_
+	is1 = '_1_' in dir_tag_str_
+	if is0 and is1:
+		raise Exception('dir_tag seems to indicate both directions (0 and 1).  %s' % dir_tag_str_)
+	elif is0:
+		return 0
+	elif is1:
+		return 1
+	else:
+		return None
+
+def is_valid_time_em(time_em_):
+	return abs(now_em() - time_em_) < 1000*60*60*24*365*20
+
+# I checked the NextBus schedules of about 10 routes and they all had the same set of
+# serviceClass values: sat, sun, and wkd.
+def time_to_serviceclass(time_em_):
+	assert is_valid_time_em(time_em_) # asserting a reasonable epoch-time-in-millis argument.
+	dt = datetime.date.fromtimestamp(time_em_/1000.0)
+	if dt.weekday() == 5:
+		return 'sat'
+	elif dt.weekday() == 6:
+		return 'sun'
+	else:
+		return 'wkd'
+
+def get_time_millis_within_day(time_em_):
+	assert is_valid_time_em(time_em_)
+	dt = datetime.datetime.fromtimestamp(time_em_/1000.0)
+	return dt.hour*60*60*1000 + dt.minute*60*1000 + dt.second*1000
+
+# TODO: make sure we handle daylight savings time (this was written in winter), first day of DST in the spring,
+# first day of non-DST in the fall, and if really keen - the dark of night on those DST-switching days.
+# (What is the TTC's policy for it?)
+# I don't know what all code would need to be changed in order to handle these things.
+
+def round_down_to_midnight(time_em_):
+	assert is_valid_time_em(time_em_)
+	dt = datetime.datetime.fromtimestamp(time_em_/1000.0)
+	dt = datetime.datetime(dt.year, dt.month, dt.day)
+	return long(time.mktime(dt.timetuple())*1000)
+
+def millis_within_day_to_str(m_):
+	assert 0 <= m_ <= 1000*60*60*24
+	hour = m_/(1000*60*60)
+	minute = (m_ - hour*1000*60*60)/(1000*60)
+	second = (m_ - (hour*1000*60*60 + minute*1000*60))/(1000)
+	return '%02d:%02d:%02d' % (hour, minute, second)
 
 
 if __name__ == '__main__':
 
-	d = sorteddict()
-	#d = {}
-	for i in range(10):
-		d[i] = str(i)*5
 
-
-	print sorteddict({1: 2, 3: 4})
-
-
-
-
-
+	print millis_within_day_to_str(43380000)
 

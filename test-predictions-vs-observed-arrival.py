@@ -37,7 +37,7 @@ if __name__ == '__main__':
 		secs = abs(t_/1000) - mins*60
 		return '%02d:%02d' % (mins, secs)
 
-	start_time = '2013-01-10 08:00'; end_time =  '2013-01-10 19:00'
+	start_time = '2013-01-10 08:00'; end_time =  '2013-01-10 10:00'
 	froute = 'dundas'
 	direction = 0
 	# dundas  6205 broadview   6046 spadina      3665 bathurst    3702 ossington    1063 dufferin    1606 lansdowne    2954 howard
@@ -65,7 +65,7 @@ if __name__ == '__main__':
 			tminus = (prediction.time_retrieved - pass_time)/(1000*60.0)
 			howlate = time_diff/(1000*60.0)
 			if 1:
-				if tminus > -10 and howlate < -5:
+				if tminus > -20 and howlate < -5:
 					print prediction
 					print 'Observed arrival:', em_to_str(pass_time)
 			if 0:

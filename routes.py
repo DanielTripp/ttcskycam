@@ -3,6 +3,7 @@
 import sys, json, os.path, bisect, xml.dom, xml.dom.minidom
 import vinfo, geom, mc, c, snaptogrid
 from misc import *
+from backport_OrderedDict import OrderedDict
 
 FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301'], 'king': ['504'], 'spadina': ['510'], \
 'bathurst': ['511', '310'], 'dufferin': ['29', '329'], 'lansdowne': ['47'], 'ossington': ['63', '316'], 'college': ['506', '306'], \
@@ -21,8 +22,94 @@ class Schedule(object):
 
 	def __init__(self, froute_, schedule_nextbus_xml_filename_):
 		dom = xml.dom.minidom.parse(schedule_nextbus_xml_filename_)
-		for route_elem in [x for x in dom.documentElement.childNodes if isinstance(x, xml.dom.minidom.Element)]:
-			print compassdir_string_to_dir_int(froute_, route_elem.getAttribute('direction'))
+		self.froute = froute_
+		self.init_dir_to_serviceclass_to_fblockid_to_stoptag_to_time(dom)
+		self.init_dir_to_serviceclass_to_stoptag_to_time_to_fblockid()
+
+	# 'fblockid' AKA fudgeblockid is our invention.  It is a way of making a unique id out of blockids.
+	# As returned by NextBus they are not unique within a schedule's service day.  eg. 505 Dundas -
+	# blockid 505_1_10 appears once mentioning scheduled stops between 05:12 and 05:20, then again from 06:05 to 06:51,
+	# then again from 07:44 to 08:31, and so on.
+	# For our purposes we turn the first appearance into an fblockid of 505_1_10-0, the second into 505_1_10-1, etc.
+	def init_dir_to_serviceclass_to_fblockid_to_stoptag_to_time(self, dom_):
+		m = {0: {}, 1: {}}
+		for route_elem in [x for x in dom_.documentElement.childNodes if x.nodeName == 'route']:
+			serviceclass = str(route_elem.getAttribute('serviceClass'))
+			direction_str = str(route_elem.getAttribute('direction'))
+			direction_int = compassdir_string_to_dir_int(self.froute, direction_str)
+			if serviceclass in m[direction_int]: raise Exception()
+			m[direction_int][serviceclass] = {}
+			for block_elem in [x for x in route_elem.childNodes if x.nodeName == 'tr']:
+				blockid = str(block_elem.getAttribute('blockID'))
+				fblockidnum = len([x for x in m[direction_int][serviceclass].keys() if x.startswith(blockid)])
+				fblockid = '%s-%d' % (blockid, fblockidnum)
+				assert fblockid not in m[direction_int][serviceclass]
+				m[direction_int][serviceclass][fblockid] = OrderedDict()
+				for stop_elem in [x for x in block_elem.childNodes if x.nodeName == 'stop']:
+					stoptag = str(stop_elem.getAttribute('tag'))
+					epoch_time = long(stop_elem.getAttribute('epochTime'))
+					if stoptag in m[direction_int][serviceclass][fblockid]: raise Exception()
+					if routeinfo(self.froute).get_stop(stoptag) is None: raise Exception()
+					m[direction_int][serviceclass][fblockid][stoptag] = epoch_time
+		self.dir_to_serviceclass_to_fblockid_to_stoptag_to_time = m
+		self.verify_dir_to_serviceclass_to_fblockid_to_stoptag_to_time()
+
+	def verify_dir_to_serviceclass_to_fblockid_to_stoptag_to_time(self):
+		ri = routeinfo(self.froute)
+		def fail(): raise Exception()
+		m = self.dir_to_serviceclass_to_fblockid_to_stoptag_to_time
+		def get_serviceclasses(dir_):
+			return set(m[dir_].keys())
+		if get_serviceclasses(0) != get_serviceclasses(1): # ensure same set of serviceclasses for both directions
+			fail()
+		for direction in (0, 1):
+			for fblockid_to_stoptag_to_time in m[direction].itervalues():
+				all_blocks_stoptags = [stoptag_to_time.keys() for stoptag_to_time in fblockid_to_stoptag_to_time.itervalues()]
+				# ensure each block mentions the same list of stoptags, and in same order:
+				for block1_stoptags, block2_stoptags in hopscotch(all_blocks_stoptags):
+					if block1_stoptags != block2_stoptags:
+						fail()
+
+	def init_dir_to_serviceclass_to_stoptag_to_time_to_fblockid(self):
+		m = {0: {}, 1: {}}
+		for dir, serviceclass_to_fblockid_to_stoptag_to_time in self.dir_to_serviceclass_to_fblockid_to_stoptag_to_time.iteritems():
+			m[dir] = {}
+			for serviceclass, fblockid_to_stoptag_to_time in serviceclass_to_fblockid_to_stoptag_to_time.iteritems():
+				m[dir][serviceclass] = defaultdict(lambda: sorteddict())
+				for fblockid, stoptag_to_time in fblockid_to_stoptag_to_time.iteritems():
+					for stoptag, tyme in stoptag_to_time.iteritems():
+						if tyme != -1:
+							m[dir][serviceclass][stoptag][tyme] = fblockid
+				m[dir][serviceclass] = dict(m[dir][serviceclass]) # making this not a defaultdict, because defaultdict can't be pickled.
+		self.dir_to_serviceclass_to_stoptag_to_time_to_fblockid = m
+
+	def get_scheduled_arrival_time(self, startstoptag_, deststoptag_, start_time_):
+		ri = routeinfo(self.froute)
+		serviceclass = time_to_serviceclass(start_time_)
+		direction = ri.get_stop(startstoptag_).direction
+		assert ri.get_stop(startstoptag_).direction == ri.get_stop(deststoptag_).direction
+		assert startstoptag_ in self.dir_to_serviceclass_to_stoptag_to_time_to_fblockid[direction][serviceclass]
+		assert deststoptag_  in self.dir_to_serviceclass_to_stoptag_to_time_to_fblockid[direction][serviceclass]
+		start_time_within_day = get_time_millis_within_day(start_time_)
+		start_time_to_fblockid = self.dir_to_serviceclass_to_stoptag_to_time_to_fblockid[direction][serviceclass][startstoptag_]
+		caught_time, caught_fblockid = start_time_to_fblockid.ceilitem(start_time_within_day)
+		print em_to_str(caught_time), caught_fblockid # TDR
+		arrival_time_millis_within_day = self.dir_to_serviceclass_to_fblockid_to_stoptag_to_time[direction][serviceclass]\
+				[caught_fblockid][deststoptag_]
+		arrival_time = round_down_to_midnight(start_time_) + arrival_time_millis_within_day
+		return arrival_time
+
+	def get_expanded_stoptag_to_time(self, dir_, serviceclass_, fblockid_):
+		ri = routeinfo(self.froute)
+		scheduled_stoptag_to_time = self.dir_to_serviceclass_to_fblockid_to_stoptag_to_time[dir_][serviceclass_][fblockid_]
+		scheduled_mofr_to_stoptag = sorteddict()
+		for scheduled_stoptag in scheduled_stoptag_to_time.keys():
+			scheduled_mofr_to_stoptag = scheduled_mofr_to_stoptag[ri.get_stop(scheduled_stoptag).mofr] = scheduled_stoptag
+		r = {}
+		for stoptag, stop in ri.dir_to_stoptag_to_stop[dir_].iteritems():
+			pass
+
+
 
 class Stop:
 	def __init__(self, stoptag_, latlng_, direction_, mofr_, dirtags_serviced_):
@@ -88,6 +175,8 @@ class RouteInfo:
 		self.init_stops_dir_to_stoptag_to_stop()
 		self.init_stops_dir_to_mofr_to_stop()
 
+	# Casting some things to str() because they come from the file in unicode, and when I'm debugging 
+	# I don't want to see u'...' everywhere. 
 	def init_stops_dir_to_stoptag_to_stop(self):
 		self.dir_to_stoptag_to_stop = {}
 		with open('stops_%s.json' % self.name, 'r') as fin:
@@ -99,6 +188,8 @@ class RouteInfo:
 				self.dir_to_stoptag_to_stop[direction_int] = {}
 				for stoptag, stopdetails in stops_file_content_json[direction_str].iteritems():
 					assert set(stopdetails.keys()) == set(['lat', 'lon', 'dirtags_serviced'])
+					stoptag = str(stoptag)
+					stopdetails['dirtags_serviced'] = [str(x) for x in stopdetails['dirtags_serviced']]
 					latlng = geom.LatLng(stopdetails['lat'], stopdetails['lon']); dirtags_serviced = stopdetails['dirtags_serviced']
 					new_stop = Stop(stoptag, latlng, direction_int, self.latlon_to_mofr(latlng), dirtags_serviced)
 					if new_stop.mofr != -1 and not new_stop.is_sunday_only:
@@ -519,6 +610,10 @@ def get_mofrndirnstoptag_to_halfintersection(froute_, mofr_):
 			r[(i.froute2mofr,direction,stoptag)] = HalfIntersection(i.froute1, i.froute1mofr, i.froute1_dir0_stoptag, i.froute1_dir1_stoptag, i.latlng)
 	return r
 
+# This converts a string from a NextBus schedule (eg. 'East') to a direction int that we use (eg. 0).
+# For all routes that I've looked at, our dir 0 (which corresponds to NextBus's _0_ in a dirtag) is east for a
+# route that goes east-west, and south for one that goes north-south.  (1 for the other direction, of course.)
+# But I know of no guarantee for this.
 def compassdir_string_to_dir_int(froute_, compassdir_str_):
 	compassdir_str = compassdir_str_.lower()
 	assert compassdir_str in ('north', 'south', 'east', 'west')
@@ -533,15 +628,18 @@ def compassdir_string_to_dir_int(froute_, compassdir_str_):
 	else:
 		raise Exception('Could not determine direction int for froute %s, schedule direction "%s"' % (froute_, compassdir_str_))
 
+def get_stops_dir_to_stoptag_to_latlng(froute_):
+	ri = routeinfo(froute_)
+	r = {}
+	for direction in (0, 1):
+		r[direction] = {}
+		for stoptag, stop in ri.dir_to_stoptag_to_stop[direction].iteritems():
+			r[direction][stoptag] = (stop.latlng.lat, stop.latlng.lng)
+	return r
+
+
 if __name__ == '__main__':
 
 	import pprint
 
-	for froute, stoptag in get_recorded_froutenstoptags():
-		if froute != 'lansdowne':
-			continue
-		stop = routeinfo(froute).get_stop(stoptag)
-		if stop.direction == 1:
-			print stop.mofr, stop.latlng, stoptag
-		
-
+	pprint.pprint(get_stops_dir_to_stoptag_to_latlng('college'))

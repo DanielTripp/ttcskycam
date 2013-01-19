@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+if [ "$#" == 1 ] ; then
+	file="$1"
+	rsync -avz dt@theorem.ca:~/web/ttc-traffic-report/dev2039462378923789/"$file" ./"$file" 
+elif [ "$#" == 0 ] ; then
+	rsync -avz --delete --exclude '.svn' dt@theorem.ca:~/web/ttc-traffic-report/dev2039462378923789 .
+else
+	echo 'Need 0 or 1 arguments.'
+fi
+
+

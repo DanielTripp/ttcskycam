@@ -42,10 +42,19 @@ class VehicleInfo:
 	def calc_time(self):
 		self.time = self.time_epoch - self.secs_since_report*1000
 
+	# self.latlng represents the stand point.
+	# arg post_ can be a LatLng, or an int representing a mofr.
 	def get_pass_time_interp(self, forevi_, post_):
-		assert self.time < forevi_.time
-		assert geom.passes(self.latlng, forevi_.latlng, post_, tolerance_=2)
-		ratio = geom.get_pass_ratio(self.latlng, forevi_.latlng, post_)
+		assert (self.time < forevi_.time) and (isinstance(post_, geom.LatLng) or isinstance(post_, int))
+		if isinstance(post_, geom.LatLng):
+			assert geom.passes(self.latlng, forevi_.latlng, post_, tolerance_=2)
+		else:
+			if not (all(x != -1 for x in (self.mofr, forevi_.mofr, post_)) and betweenii(self.mofr, post_, forevi_.mofr)):
+				raise Exception('This function, when passed a mofr int (%d) as a post_, needs vis with valid mofrs.  %s %s' % (post_, self, forevi_))
+		if isinstance(post_, geom.LatLng):
+			ratio = geom.get_pass_ratio(self.latlng, forevi_.latlng, post_)
+		else: # i.e. int
+			ratio = (post_ - self.mofr)/float(forevi_.mofr - self.mofr)
 		r = long(self.time + ratio*(forevi_.time - self.time))
 		return r
 
@@ -81,6 +90,11 @@ class VehicleInfo:
 			self._mofr = routes.latlon_to_mofr(self.route_tag, self.latlng)
 		return self._mofr
 
+	# widemofr is a higher-tolerance mofr than the regular mofr.  That is, it will indicate a mofr not just when
+	# the latlng is close to the fudgeroute line, but up to 2 km away from it.
+	# The main point of widemofr is to enable the fixing of dirtags even when the vehicle is taking a detour.
+	# With widemofr we can check if widemofr is increasing or decreasing over time, and from that straightforwardly
+	# determine whether the direction int of the dirtag should be 0 or 1.
 	@property
 	def widemofr(self):
 		if self.mofr != -1:
@@ -97,18 +111,9 @@ class VehicleInfo:
 
 	@property
 	def dir_tag_int(self):
-		is0 = '_0_' in self.dir_tag
-		is1 = '_1_' in self.dir_tag
-		if is0 and is1:
-			raise Exception('dir_tag seems to indicate both directions (0 and 1).  %s' % str(self))
-		elif is0:
-			return 0
-		elif is1:
-			return 1
-		else:
-			return None
+		return get_dir_tag_int(self.dir_tag)
 
-	@property 
+	@property
 	def lat(self):
 		return self.latlng.lat
 

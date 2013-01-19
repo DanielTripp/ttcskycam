@@ -52,7 +52,7 @@ class OurJSONEncoder(json.JSONEncoder):
 
 vars = urlparse.parse_qs(os.getenv('QUERY_STRING'))
 module_and_funcname = vars['module_and_funcname'][0]
-allowables = ['web.get_vehicle_svg', 'traffic.get_traffics', 'traffic.get_traffics_dirfromlatlngs', 'traffic.get_recent_vehicle_locations', 'traffic.get_recent_vehicle_locations_dirfromlatlngs', 'routes.get_all_routes_latlons', 'routes.get_trip_endpoint_info', 'routes.snaptest', 'util.get_current_wrong_dirs', 'tracks.get_all_tracks_polylines', 'snaptogrid.get_display_grid', 'routes.get_configroute_to_fudgeroute_map', 'routes.get_fudgeroutes_for_map_bounds', 'routes.get_fudgeroute_to_compassdir_to_intdir']
+allowables = ['web.get_vehicle_svg', 'traffic.get_traffics', 'traffic.get_traffics_dirfromlatlngs', 'traffic.get_recent_vehicle_locations', 'traffic.get_recent_vehicle_locations_dirfromlatlngs', 'routes.get_all_routes_latlons', 'routes.get_trip_endpoint_info', 'routes.snaptest', 'util.get_current_wrong_dirs', 'tracks.get_all_tracks_polylines', 'snaptogrid.get_display_grid', 'routes.get_configroute_to_fudgeroute_map', 'routes.get_fudgeroutes_for_map_bounds', 'routes.get_fudgeroute_to_compassdir_to_intdir', 'routes.get_stops_dir_to_stoptag_to_latlng']
 if (module_and_funcname in allowables) or os.getenv('HTTP_REFERER').endswith('test.24972394874134958.html') \
 		or module_and_funcname.startswith('t.'):
 	modulename = module_and_funcname.split('.')[0]
