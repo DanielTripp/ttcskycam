@@ -94,19 +94,26 @@ class Schedule(object):
 	def time_to_fblockid(self, dir_, serviceclass_, stoptag_):
 		return self.dir_to_serviceclass_to_stoptag_to_time_to_fblockid[dir_][serviceclass_][stoptag_]
 
-	def get_arrival_time(self, startstoptag_, deststoptag_, start_time_):
+	def get_caught_and_arrival_time_within_day(self, startstoptag_, deststoptag_, start_time_):
 		ri = routeinfo(self.froute)
 		serviceclass = time_to_serviceclass(start_time_)
 		direction = ri.get_stop(startstoptag_).direction
 		assert ri.get_stop(startstoptag_).direction == ri.get_stop(deststoptag_).direction
 		start_time_within_day = get_time_millis_within_day(start_time_)
 		startstop_time_to_fblockid = self.get_expanded_time_to_fblockid(direction, serviceclass, startstoptag_)
-		caught_time, caught_fblockid = startstop_time_to_fblockid.ceilitem(start_time_within_day)
-		print 'caught', caught_fblockid, 'at', millis_within_day_to_str(caught_time) # TDR
-		arrival_time_millis_within_day = self.get_expanded_fblockid_to_time(direction, serviceclass, deststoptag_)[caught_fblockid]
-		assert arrival_time_millis_within_day != -1 # TODO: be sure to catch the right block by seeing if it services deststop.
-		arrival_time = round_down_to_midnight(start_time_) + arrival_time_millis_within_day
+		caught_time_within_day, caught_fblockid = startstop_time_to_fblockid.ceilitem(start_time_within_day)
+		arrival_time_within_day = self.get_expanded_fblockid_to_time(direction, serviceclass, deststoptag_)[caught_fblockid]
+		assert arrival_time_within_day != -1 # TODO: be sure to catch the right block by seeing if it services deststop.
+		return (caught_time_within_day, arrival_time_within_day)
+
+	def get_arrival_time(self, startstoptag_, deststoptag_, start_time_):
+		caught_time_within_day, arrival_time_within_day = self.get_caught_and_arrival_time_within_day(startstoptag_, deststoptag_, start_time_)
+		arrival_time = round_down_to_midnight(start_time_) + arrival_time_within_day
 		return arrival_time
+
+	def get_ride_time(self, startstoptag_, deststoptag_, start_time_):
+		caught_time_within_day, arrival_time_within_day = self.get_caught_and_arrival_time_within_day(startstoptag_, deststoptag_, start_time_)
+		return (arrival_time_within_day - caught_time_within_day)
 
 	# Doing the same thing as get_expanded_stoptag_to_time() but for different values.
 	# return a sorteddict.
@@ -117,17 +124,20 @@ class Schedule(object):
 		r = {}
 		for fblockid in self.dir_to_serviceclass_to_fblockid_to_stoptag_to_time[dir_][serviceclass_].iterkeys():
 			scheduled_stoptag_to_time = self.stoptag_to_time(dir_, serviceclass_, fblockid)
-			scheduled_mofr_to_stoptag = self.get_scheduled_mofr_to_stoptag(dir_, serviceclass_, fblockid)
-			lesser_stoptag, greater_stoptag = scheduled_mofr_to_stoptag.boundingvalues(stop.mofr,
-					lambda mofr, stoptag: scheduled_stoptag_to_time[stoptag] != -1)
-			if lesser_stoptag is not None and greater_stoptag is not None:
-				def get_scheduled_mofrntime(scheduled_stoptag_):
-					return (ri.get_stop(scheduled_stoptag_).mofr, scheduled_stoptag_to_time[scheduled_stoptag_])
-				lesser_mofrntime = get_scheduled_mofrntime(lesser_stoptag)
-				greater_mofrntime = get_scheduled_mofrntime(greater_stoptag)
-				assert lesser_mofrntime[1] != -1 and greater_mofrntime[1] != -1
-				interp_time = get_range_val(lesser_mofrntime, greater_mofrntime, stop.mofr)
-				r[interp_time] = fblockid
+			if stoptag_ in scheduled_stoptag_to_time and scheduled_stoptag_to_time[stoptag_] != -1:
+				r[scheduled_stoptag_to_time[stoptag_]] = fblockid
+			else:
+				scheduled_mofr_to_stoptag = self.get_scheduled_mofr_to_stoptag(dir_, serviceclass_, fblockid)
+				lesser_stoptag, greater_stoptag = scheduled_mofr_to_stoptag.boundingvalues(stop.mofr,
+						lambda mofr, stoptag: scheduled_stoptag_to_time[stoptag] != -1)
+				if lesser_stoptag is not None and greater_stoptag is not None:
+					def get_scheduled_mofrntime(scheduled_stoptag_):
+						return (ri.get_stop(scheduled_stoptag_).mofr, scheduled_stoptag_to_time[scheduled_stoptag_])
+					lesser_mofrntime = get_scheduled_mofrntime(lesser_stoptag)
+					greater_mofrntime = get_scheduled_mofrntime(greater_stoptag)
+					assert lesser_mofrntime[1] != -1 and greater_mofrntime[1] != -1
+					interp_time = get_range_val(lesser_mofrntime, greater_mofrntime, stop.mofr)
+					r[interp_time] = fblockid
 		return sorteddict(r)
 
 	def get_expanded_fblockid_to_time(self, dir_, serviceclass_, stoptag_):
