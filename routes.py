@@ -1,6 +1,6 @@
 #!/usr/bin/python2.6
 
-import sys, json, os.path, bisect, xml.dom, xml.dom.minidom, pprint
+import sys, json, os.path, bisect, xml.dom, xml.dom.minidom
 import vinfo, geom, mc, c, snaptogrid
 from misc import *
 
@@ -24,6 +24,22 @@ class Schedule(object):
 		self.froute = froute_
 		self.init_dir_to_serviceclass_to_fblockid_to_stoptag_to_time(dom)
 		self.init_dir_to_serviceclass_to_stoptag_to_time_to_fblockid()
+		self.init_header_dir_to_serviceclass_to_stoptag_to_name(dom)
+
+	def init_header_dir_to_serviceclass_to_stoptag_to_name(self, dom_):
+		m = {0: {}, 1: {}}
+		for route_elem in [x for x in dom_.documentElement.childNodes if x.nodeName == 'route']:
+			serviceclass = str(route_elem.getAttribute('serviceClass'))
+			direction_str = str(route_elem.getAttribute('direction'))
+			direction_int = compassdir_string_to_dir_int(self.froute, direction_str)
+			m[direction_int][serviceclass] = {}
+			header_elem = [x for x in route_elem.childNodes if x.nodeName == 'header'][0]
+			for stop_elem in [x for x in header_elem.childNodes if x.nodeName == 'stop']:
+				stoptag = str(stop_elem.getAttribute('tag')) # cast to str() gets rid of unicode.
+				name = str(stop_elem.firstChild.nodeValue)
+				m[direction_int][serviceclass][stoptag] = name
+		self.header_dir_to_serviceclass_to_stoptag_to_name = m
+
 
 	# 'fblockid' AKA fudgeblockid is our invention.  It is a way of making a unique id out of blockids.
 	# As returned by NextBus they are not unique within a schedule's service day.  eg. 505 Dundas -
@@ -102,6 +118,7 @@ class Schedule(object):
 		start_time_within_day = get_time_millis_within_day(start_time_)
 		startstop_time_to_fblockid = self.get_expanded_time_to_fblockid(direction, serviceclass, startstoptag_)
 		caught_time_within_day, caught_fblockid = startstop_time_to_fblockid.ceilitem(start_time_within_day)
+		print 'caught', caught_fblockid # TDR
 		arrival_time_within_day = self.get_expanded_fblockid_to_time(direction, serviceclass, deststoptag_)[caught_fblockid]
 		assert arrival_time_within_day != -1 # TODO: be sure to catch the right block by seeing if it services deststop.
 		return (caught_time_within_day, arrival_time_within_day)
@@ -178,21 +195,38 @@ class Schedule(object):
 			r[ri.get_stop(scheduled_stoptag).mofr] = scheduled_stoptag
 		return r
 
-	# Assumes that every long is a millis-within-a-day.
-	class OurPrettyPrinter(pprint.PrettyPrinter):
-		def format(self, object, context, maxlevels, level):
-			if isinstance(object, long) and object != -1:
-				return pprint.PrettyPrinter.format(self, millis_within_day_to_str(object), context, maxlevels, level)
-			else:
-				return pprint.PrettyPrinter.format(self, object, context, maxlevels, level)
+	def get_header_name(self, dir_, serviceclass_, stoptag_):
+		return self.header_dir_to_serviceclass_to_stoptag_to_name[dir_][serviceclass_][stoptag_]
 
 	def pprint(self):
-		pprinter = self.OurPrettyPrinter()
-		pprinter.pprint(self.dir_to_serviceclass_to_fblockid_to_stoptag_to_time)
-		print '---'
-		pprinter.pprint(self.dir_to_serviceclass_to_stoptag_to_time_to_fblockid)
+		ri = routeinfo(self.froute)
+		for direction in (0, 1):
+			for serviceclass in sorted(self.dir_to_serviceclass_to_fblockid_to_stoptag_to_time[direction].keys(),
+					key=lambda x: defaultdict(lambda x: x, {'wkd':0, 'sat':1, 'sun':2})[x]):
+				fblockid_to_stoptag_to_time = self.dir_to_serviceclass_to_fblockid_to_stoptag_to_time[direction][serviceclass]
+				def get_block_start_time(fblockid__):
+					return max(fblockid_to_stoptag_to_time[fblockid__].values())
+				for fblockid in sorted(fblockid_to_stoptag_to_time.keys(), key=get_block_start_time):
+					stoptag_to_time = fblockid_to_stoptag_to_time[fblockid]
+					for stoptag in sorted(stoptag_to_time.keys(), key=lambda x: ri.get_stop(x).mofr, reverse=(direction==1)):
+						tyme = stoptag_to_time[stoptag]
+						header_stop_name = self.get_header_name(direction, serviceclass, stoptag)
+						print '%d %s %s %8s %8s (%s)' \
+							  % (direction, serviceclass, fblockid, stoptag, millis_within_day_to_str(tyme), header_stop_name)
+					print '---'
 
 
+def schedule(froute_):
+	return mc.get(schedule_impl, [froute_])
+
+def schedule_impl(froute_):
+	if froute_ == 'king':
+		filename = '/tmp/504-schedule.txt'
+	elif froute_ == 'dundas':
+		filename = '/tmp/505-schedule.txt'
+	else:
+		return None
+	return Schedule(froute_, filename)
 
 class Stop:
 	def __init__(self, stoptag_, latlng_, direction_, mofr_, dirtags_serviced_):
