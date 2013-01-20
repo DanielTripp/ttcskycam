@@ -2,9 +2,9 @@
 
 # Tables involved: 
 # 
-# create table ttc_vehicle_locations (vehicle_id varchar(100), route_tag varchar(100), dir_tag varchar(100), lat double precision, lon double precision, secs_since_report integer, time_epoch bigint, time_str varchar(100), predictable boolean, heading integer, rowid serial unique, mofr integer, widemofr integer);
-# create index ttc_vehicle_locations_idx on ttc_vehicle_locations (route_tag, time_epoch desc);
-# create index ttc_vehicle_locations_idx2 on ttc_vehicle_locations (vehicle_id, time_epoch desc);
+# create table ttc_vehicle_locations (vehicle_id varchar(100), route_tag varchar(100), dir_tag varchar(100), lat double precision, lon double precision, secs_since_report integer, time_retrieved bigint, time_str varchar(100), predictable boolean, heading integer, rowid serial unique, mofr integer, widemofr integer);
+# create index ttc_vehicle_locations_idx on ttc_vehicle_locations (route_tag, time_retrieved desc);
+# create index ttc_vehicle_locations_idx2 on ttc_vehicle_locations (vehicle_id, time_retrieved desc);
 # 
 # create table predictions (fudgeroute VARCHAR(100), configroute VARCHAR(100), stoptag VARCHAR(100), time_retrieved_str varchar(30), time_of_prediction_str varchar(30), dirtag VARCHAR(100), vehicle_id VARCHAR(100), is_departure boolean, block VARCHAR(100), triptag VARCHAR(100), branch VARCHAR(100), affected_by_layover boolean, is_schedule_based boolean, delayed boolean, time_retrieved bigint, time_of_prediction bigint, rowid serial unique);
 # create index predictions_idx on predictions (fudgeroute, stoptag, time_retrieved desc);
@@ -16,7 +16,7 @@ from misc import *
 
 HOSTMONIKER_TO_IP = {'theorem': '72.2.4.176', 'black': '24.52.231.206'}
 
-VI_COLS = ' dir_tag, heading, vehicle_id, lat, lon, predictable, route_tag, secs_since_report, time_epoch, time, mofr, widemofr '
+VI_COLS = ' dir_tag, heading, vehicle_id, lat, lon, predictable, route_tag, secs_since_report, time_retrieved, time, mofr, widemofr '
 
 PREDICTION_COLS = ' fudgeroute, configroute, stoptag, time_retrieved, time_of_prediction, vehicle_id, is_departure, block, dirtag, triptag, branch, affected_by_layover, is_schedule_based, delayed'
 
@@ -101,7 +101,7 @@ def insert_vehicle_info(vi_):
 		mofr = vi_.mofr; widemofr = vi_.widemofr
 	else:
 		mofr = None; widemofr = None
-	cols = [vi_.vehicle_id, vi_.route_tag, vi_.dir_tag, vi_.lat, vi_.lng, vi_.secs_since_report, vi_.time_epoch, \
+	cols = [vi_.vehicle_id, vi_.route_tag, vi_.dir_tag, vi_.lat, vi_.lng, vi_.secs_since_report, vi_.time_retrieved, \
 		vi_.predictable, vi_.heading, vi_.time, em_to_str(vi_.time), mofr, widemofr]
 	curs.execute('INSERT INTO ttc_vehicle_locations VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,default,%s,%s)', cols)
 	curs.close()
@@ -112,11 +112,11 @@ def vi_select_generator(configroute_, end_time_em_, start_time_em_, dir_=None, i
 	dir_clause = ('and dir_tag like \'%%%%\\\\_%s\\\\_%%%%\' ' % (str(dir_)) if dir_ != None else ' ')
 	sql = 'select '+VI_COLS+' from ttc_vehicle_locations where route_tag = %s '\
 		+('' if include_unpredictables_ else ' and predictable = true ') \
-		+' and time <= %s and time >= %s '\
+		+' and time <= %s and time >= %s and time_retrieved <= %s '\
 		+(' and vehicle_id = %s ' if vid_ else '') \
 		+ dir_clause \
 		+(' order by time' if forward_in_time_order_ else ' order by time desc')
-	curs.execute(sql, [configroute_, end_time_em_, start_time_em_] + ([vid_] if vid_ else []))
+	curs.execute(sql, [configroute_, end_time_em_, start_time_em_, end_time_em_] + ([vid_] if vid_ else []))
 	while True:
 		row = curs.fetchone()
 		if not row:
