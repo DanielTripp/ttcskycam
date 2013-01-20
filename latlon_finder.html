@@ -29,7 +29,7 @@ function initialize() {
 		draggable: true
 		});
 
-	google.maps.event.addListener(g_marker, 'dragend', show_latlng());
+	google.maps.event.addListener(g_marker, 'dragend', show_latlng);
 
 	show_latlng();
 }
