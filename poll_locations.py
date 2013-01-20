@@ -31,7 +31,7 @@ def insert_xml_into_db(xmldoc_):
 		raise Exception("Couldn't find lastTime")
 
 	for vehicle_info in vehicles:
-		vehicle_info.time_epoch = last_time
+		vehicle_info.time_retrieved = last_time
 		vehicle_info.calc_time()
 		db.insert_vehicle_info(vehicle_info)
 
