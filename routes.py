@@ -1,9 +1,8 @@
 #!/usr/bin/python2.6
 
-import sys, json, os.path, bisect, xml.dom, xml.dom.minidom
+import sys, json, os.path, bisect, xml.dom, xml.dom.minidom, pprint
 import vinfo, geom, mc, c, snaptogrid
 from misc import *
-from backport_OrderedDict import OrderedDict
 
 FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301'], 'king': ['504'], 'spadina': ['510'], \
 'bathurst': ['511', '310'], 'dufferin': ['29', '329'], 'lansdowne': ['47'], 'ossington': ['63', '316'], 'college': ['506', '306'], \
@@ -44,7 +43,7 @@ class Schedule(object):
 				fblockidnum = len([x for x in m[direction_int][serviceclass].keys() if x.startswith(blockid)])
 				fblockid = '%s-%d' % (blockid, fblockidnum)
 				assert fblockid not in m[direction_int][serviceclass]
-				m[direction_int][serviceclass][fblockid] = OrderedDict()
+				m[direction_int][serviceclass][fblockid] = {}
 				for stop_elem in [x for x in block_elem.childNodes if x.nodeName == 'stop']:
 					stoptag = str(stop_elem.getAttribute('tag'))
 					epoch_time = long(stop_elem.getAttribute('epochTime'))
@@ -83,31 +82,105 @@ class Schedule(object):
 				m[dir][serviceclass] = dict(m[dir][serviceclass]) # making this not a defaultdict, because defaultdict can't be pickled.
 		self.dir_to_serviceclass_to_stoptag_to_time_to_fblockid = m
 
-	def get_scheduled_arrival_time(self, startstoptag_, deststoptag_, start_time_):
+	def time(self, dir_, serviceclass_, fblockid_, stoptag_):
+		return self.dir_to_serviceclass_to_fblockid_to_stoptag_to_time[dir_][serviceclass_][fblockid_][stoptag_]
+
+	def stoptag_to_time(self, dir_, serviceclass_, fblockid_):
+		return self.dir_to_serviceclass_to_fblockid_to_stoptag_to_time[dir_][serviceclass_][fblockid_]
+
+	def has_stoptag(self, dir_, serviceclass_, stoptag_):
+		return stoptag_ in self.dir_to_serviceclass_to_stoptag_to_time_to_fblockid[dir_][serviceclass_]
+
+	def time_to_fblockid(self, dir_, serviceclass_, stoptag_):
+		return self.dir_to_serviceclass_to_stoptag_to_time_to_fblockid[dir_][serviceclass_][stoptag_]
+
+	def get_arrival_time(self, startstoptag_, deststoptag_, start_time_):
 		ri = routeinfo(self.froute)
 		serviceclass = time_to_serviceclass(start_time_)
 		direction = ri.get_stop(startstoptag_).direction
 		assert ri.get_stop(startstoptag_).direction == ri.get_stop(deststoptag_).direction
-		assert startstoptag_ in self.dir_to_serviceclass_to_stoptag_to_time_to_fblockid[direction][serviceclass]
-		assert deststoptag_  in self.dir_to_serviceclass_to_stoptag_to_time_to_fblockid[direction][serviceclass]
 		start_time_within_day = get_time_millis_within_day(start_time_)
-		start_time_to_fblockid = self.dir_to_serviceclass_to_stoptag_to_time_to_fblockid[direction][serviceclass][startstoptag_]
-		caught_time, caught_fblockid = start_time_to_fblockid.ceilitem(start_time_within_day)
-		print em_to_str(caught_time), caught_fblockid # TDR
-		arrival_time_millis_within_day = self.dir_to_serviceclass_to_fblockid_to_stoptag_to_time[direction][serviceclass]\
-				[caught_fblockid][deststoptag_]
+		startstop_time_to_fblockid = self.get_expanded_time_to_fblockid(direction, serviceclass, startstoptag_)
+		caught_time, caught_fblockid = startstop_time_to_fblockid.ceilitem(start_time_within_day)
+		print 'caught', caught_fblockid, 'at', millis_within_day_to_str(caught_time) # TDR
+		arrival_time_millis_within_day = self.get_expanded_fblockid_to_time(direction, serviceclass, deststoptag_)[caught_fblockid]
+		assert arrival_time_millis_within_day != -1 # TODO: be sure to catch the right block by seeing if it services deststop.
 		arrival_time = round_down_to_midnight(start_time_) + arrival_time_millis_within_day
 		return arrival_time
 
+	# Doing the same thing as get_expanded_stoptag_to_time() but for different values.
+	# return a sorteddict.
+	def get_expanded_time_to_fblockid(self, dir_, serviceclass_, stoptag_):
+		ri = routeinfo(self.froute)
+		stop = ri.get_stop(stoptag_)
+		assert stop.direction == dir_
+		r = {}
+		for fblockid in self.dir_to_serviceclass_to_fblockid_to_stoptag_to_time[dir_][serviceclass_].iterkeys():
+			scheduled_stoptag_to_time = self.stoptag_to_time(dir_, serviceclass_, fblockid)
+			scheduled_mofr_to_stoptag = self.get_scheduled_mofr_to_stoptag(dir_, serviceclass_, fblockid)
+			lesser_stoptag, greater_stoptag = scheduled_mofr_to_stoptag.boundingvalues(stop.mofr,
+					lambda mofr, stoptag: scheduled_stoptag_to_time[stoptag] != -1)
+			if lesser_stoptag is not None and greater_stoptag is not None:
+				def get_scheduled_mofrntime(scheduled_stoptag_):
+					return (ri.get_stop(scheduled_stoptag_).mofr, scheduled_stoptag_to_time[scheduled_stoptag_])
+				lesser_mofrntime = get_scheduled_mofrntime(lesser_stoptag)
+				greater_mofrntime = get_scheduled_mofrntime(greater_stoptag)
+				assert lesser_mofrntime[1] != -1 and greater_mofrntime[1] != -1
+				interp_time = get_range_val(lesser_mofrntime, greater_mofrntime, stop.mofr)
+				r[interp_time] = fblockid
+		return sorteddict(r)
+
+	def get_expanded_fblockid_to_time(self, dir_, serviceclass_, stoptag_):
+		return invert_dict(self.get_expanded_time_to_fblockid(dir_, serviceclass_, stoptag_))
+
+	# NextBus schedules only mention a handful of stops, but it's straightforward to infer a schedule for all stops by
+	# interpolating by mofr between the scheduled stops.  That's what this does.
+	# note [1]: There are some odd cases to deal with eg. King / wkd / east - block 504_25_430 (and many others) -
+	# the NextBus schedule mentions stoptag 3443 in all blocks but not very many have a time other than -1.  Same with stoptag 7672.
+	# So here we use the scheduled time if it's not -1, otherwise we search in either direction for the nearest stops w/ time != -1.
 	def get_expanded_stoptag_to_time(self, dir_, serviceclass_, fblockid_):
 		ri = routeinfo(self.froute)
-		scheduled_stoptag_to_time = self.dir_to_serviceclass_to_fblockid_to_stoptag_to_time[dir_][serviceclass_][fblockid_]
-		scheduled_mofr_to_stoptag = sorteddict()
-		for scheduled_stoptag in scheduled_stoptag_to_time.keys():
-			scheduled_mofr_to_stoptag = scheduled_mofr_to_stoptag[ri.get_stop(scheduled_stoptag).mofr] = scheduled_stoptag
+		scheduled_stoptag_to_time = self.stoptag_to_time(dir_, serviceclass_, fblockid_)
+		scheduled_mofr_to_stoptag = self.get_scheduled_mofr_to_stoptag(dir_, serviceclass_, fblockid_)
 		r = {}
 		for stoptag, stop in ri.dir_to_stoptag_to_stop[dir_].iteritems():
-			pass
+			if stoptag in scheduled_stoptag_to_time and scheduled_stoptag_to_time[stoptag] != -1: # note [1]
+				r[stoptag] = scheduled_stoptag_to_time[stoptag]
+			else:
+				lesser_stoptag, greater_stoptag = scheduled_mofr_to_stoptag.boundingvalues(stop.mofr,
+						lambda mofr, stoptag: scheduled_stoptag_to_time[stoptag] != -1)
+				if lesser_stoptag is None or greater_stoptag is None:
+					r[stoptag] = -1
+				else:
+					def get_scheduled_mofrntime(scheduled_stoptag_):
+						return (ri.get_stop(scheduled_stoptag_).mofr, scheduled_stoptag_to_time[scheduled_stoptag_])
+					lesser_mofrntime = get_scheduled_mofrntime(lesser_stoptag)
+					greater_mofrntime = get_scheduled_mofrntime(greater_stoptag)
+					assert lesser_mofrntime[1] != -1 and greater_mofrntime[1] != -1
+					r[stoptag] = get_range_val(lesser_mofrntime, greater_mofrntime, stop.mofr)
+		return r
+
+	def get_scheduled_mofr_to_stoptag(self, dir_, serviceclass_, fblockid_):
+		ri = routeinfo(self.froute)
+		scheduled_stoptag_to_time = self.stoptag_to_time(dir_, serviceclass_, fblockid_)
+		r = sorteddict()
+		for scheduled_stoptag in scheduled_stoptag_to_time.keys():
+			r[ri.get_stop(scheduled_stoptag).mofr] = scheduled_stoptag
+		return r
+
+	# Assumes that every long is a millis-within-a-day.
+	class OurPrettyPrinter(pprint.PrettyPrinter):
+		def format(self, object, context, maxlevels, level):
+			if isinstance(object, long) and object != -1:
+				return pprint.PrettyPrinter.format(self, millis_within_day_to_str(object), context, maxlevels, level)
+			else:
+				return pprint.PrettyPrinter.format(self, object, context, maxlevels, level)
+
+	def pprint(self):
+		pprinter = self.OurPrettyPrinter()
+		pprinter.pprint(self.dir_to_serviceclass_to_fblockid_to_stoptag_to_time)
+		print '---'
+		pprinter.pprint(self.dir_to_serviceclass_to_stoptag_to_time_to_fblockid)
 
 
 
