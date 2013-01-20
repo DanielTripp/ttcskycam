@@ -131,8 +131,10 @@ def get_range_val(p1_, p2_, domain_val_):
 	x1 = float(p1_[0]); y1 = float(p1_[1])
 	x2 = float(p2_[0]); y2 = float(p2_[1])
 	r = (y2 - y1)*(domain_val_ - x1)/(x2 - x1) + y1
-	if any(type(x) == float for x in p1_ + p2_ + (domain_val_,)):
+	if any(type(x) == float for x in p1_ + p2_ + (domain_val_,)): # are any arguments floats?
 		return r
+	elif any(type(x) == long for x in p1_ + p2_ + (domain_val_,)): # are any arguments longs?
+		return long(r)
 	else:
 		return int(r)
 
@@ -360,25 +362,46 @@ class sorteddict(dict):
 		rval = self[rkey]
 		return (rkey, rval)
 
-	def boundingitems(self, key_):
+	# Returns items in the list immediately lesser and greater than given key.
+	# If key arg exists in this dict, it is not returned.
+	# eg. self = {0: '', 5: '', 10: ''}. boundingitems(5) = ((0, ''), (10, '')).  boundingitems(6) = ((5, ''), (10, ''))
+	# boundingitems(11) = ((10, ''), None)
+	# arg itempredicate takes 2 args (key and value) and should return True if that item indicated is acceptable to
+	# return from this function.  If False then this function will keep searching, upward or downward.
+	def boundingitems(self, key_, itempredicate=None):
 		assert len(self) == len(self._sortedkeys)
 		if len(self) == 0:
 			return (None, None)
-		if key_ in self:
-			raise Exception('Can\'t call boundingitems for a key (%s) that exists in this dict.' % key_)
+
 		idx = bisect.bisect_left(self._sortedkeys, key_)
-		if idx == len(self):
-			hi_key = None
-		else:
-			hi_key = self._sortedkeys[idx]
-		if idx-1 >= 0:
-			lo_key = self._sortedkeys[idx-1]
-		else:
-			lo_key = None
+
+		def get_acceptable_key(start_key_idx__, search_upward_aot_downward__):
+			if not (0 <= start_key_idx__ < len(self)):
+				return None
+			if itempredicate is not None:
+				idx = start_key_idx__
+				while 0 <= idx < len(self):
+					if itempredicate(self._sortedkeys[idx], self[self._sortedkeys[idx]]):
+						return self._sortedkeys[idx]
+						break
+					idx += (1 if search_upward_aot_downward__ else -1)
+				else:
+					return None
+			else:
+				return self._sortedkeys[start_key_idx__]
+
+		lo_key = get_acceptable_key(idx-1, False)
+		hi_key = get_acceptable_key((idx if key_ not in self else idx+1), True)
+
 		def get_item(key__):
 			return ((key__, self[key__]) if key__ is not None else None)
 		return (get_item(lo_key), get_item(hi_key))
 
+	def boundingvalues(self, key_, itempredicate=None):
+		ritems = self.boundingitems(key_, itempredicate=itempredicate)
+		def get_value(item__):
+			return (item__[1] if item__ is not None else None)
+		return (get_value(ritems[0]), get_value(ritems[1]))
 
 def get_dir_tag_int(dir_tag_str_):
 	assert isinstance(dir_tag_str_, basestring)
@@ -425,15 +448,27 @@ def round_down_to_midnight(time_em_):
 	return long(time.mktime(dt.timetuple())*1000)
 
 def millis_within_day_to_str(m_):
-	assert 0 <= m_ <= 1000*60*60*24
+	assert 0 <= m_ <= 1000*60*60*48 # NextBus schedules use values greater than 1000*60*60*24 for times after midnight.
+		# The TTC service day seems to start around 5:00 or 6:00 AM.
 	hour = m_/(1000*60*60)
 	minute = (m_ - hour*1000*60*60)/(1000*60)
 	second = (m_ - (hour*1000*60*60 + minute*1000*60))/(1000)
+	while hour > 23:
+		hour -= 24
 	return '%02d:%02d:%02d' % (hour, minute, second)
 
+def invert_dict(dict_):
+	if dict_ is None:
+		return None
+	elif len(dict_) == 0:
+		return {}
+	else:
+		if len(set(dict_.values())) != len(dict_):
+			raise Exception('Can\'t invert dict.  Contains duplicate values.')
+		return dict((v,k) for k, v in dict_.iteritems())
 
 if __name__ == '__main__':
 
 
-	print millis_within_day_to_str(43380000)
+	print invert_dict({1: 'a', 2: 'b'})
 
