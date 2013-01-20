@@ -448,14 +448,18 @@ def round_down_to_midnight(time_em_):
 	return long(time.mktime(dt.timetuple())*1000)
 
 def millis_within_day_to_str(m_):
-	assert 0 <= m_ <= 1000*60*60*48 # NextBus schedules use values greater than 1000*60*60*24 for times after midnight.
+	assert isinstance(m_, int) or isinstance(m_, long)
+	assert m_ == -1 or (0 <= m_ <= 1000*60*60*48) # NextBus schedules use values greater than 1000*60*60*24 for times after midnight.
 		# The TTC service day seems to start around 5:00 or 6:00 AM.
-	hour = m_/(1000*60*60)
-	minute = (m_ - hour*1000*60*60)/(1000*60)
-	second = (m_ - (hour*1000*60*60 + minute*1000*60))/(1000)
-	while hour > 23:
-		hour -= 24
-	return '%02d:%02d:%02d' % (hour, minute, second)
+	if m_ == -1:
+		return str(m_)
+	else:
+		hour = m_/(1000*60*60)
+		minute = (m_ - hour*1000*60*60)/(1000*60)
+		second = (m_ - (hour*1000*60*60 + minute*1000*60))/(1000)
+		while hour > 23:
+			hour -= 24
+		return '%02d:%02d:%02d' % (hour, minute, second)
 
 def invert_dict(dict_):
 	if dict_ is None:
