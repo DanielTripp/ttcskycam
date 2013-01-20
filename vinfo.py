@@ -20,12 +20,12 @@ class VehicleInfo:
 			0L, 0L, None, None)
 		return r
 
-	def __init__(self, dir_tag_, heading_, vehicle_id_, lat_, lon_, predictable_, route_tag_, secs_since_report_, time_epoch_, time_, \
+	def __init__(self, dir_tag_, heading_, vehicle_id_, lat_, lon_, predictable_, route_tag_, secs_since_report_, time_retrieved_, time_, \
 				mofr_, widemofr_):
 		assert type(dir_tag_) == str and type(heading_) == int and type(vehicle_id_) == str \
 			and type(lat_) == float and type(lon_) == float \
 			and type(predictable_) == bool and type(route_tag_) == str \
-			and type(secs_since_report_) == int and type(time_epoch_) == long and type(time_) == long
+			and type(secs_since_report_) == int and type(time_retrieved_) == long and type(time_) == long
 		self.dir_tag = dir_tag_
 		self.heading = heading_
 		self.vehicle_id = vehicle_id_
@@ -33,14 +33,14 @@ class VehicleInfo:
 		self.predictable = predictable_
 		self.route_tag = route_tag_
 		self.secs_since_report = secs_since_report_
-		self.time_epoch = time_epoch_
+		self.time_retrieved = time_retrieved_
 		self.time = time_
 		self._mofr = (None if DONT_USE_WRITTEN_MOFRS else mofr_)
 		self._widemofr = (None if DONT_USE_WRITTEN_MOFRS else widemofr_)
 		self.is_dir_tag_corrected = False
 
 	def calc_time(self):
-		self.time = self.time_epoch - self.secs_since_report*1000
+		self.time = self.time_retrieved - self.secs_since_report*1000
 
 	# self.latlng represents the stand point.
 	# arg post_ can be a LatLng, or an int representing a mofr.
