@@ -80,15 +80,26 @@ function recreate_slider() {
 function initialize() {
 	init_map();
 	recreate_slider();
-	google.maps.event.addListener(g_map, 'bounds_changed', function() {
-			erase_grid();
-			draw_grid();
-		});
+
+	// Using a delayed listener for the grid redraw because bounds_changed events can happen dozens of times a second while 
+	// drag-scrolling the map, and redrawing on every one of those was making that dragging very choppy.  
+	// And I see no utility in redrawing the map more than 10 times per second.  
+	// Furthermore - the idea behind erasing the grid on dragstart is to make scrolling even smoother, because the fewer 
+	// objects are on the map, the smoother the scrolling will be.   (I'm fairly sure that I noticed a difference in 
+	// scrolling smoothness with this erasing but it's not as pronounced as the difference that the delayed listener makes.)
+	google.maps.event.addListener(g_map, 'dragstart', erase_grid);
+	add_delayed_event_listener(g_map, 'bounds_changed', redraw_grid, 100);
+
 	$('#sqlstr_field').keydown(function (e){
 			if(e.keyCode == 13) {
 				$('#submit0_button').trigger('click');
 			}
 		});
+}
+
+function redraw_grid() {
+	erase_grid();
+	draw_grid();
 }
 
 function draw_grid() {
@@ -108,13 +119,13 @@ function draw_grid_lats() {
 		var line = new google.maps.Polyline({map: g_map, path: pts, strokeColor: 'rgb(0,0,255)', strokeWeight: "0.5"});
 		g_grid_objects.push(line);
 		var marker = new RichMarker({
-			position: new google.maps.LatLng(lat, g_map.getBounds().getSouthWest().lng()), 
+			position: new google.maps.LatLng(lat, g_map.getBounds().getNorthEast().lng()), 
 			map: g_map,
 			draggable: false,
 			flat: true, 
-			anchor: RichMarkerPosition.BOTTOM_LEFT, 
+			anchor: RichMarkerPosition.BOTTOM_RIGHT, 
 			content: sprintf('<svg width="35" height="20" version="1.1">' +
-					'<text x="0" y="15" fill="rgb(0,0,255)">       %d</text>' +
+					'<text x="0" y="15" font-size="24" font-weight="bold"  fill="rgb(0,0,255)">       %d</text>' +
 					'</svg>', 
 					i)
 			});
@@ -134,12 +145,13 @@ function draw_grid_lons() {
 		var line = new google.maps.Polyline({map: g_map, path: pts, strokeColor: 'rgb(0,0,255)', strokeWeight: "0.5"});
 		g_grid_objects.push(line);
 		var marker = new RichMarker({
-			position: new google.maps.LatLng(g_map.getBounds().getSouthWest().lat(), lon), 
+			position: new google.maps.LatLng(g_map.getBounds().getNorthEast().lat(), lon), 
+			anchor: RichMarkerPosition.TOP_LEFT, 
 			map: g_map,
 			draggable: false,
 			flat: true, 
 			content: sprintf('<svg width="35" height="20" version="1.1">' +
-					'<text x="0" y="15" fill="rgb(0,0,255)">%d</text>' +
+					'<text x="0" y="15" font-size="24" font-weight="bold" fill="rgb(0,0,255)">%d</text>' +
 					'</svg>', 
 					i)
 			});

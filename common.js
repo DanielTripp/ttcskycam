@@ -371,6 +371,20 @@ function sort_buckets_list(l_) {
 	}
 }
 
+function add_delayed_event_listener(listenee_, eventname_, real_listener_func_, delay_millis_) {
+	var timeout = null;
+
+	function delaying_listener() {
+		if(timeout != null) {
+			clearTimeout(timeout);
+			timeout = null;
+		}
+		timeout = setTimeout(real_listener_func_, delay_millis_);
+	}
+
+	google.maps.event.addListener(listenee_, eventname_, delaying_listener);
+}
+
 
 eval(get_sync("js/json2.js"));
 

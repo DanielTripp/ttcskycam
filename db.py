@@ -9,7 +9,7 @@
 # create table predictions (fudgeroute VARCHAR(100), configroute VARCHAR(100), stoptag VARCHAR(100), time_retrieved_str varchar(30), time_of_prediction_str varchar(30), dirtag VARCHAR(100), vehicle_id VARCHAR(100), is_departure boolean, block VARCHAR(100), triptag VARCHAR(100), branch VARCHAR(100), affected_by_layover boolean, is_schedule_based boolean, delayed boolean, time_retrieved bigint, time_of_prediction bigint, rowid serial unique);
 # create index predictions_idx on predictions (fudgeroute, stoptag, time_retrieved desc);
 
-import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket, datetime, calendar
+import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket, datetime, calendar, math
 from collections import defaultdict, Sequence
 import vinfo, geom, traffic, routes, yards, tracks, predictions
 from misc import *
@@ -283,15 +283,21 @@ def massage_whereclause_lat_args(whereclause_):
 	with open('debug-vehicle-lat-grid.json') as fin:
 		grid_lats = json.load(fin)
 	def repl(mo_):
-		return str(grid_lats[int(mo_.group(1))])
-	return re.sub(r'\b(\d+)lat\b', repl, whereclause_)
+		n = float(mo_.group(1))
+		floorn = int(math.floor(n)); ceiln = int(math.ceil(n))
+		lat = get_range_val((floorn, grid_lats[floorn]), (ceiln, grid_lats[ceiln]), n)
+		return str(lat)
+	return re.sub(r'\b(\d+(?:\.\d+)?)lat\b', repl, whereclause_)
 
 def massage_whereclause_lon_args(whereclause_):
 	with open('debug-vehicle-lon-grid.json') as fin:
 		grid_lons = json.load(fin)
 	def repl(mo_):
-		return str(grid_lons[int(mo_.group(1))])
-	return re.sub(r'\b(\d+)lon\b', repl, whereclause_)
+		n = float(mo_.group(1))
+		floorn = int(math.floor(n)); ceiln = int(math.ceil(n))
+		lon = get_range_val((floorn, grid_lons[floorn]), (ceiln, grid_lons[ceiln]), n)
+		return str(lon)
+	return re.sub(r'\b(\d+(?:\.\d+)?)lon\b', repl, whereclause_)
 
 def massage_whereclause_dir_args(whereclause_):
 	r = whereclause_

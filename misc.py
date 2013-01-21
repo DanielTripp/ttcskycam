@@ -130,6 +130,12 @@ def intervalii(a_, b_):
 def get_range_val(p1_, p2_, domain_val_):
 	x1 = float(p1_[0]); y1 = float(p1_[1])
 	x2 = float(p2_[0]); y2 = float(p2_[1])
+	if abs(x2 - x1) < 0.000000001: # special case - would normally cause a divide-by-zero error - but we'll let the caller 
+			# get away with it sometimes: 
+		if abs(y2 - y1) < 0.0000000001 and abs(domain_val_ - x1) < 0.0000000001:
+			return y1
+		else:
+			raise ZeroDivisionError()
 	r = (y2 - y1)*(domain_val_ - x1)/(x2 - x1) + y1
 	if any(type(x) == float for x in p1_ + p2_ + (domain_val_,)): # are any arguments floats?
 		return r
@@ -448,18 +454,14 @@ def round_down_to_midnight(time_em_):
 	return long(time.mktime(dt.timetuple())*1000)
 
 def millis_within_day_to_str(m_):
-	assert isinstance(m_, int) or isinstance(m_, long)
-	assert m_ == -1 or (0 <= m_ <= 1000*60*60*48) # NextBus schedules use values greater than 1000*60*60*24 for times after midnight.
+	assert 0 <= m_ <= 1000*60*60*48 # NextBus schedules use values greater than 1000*60*60*24 for times after midnight.
 		# The TTC service day seems to start around 5:00 or 6:00 AM.
-	if m_ == -1:
-		return str(m_)
-	else:
-		hour = m_/(1000*60*60)
-		minute = (m_ - hour*1000*60*60)/(1000*60)
-		second = (m_ - (hour*1000*60*60 + minute*1000*60))/(1000)
-		while hour > 23:
-			hour -= 24
-		return '%02d:%02d:%02d' % (hour, minute, second)
+	hour = m_/(1000*60*60)
+	minute = (m_ - hour*1000*60*60)/(1000*60)
+	second = (m_ - (hour*1000*60*60 + minute*1000*60))/(1000)
+	while hour > 23:
+		hour -= 24
+	return '%02d:%02d:%02d' % (hour, minute, second)
 
 def invert_dict(dict_):
 	if dict_ is None:
