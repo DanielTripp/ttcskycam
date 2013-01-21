@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-		<title>test</title>
+		<title>show_points_file</title>
     <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
     <style type="text/css">
       html { height: 100% }
@@ -19,62 +19,102 @@
 var g_latlngs = new buckets.LinkedList();
 var g_polylines = new buckets.LinkedList();
 var g_i = 0;
+var g_bounding_rect = null;
+var g_dot_opacity = 0.5;
 
 function initialize() {
 
 	init_map();
 
+	google.maps.event.addListener(g_map, 'zoom_changed', redraw_objects);
+
   $('#filename_field').keydown(function (e){
       if(e.keyCode == 13) {
-				g_polylines.forEach(function(e) {
-					e.setMap(null);
-				});
-				g_polylines.clear();
-				g_latlngs.clear();
-				g_i = 0;
-
-				var contents_str = get_sync(get_value('filename_field'), {cache: false});
-				if(contents_str != null) {
-					var contents_latlng_list = null;
-					try {
-						contents_latlng_list = $.parseJSON(contents_str);
-					} catch(e if e instanceof SyntaxError) {
-						// So it wasn't JSON.    Maybe it's XML: 
-						var dom = $.parseXML(contents_str);
-						contents_latlng_list = [];
-
-						$(dom).find('*').each(function() {
-							var lat = $(this).attr('lat'), lng = $(this).attr('lon');
-							if(lat != undefined && lng != undefined) {
-								contents_latlng_list.push([lat, lng]);
-							}
-						});
-					}
-					if(contents_latlng_list != null) {
-						for(var i in contents_latlng_list) {
-							var raw_latlng = contents_latlng_list[i];
-							var glatlng = new google.maps.LatLng(raw_latlng[0], raw_latlng[1]);
-							g_latlngs.add(glatlng);
-						}
-						if(false) {
-							draw_one_point_at_a_time();
-						} else {
-							draw_all_points();
-						}
-					}
+				forget_drawn_objects();
+				get_latlngs_from_file();
+				if(false) {
+					draw_one_point_at_a_time();
+				} else {
+					draw_all_points();
 				}
       }
     });
+}
 
+function get_latlngs_from_file() {
+	g_latlngs.clear();
+	var contents_str = get_sync(get_value('filename_field'), {cache: false});
+	if(contents_str != null) {
+		var contents_latlng_list = null;
+		try {
+			contents_latlng_list = $.parseJSON(contents_str);
+		} catch(e if e instanceof SyntaxError) {
+			// So it wasn't JSON.    Maybe it's XML: 
+			var dom = $.parseXML(contents_str);
+			contents_latlng_list = [];
 
+			$(dom).find('*').each(function() {
+				var lat = $(this).attr('lat'), lng = $(this).attr('lon');
+				if(lat != undefined && lng != undefined) {
+					contents_latlng_list.push([lat, lng]);
+				}
+			});
+		}
+		if(contents_latlng_list != null) {
+			for(var i in contents_latlng_list) {
+				var raw_latlng = contents_latlng_list[i];
+				var glatlng = new google.maps.LatLng(raw_latlng[0], raw_latlng[1]);
+				g_latlngs.add(glatlng);
+			}
+		}
+	}
+}
+
+function redraw_objects() {
+	forget_drawn_objects();
+	draw_all_points();
+}
+
+function forget_drawn_objects() {
+	g_polylines.forEach(function(e) {
+		e.setMap(null);
+	});
+	g_polylines.clear();
+	g_i = 0;
+
+	if(g_bounding_rect != null) {
+		g_bounding_rect.setMap(null);
+		g_bounding_rect = null;
+	}
 }
 
 function draw_all_points() {
+	var minlat=90, maxlat=0, minlng=0, maxlng=-180;
+
 	g_latlngs.forEach(function(glatlng) {
-		var polyline = new google.maps.Polyline({map: g_map, strokeWeight: 10, strokeOpacity: 0.3, 
+		var polyline = new google.maps.Polyline({map: g_map, strokeWeight: get_dot_size(), strokeOpacity: g_dot_opacity, 
 				path: [glatlng, glatlng]});
 		g_polylines.add(polyline);
+
+		minlat = Math.min(minlat, glatlng.lat());
+		maxlat = Math.max(maxlat, glatlng.lat());
+		minlng = Math.min(minlng, glatlng.lng());
+		maxlng = Math.max(maxlng, glatlng.lng());
 	});
+
+	var rect_bounds = new google.maps.LatLngBounds(
+			new google.maps.LatLng(minlat, minlng), new google.maps.LatLng(maxlat, maxlng));
+	g_bounding_rect = new google.maps.Rectangle({bounds: rect_bounds, map: g_map, strokeColor: 'rgb(0,0,0)', 
+			strokeOpacity: 0.5, strokeWeight: 1, fillOpacity: 0});
+}
+
+function get_dot_size() {
+	var zoom = g_map.getZoom();
+	if(zoom <= 12) {
+		return 10;
+	} else {
+		return get_range_val(12, 10, 21, 80, zoom);
+	}
 }
 
 function draw_one_point_at_a_time() {
@@ -90,6 +130,18 @@ function draw_one_point_at_a_time() {
 	}
 }
 
+function on_opacity_down_clicked() {
+	g_dot_opacity = Math.max(g_dot_opacity-0.1, 0.0);
+	redraw_objects();
+}
+
+function on_opacity_up_clicked() {
+	g_dot_opacity = Math.min(g_dot_opacity+0.1, 1.0);
+	redraw_objects();
+}
+
+
+
 
 
     </script>
@@ -97,6 +149,8 @@ function draw_one_point_at_a_time() {
   <body onload="initialize()" >
 		<div id="map_canvas" style="width:80%; height:100%"></div>
 		<input type="text" size="130" name="filename_field" id="filename_field" />
+		<input type="button" onclick="on_opacity_down_clicked()" value="Opacity DOWN" />
+		<input type="button" onclick="on_opacity_up_clicked()" value="Opacity UP" />
 		<p id="p1"/>
   </body>
 </html>
