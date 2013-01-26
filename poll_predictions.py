@@ -66,7 +66,7 @@ if __name__ == '__main__':
 		sys.exit('No arguments allowed.  Only options.')
 
 	if get_opt(opts, 'redirect-stdstreams-to-file'):
-		redirect_stdstreams_to_file('poll_predictions_')
+		redirect_stdstreams_to_file('poll_predictions')
 
 	poll_once(not get_opt(opts, 'dont-insert-into-db'))
 
