@@ -47,7 +47,8 @@ class Prediction:
 	def __repr__(self):
 		return self.__str__()
 
-# param dest_stoptag_ can be None 
+# param dest_stoptag_ can be None
+# return sorted by Prediction.time, ascending.
 def get_extrapolated_predictions(froute_, start_stoptag_, dest_stoptag_, time_):
 	assert isinstance(froute_, basestring) and isinstance(start_stoptag_, basestring)
 	time_ = massage_time_arg(time_, 60*1000)
@@ -61,7 +62,7 @@ def get_extrapolated_predictions(froute_, start_stoptag_, dest_stoptag_, time_):
 		t = now_em()
 		start_to_recorded_stop_riding_time_secs = traffic.get_est_riding_time_secs(froute_, start_stop.mofr, recorded_stop.mofr, \
 				True, time_)
-		if start_to_recorded_stop_riding_time_secs == -1:
+		if start_to_recorded_stop_riding_time_secs is None:
 			raise Exception('found no traffic between mofrs %d and %d on %s' % (start_stop.mofr, recorded_stop.mofr, froute_))
 		r = []
 		while predictions_from_db:

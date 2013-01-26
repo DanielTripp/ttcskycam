@@ -1,7 +1,8 @@
 #!/usr/bin/python2.6
 
-import sys, subprocess, re, time, xml.dom, xml.dom.minidom, traceback, json
+import sys, subprocess, re, time, xml.dom, xml.dom.minidom, traceback, json, getopt
 from collections import defaultdict
+from xml.parsers.expat import ExpatError
 import db, vinfo, routes
 from misc import *
 
@@ -16,10 +17,23 @@ def get_data_from_web_as_str(route_, time_es_=0):
 
 def get_data_from_web_as_xml(route_, time_es_=0):
 	data_str = get_data_from_web_as_str(route_, time_es_)
-	r = xml.dom.minidom.parseString(data_str)
+	if not data_str:
+		raise Exception('Got no output from NextBus.')
+	def print_data_str(msg_):
+		print >> sys.stderr, '--- %s - %s:' % (now_str(), msg_)
+		print >> sys.stderr, '---'
+		print >> sys.stderr, data_str,
+		print >> sys.stderr, '---'
+	try:
+		r = xml.dom.minidom.parseString(data_str)
+	except ExpatError:
+		print_data_str('Failed to parse output from NextBus.')
+		raise
+	if [e for e in r.documentElement.childNodes if e.nodeName.lower() == 'error']:
+		print_data_str('Detected error(s) in output from NextBus.  (Will try to get data from this document regardless.)')
 	return r
  
-def insert_xml_into_db(xmldoc_):
+def insert_xml_into_db(xmldoc_, really_insert_into_db_):
 	vehicles = []
 	last_time = None
 	for elem in (node for node in xmldoc_.documentElement.childNodes if isinstance(node, xml.dom.minidom.Element)):
@@ -33,11 +47,12 @@ def insert_xml_into_db(xmldoc_):
 	for vehicle_info in vehicles:
 		vehicle_info.time_retrieved = last_time
 		vehicle_info.calc_time()
-		db.insert_vehicle_info(vehicle_info)
+		if really_insert_into_db_:
+			db.insert_vehicle_info(vehicle_info)
 
 	return last_time
 
-def poll_once():
+def poll_once(insert_into_db_):
 	route_to_lasttime_em = defaultdict(lambda: 0)
 	try:
 		with open('pollstate.json') as fin:
@@ -49,7 +64,7 @@ def poll_once():
 		try:
 			#print 'Using %d for %s' % (route_to_lasttime_em[route], route)
 			data_xmldoc = get_data_from_web_as_xml(route, route_to_lasttime_em[route])
-			route_to_lasttime_em[route] = insert_xml_into_db(data_xmldoc)
+			route_to_lasttime_em[route] = insert_xml_into_db(data_xmldoc, insert_into_db_)
 		except Exception, e:
 			print 'At %s: error getting route %s' % (em_to_str(now_em()), route)
 			traceback.print_exc(e)
@@ -61,6 +76,13 @@ def poll_once():
 			json.dump(route_to_lasttime_em, fout)
 
 if __name__ == '__main__':
-	assert len(sys.argv) == 1
-	poll_once()
+
+	opts, args = getopt.getopt(sys.argv[1:], '', ['redirect-stdstreams-to-file', 'dont-insert-into-db'])
+	if args:
+		sys.exit('No arguments allowed.  Only options.')
+
+	if get_opt(opts, 'redirect-stdstreams-to-file'):
+		redirect_stdstreams_to_file('poll_locations')
+
+	poll_once(not get_opt(opts, 'dont-insert-into-db'))
 

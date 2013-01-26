@@ -385,6 +385,16 @@ function add_delayed_event_listener(listenee_, eventname_, real_listener_func_, 
 	google.maps.event.addListener(listenee_, eventname_, delaying_listener);
 }
 
+function sorted_keys(dict_) {
+    var keys = [];
+    for(var key in dict_) {
+        if(dict_.hasOwnProperty(key)) {
+            keys.push(key);
+        }
+    }
+    return keys.sort();
+}
+
 
 eval(get_sync("js/json2.js"));
 
