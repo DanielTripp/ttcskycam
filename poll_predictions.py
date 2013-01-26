@@ -9,7 +9,7 @@ import db, vinfo, routes, predictions
 from misc import *
 
 CROUTENSTOPTAGS_TO_OMIT = [('306', '8763'), ('306', '9132'), ('306', '8999'), ('306', '4538'), ('306', '14260_ar'), ('310', '14142_ar'),
-	('316', '14050'), ('316', '14197_ar'), ('329', '6113_arx')]
+	('316', '14050'), ('316', '14197_ar'), ('329', '6113_ar')]
 
 def get_data_from_web_as_str(froute_, stoptag_):
 	url_stops_part = ''.join('&stops=%s|%s' % (croute, stoptag_) for croute in routes.FUDGEROUTE_TO_CONFIGROUTES[froute_] \
@@ -66,7 +66,7 @@ if __name__ == '__main__':
 		sys.exit('No arguments allowed.  Only options.')
 
 	if get_opt(opts, 'redirect-stdstreams-to-file'):
-		redirect_stdstreams_to_file('poll_predictions')
+		redirect_stdstreams_to_file('poll_predictions_')
 
 	poll_once(not get_opt(opts, 'dont-insert-into-db'))
 
