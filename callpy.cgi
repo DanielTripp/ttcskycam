@@ -32,13 +32,6 @@ def get_arg_objvals(vardict_):
 		r.append(arg_objval)
 	return r
 
-def first(iterable_, func_=bool):
-	for e in iterable_:
-		if func_(e):
-			return e
-	return None
-
-
 
 class OurJSONEncoder(json.JSONEncoder):
 

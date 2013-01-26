@@ -52,11 +52,21 @@ class VehicleInfo:
 			if not (all(x != -1 for x in (self.mofr, forevi_.mofr, post_)) and betweenii(self.mofr, post_, forevi_.mofr)):
 				raise Exception('This function, when passed a mofr int (%d) as a post_, needs vis with valid mofrs.  %s %s' % (post_, self, forevi_))
 		if isinstance(post_, geom.LatLng):
+			if self.latlng.dist_m(forevi_.latlng) < 0.001:
+				if self.latlng.dist_m(post_) < 0.001:
+					ratio = 0.0
+				else:
+					raise Exception('ratio (denominator) would have been zero.')
 			ratio = geom.get_pass_ratio(self.latlng, forevi_.latlng, post_)
 		else: # i.e. int
-			ratio = (post_ - self.mofr)/float(forevi_.mofr - self.mofr)
-		r = long(self.time + ratio*(forevi_.time - self.time))
-		return r
+			if self.mofr == forevi_.mofr:
+				if self.mofr == post_:
+					ratio = 0.0
+				else:
+					raise Exception('ratio (denominator) would have been zero.')
+			else:
+				ratio = (post_ - self.mofr)/float(forevi_.mofr - self.mofr)
+		return long(self.time + ratio*(forevi_.time - self.time))
 
 	def __str__(self):
 		return 'route: %s, vehicle: %s, dir: %-12s, (  %f, %f  )  , mofr: %5d, heading: %3d, time: %s %s' \

@@ -24,6 +24,9 @@ def em_to_str_hms(t_):
 def now_em():
 	return int(time.time()*1000)
 
+def now_str():
+	return em_to_str(now_em())
+
 def frange(min_, max_, step_):
 	x = min_
 	while x < max_:
@@ -268,7 +271,7 @@ def first(iterable_, predicate_):
 	for e in iterable_:
 		if predicate_(e):
 			return e
-		return None
+	return None
 
 def round_down_by_minute(t_em_):
 	dt = datetime.datetime.utcfromtimestamp(t_em_/1000.0)
@@ -472,6 +475,25 @@ def invert_dict(dict_):
 		if len(set(dict_.values())) != len(dict_):
 			raise Exception('Can\'t invert dict.  Contains duplicate values.')
 		return dict((v,k) for k, v in dict_.iteritems())
+
+def get_opt(opts_, optname_):
+	for e in opts_:
+		if e[0] == '--'+optname_:
+			if e[1] == '':
+				return True
+			else:
+				return e[1]
+	else:
+		return None
+
+def redirect_stdstreams_to_file(filename_prefix_):
+	file = os.path.expanduser('~/ttc-logs/%s%s.txt' % (filename_prefix_, datetime.datetime.now().strftime('%Y-%m-%d')))
+	if not os.path.exists(os.path.dirname(file)):
+		os.makedirs(os.path.dirname(file))
+	fout = open(file, 'a+')
+	sys.stdout = fout
+	sys.stderr = fout
+
 
 if __name__ == '__main__':
 

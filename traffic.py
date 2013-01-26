@@ -228,7 +228,8 @@ def kmph_to_mps(kmph_):
 def test(a_, b_):
 	return 'test func got: %s and %s' % (a_, b_)
 
-# return -1 if one or more parts of the route have no traffic data. 
+# return -1 if one or more parts of the route have no traffic data.
+# otherwise - return value is in seconds.
 def get_est_riding_time_secs(froute_, start_mofr_, dest_mofr_, current_, time_):
 	assert all(0 <= mofr <= routes.routeinfo(froute_).max_mofr() for mofr in (start_mofr_, dest_mofr_))
 	if mofrs_to_dir(start_mofr_, dest_mofr_) == 0:
@@ -242,8 +243,8 @@ def get_est_riding_time_secs(froute_, start_mofr_, dest_mofr_, current_, time_):
 	if startmofr != round_up_off_step(startmofr, MOFR_STEP):
 		dist_m = round_up_off_step(startmofr, MOFR_STEP) - startmofr
 		speed_kmph = mofr_to_kmph[round(startmofr, MOFR_STEP)]
-		if speed_kmph == None:
-			return -1
+		if speed_kmph is None:
+			return None
 		speed_mps = kmph_to_mps(speed_kmph)
 		#alert('adding distance '+dist_m+', speed '+speed_mps+', makes for '+(dist_m/speed_mps))
 		r_secs += dist_m/speed_mps
@@ -251,8 +252,8 @@ def get_est_riding_time_secs(froute_, start_mofr_, dest_mofr_, current_, time_):
 	while cur_offstep_mofr < round_down_off_step(destmofr, MOFR_STEP):
 		mofr_with_ref_speed = round_up(cur_offstep_mofr, MOFR_STEP)
 		speed_kmph = mofr_to_kmph[mofr_with_ref_speed]
-		if speed_kmph == -1:
-			return -1
+		if speed_kmph is None:
+			return None
 		speed_mps = kmph_to_mps(speed_kmph)
 		#alert('adding distance '+MOFR_STEP+', speed '+speed_mps+', makes for '+(MOFR_STEP/speed_mps))
 		r_secs += MOFR_STEP/speed_mps
@@ -260,8 +261,8 @@ def get_est_riding_time_secs(froute_, start_mofr_, dest_mofr_, current_, time_):
 	if destmofr != round_down_off_step(destmofr, MOFR_STEP):
 		dist_m = destmofr - round_down_off_step(destmofr, MOFR_STEP)
 		speed_kmph = mofr_to_kmph[round(destmofr, MOFR_STEP)]
-		if speed_kmph == -1:
-			return -1
+		if speed_kmph is None:
+			return None
 		speed_mps = kmph_to_mps(speed_kmph)
 		#alert('adding distance '+dist_m+', speed '+speed_mps+', makes for '+(dist_m/speed_mps))
 		r_secs += dist_m/speed_mps

@@ -3,6 +3,8 @@
 import sys, json, os.path, bisect, xml.dom, xml.dom.minidom
 import vinfo, geom, mc, c, snaptogrid
 from misc import *
+#from mrucache import *
+from lru_cache import lru_cache
 
 FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301'], 'king': ['504'], 'spadina': ['510'], \
 'bathurst': ['511', '310'], 'dufferin': ['29', '329'], 'lansdowne': ['47'], 'ossington': ['63', '316'], 'college': ['506', '306'], \
@@ -64,7 +66,10 @@ class Schedule(object):
 					stoptag = str(stop_elem.getAttribute('tag'))
 					epoch_time = long(stop_elem.getAttribute('epochTime'))
 					if stoptag in m[direction_int][serviceclass][fblockid]: raise Exception()
-					if routeinfo(self.froute).get_stop(stoptag) is None: raise Exception()
+					if routeinfo(self.froute).get_stop(stoptag) is None:
+						continue # this will be the case eg. stop 5520 on 47C Lansdowne - Orfus road branch - we can't deal with that yet
+							# so we can't add this scheduled stop to our schedule.  But we still want the rest of this block's schedule,
+							# because most of the branch is probably on our fudgeroute.
 					m[direction_int][serviceclass][fblockid][stoptag] = epoch_time
 		self.dir_to_serviceclass_to_fblockid_to_stoptag_to_time = m
 		self.verify_dir_to_serviceclass_to_fblockid_to_stoptag_to_time()
@@ -118,16 +123,17 @@ class Schedule(object):
 		start_time_within_day = get_time_millis_within_day(start_time_)
 		startstop_time_to_fblockid = self.get_expanded_time_to_fblockid(direction, serviceclass, startstoptag_)
 		caught_time_within_day, caught_fblockid = startstop_time_to_fblockid.ceilitem(start_time_within_day)
-		print 'caught', caught_fblockid # TDR
 		arrival_time_within_day = self.get_expanded_fblockid_to_time(direction, serviceclass, deststoptag_)[caught_fblockid]
 		assert arrival_time_within_day != -1 # TODO: be sure to catch the right block by seeing if it services deststop.
 		return (caught_time_within_day, arrival_time_within_day)
 
+	# time in epoch millis.
 	def get_arrival_time(self, startstoptag_, deststoptag_, start_time_):
 		caught_time_within_day, arrival_time_within_day = self.get_caught_and_arrival_time_within_day(startstoptag_, deststoptag_, start_time_)
 		arrival_time = round_down_to_midnight(start_time_) + arrival_time_within_day
 		return arrival_time
 
+	# return millis.
 	def get_ride_time(self, startstoptag_, deststoptag_, start_time_):
 		caught_time_within_day, arrival_time_within_day = self.get_caught_and_arrival_time_within_day(startstoptag_, deststoptag_, start_time_)
 		return (arrival_time_within_day - caught_time_within_day)
@@ -220,13 +226,10 @@ def schedule(froute_):
 	return mc.get(schedule_impl, [froute_])
 
 def schedule_impl(froute_):
-	if froute_ == 'king':
-		filename = '/tmp/504-schedule.txt'
-	elif froute_ == 'dundas':
-		filename = '/tmp/505-schedule.txt'
+	if froute_ in ('king', 'dundas', 'lansdowne'):
+		return Schedule(froute_, '%s-schedule.xml' % froute_)
 	else:
-		return None
-	return Schedule(froute_, filename)
+		raise Exception('not yet implemented')
 
 class Stop:
 	def __init__(self, stoptag_, latlng_, direction_, mofr_, dirtags_serviced_):
@@ -340,10 +343,14 @@ class RouteInfo:
 		for direction in (0, 1):
 			if stoptag_ in self.dir_to_stoptag_to_stop[direction]:
 				return self.dir_to_stoptag_to_stop[direction][stoptag_]
-		raise Exception('Could not find stop for stoptag "%s", route %s' % (stoptag_, self.name))
+		return None
 
+	@lru_cache(5000)
 	def latlon_to_mofr(self, post_, tolerance_=0):
 		assert isinstance(post_, geom.LatLng) and (tolerance_ in (0, 1, 1.5, 2))
+		#mrucache_key = (self.name, post_, tolerance_)
+		#if mrucache_key in g_latlon_to_mofr_mrucache:
+		#	return g_latlon_to_mofr_mrucache[mrucache_key]
 		snap_result = self.snaptogridcache.snap(post_, {0:50, 1:300, 1.5:600, 2:2000}[tolerance_])
 		if snap_result is None:
 			return -1
@@ -351,7 +358,9 @@ class RouteInfo:
 		r = self.routeptaddr_to_mofr[dir][routeptidx]
 		if snap_result[2]:
 			r += snap_result[0].dist_m(self.routepts(dir)[routeptidx])
-		return int(r)
+		r = int(r)
+		#g_latlon_to_mofr_mrucache[mrucache_key] = r
+		return r
 
 	def snaptest(self, pt_, tolerance_=0):
 		assert isinstance(pt_, geom.LatLng) and (tolerance_ in (0, 1, 2))

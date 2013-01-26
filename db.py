@@ -737,13 +737,22 @@ def _get_observed_arrival_time_arrival_time(startvi1_, startstoptag_, deststopta
 	curs.execute('select '+VI_COLS+' from ttc_vehicle_locations where vehicle_id = %s and time > %s and time < %s order by time',
 			[startvi1_.vehicle_id, startvi1_.time, startvi1_.time + 1000*60*60*2])
 	lastvi = startvi1_
+	r = None
 	for row in curs:
 		curvi = vinfo.VehicleInfo(*row)
 		if curvi.mofr != -1 and (curvi.mofr >= destmofr if direction==0 else curvi.mofr <= destmofr):
-			assert lastvi.mofr != -1 # Apparently a detour, or a large gap in GPS readings.  Not sure what to do with this.
-			return lastvi.get_pass_time_interp(curvi, destmofr)
+			if (lastvi.mofr != -1) and abs(curvi.mofr - lastvi.mofr) < 1000:
+				r = lastvi.get_pass_time_interp(curvi, destmofr)
+			# else - lastvi.mofr == -1 could mean that the vehicle is coming back from a detour.  the >= 1000 could mean
+			# a large gap in GPS readings.  Both could mean both - such as the odd short-turn / detour that vid 4040 (route 505)
+			# does around 2013-01-15 16:50.  In some cases like this, mabye we could (and should) get a useful return value for
+			# this method out of this.  But this would at least require more coding here, such as searching backwards in these rows
+			# for the last row with mofr != -1.
+			# TODO: do filtering out of buggy GPS readings here, like graphical vehicle locations interpolation does.
+			break
 		lastvi = curvi
 	curs.close()
+	return r
 
 # note [1] - TODO: do more here.  Handle cases of caught vehicle being stuck and rescued by another vehicle. three sub-cases:
 # 1) rescue from behind (must be a bus),
@@ -760,16 +769,6 @@ def _get_observed_arrival_time_caught_vehicle_passing_vis(froute_, startstoptag_
 		candidate_vid_to_lastvi = {}
 		for row in curs:
 			curvi = vinfo.VehicleInfo(*row)
-			#curvi_fixed_dirtag = fix_dirtag_str(curvi.dir_tag, direction, curvi.route_tag)
-			if 0:
-				if curvi.dir_tag != curvi_fixed_dirtag:
-					print curvi.dir_tag, curvi_fixed_dirtag   # TDR
-				else:
-					print '--------- dirtag not fixed '
-			#if 0:
-			#print curvi_fixed_dirtag # TDR
-			#if curvi_fixed_dirtag not in ri.get_stop(deststoptag_).dirtags_serviced: # see note [1]
-			#	continue
 			if curvi.vehicle_id in candidate_vid_to_lastvi:
 				lastvi = candidate_vid_to_lastvi[curvi.vehicle_id]
 				if lastvi.mofr != -1 and curvi.mofr != -1 \

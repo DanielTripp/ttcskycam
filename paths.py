@@ -1,6 +1,6 @@
 #!/usr/bin/python2.6
 
-import sys, json, os.path
+import sys, json, os.path, pprint
 import vinfo, geom, routes, predictions, mc, c, snaptogrid, traffic 
 from misc import *
 
@@ -95,14 +95,14 @@ def get_path_est_arrival_time(t0_, path_):
 	sim_time = t0_
 
 	for leg in path_:
-		print leg # TDR 
+		#print leg
 		if leg.mode == 'walking':
 			sim_time += (leg.dist_m/WALKING_SPEED_MPS)*1000
 		else:
 			matched_prediction = None
 			for prediction in predictions.get_extrapolated_predictions(leg.froute, leg.start_stoptag, leg.dest_stoptag, t0_):
 				if prediction.time > sim_time:
-					print '---------- waited', em_to_str_hm(prediction.time - sim_time) # TDR 
+					#print '---------- waited', em_to_str_hm(prediction.time - sim_time)
 					sim_time = prediction.time
 					matched_prediction = prediction
 					break
@@ -114,15 +114,50 @@ def get_path_est_arrival_time(t0_, path_):
 			predictions_at_dest_stop = predictions.get_extrapolated_predictions(leg.froute, leg.dest_stoptag, None, t0_)
 			prediction_of_caught_vehicle_at_dest_stop = first(predictions_at_dest_stop, lambda p: p.vehicle_id == matched_prediction.vehicle_id)
 			if prediction_of_caught_vehicle_at_dest_stop is not None:
-				printerr('-------- using predictions instead of traffic for travel time') # TDR 
+				#printerr('-------- using predictions instead of traffic for travel time')
 				sim_time = prediction_of_caught_vehicle_at_dest_stop.time
 			else:
 				leg_riding_time_secs = traffic.get_est_riding_time_secs(leg.froute, leg.start_mofr, leg.dest_mofr, True, t0_)
-				if leg_riding_time_secs == -1:
+				if leg_riding_time_secs is None:
 					raise Exception()
 				sim_time += leg_riding_time_secs*1000
 
 	return sim_time
+
+def get_est_arrival_time(froute_, start_stoptag_, dest_stoptag_, time_retrieved_, sim_time_, ride_time_est_style_):
+	assert is_valid_time_em(time_retrieved_) and is_valid_time_em(sim_time_) and ride_time_est_style_ in ('predictions', 'traffic', 'schedule')
+	assert time_retrieved_ <= sim_time_
+	ri = routes.routeinfo(froute_)
+	assert (ri.get_stop(start_stoptag_).direction == ri.get_stop(dest_stoptag_).direction) and (start_stoptag_ != dest_stoptag_)
+	assert mofrs_to_dir(ri.get_stop(start_stoptag_).mofr, ri.get_stop(dest_stoptag_).mofr) == ri.get_stop(start_stoptag_).direction
+
+	for prediction in predictions.get_extrapolated_predictions(froute_, start_stoptag_, dest_stoptag_, time_retrieved_):
+		if prediction.time >= sim_time_:
+			caught_prediction = prediction
+			break
+	else:
+		raise Exception('No prediction found at starting stop')
+
+	if ride_time_est_style_ == 'predictions':
+		predictions_at_dest_stop = predictions.get_extrapolated_predictions(froute_, dest_stoptag_, None, time_retrieved_)
+		prediction_of_caught_vehicle_at_dest_stop = first(predictions_at_dest_stop, lambda p: p.vehicle_id == caught_prediction.vehicle_id)
+		if prediction_of_caught_vehicle_at_dest_stop is not None:
+			return prediction_of_caught_vehicle_at_dest_stop.time
+		else:
+			return None
+	elif ride_time_est_style_ == 'traffic':
+		start_mofr = ri.get_stop(start_stoptag_).mofr; dest_mofr = ri.get_stop(dest_stoptag_).mofr;
+		ride_time_secs = traffic.get_est_riding_time_secs(froute_, start_mofr, dest_mofr, True, time_retrieved_)
+		if ride_time_secs is None:
+			return None
+		return caught_prediction.time + ride_time_secs*1000
+	elif ride_time_est_style_ == 'schedule':
+		ride_time = routes.schedule(froute_).get_ride_time(start_stoptag_, dest_stoptag_, caught_prediction.time)
+		return caught_prediction.time + ride_time
+	else:
+		raise Exception()
+
+
 
 # start_stoptag_hints_ and dest_stoptag_hints_ can be None, that is okay.  These arguments exist as an optimization 
 # (within PathLeg.make_transit_leg()) so that mofr_to_stop() doesn't need to be called in many of these recursive 
