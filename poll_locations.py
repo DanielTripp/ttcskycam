@@ -82,7 +82,7 @@ if __name__ == '__main__':
 		sys.exit('No arguments allowed.  Only options.')
 
 	if get_opt(opts, 'redirect-stdstreams-to-file'):
-		redirect_stdstreams_to_file('poll_locations')
+		redirect_stdstreams_to_file('poll_locations_')
 
 	poll_once(not get_opt(opts, 'dont-insert-into-db'))
 
