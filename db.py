@@ -11,7 +11,7 @@
 
 import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket, datetime, calendar, math
 from collections import defaultdict, Sequence
-import vinfo, geom, traffic, routes, yards, tracks, predictions
+import vinfo, geom, traffic, routes, yards, tracks, predictions, mc
 from misc import *
 
 HOSTMONIKER_TO_IP = {'theorem': '72.2.4.176', 'black': '24.52.231.206'}
@@ -716,6 +716,9 @@ def routes_clause(froute_):
 # Return map containing keys 'time_caught', 'time_arrived', and 'vid'.
 # Times are absolute epoch times in millis, not a relative time spent travelling.
 def get_observed_arrival_time(froute_, startstoptag_, deststoptag_, time_):
+	return mc.get(get_observed_arrival_time_impl, [froute_, startstoptag_, deststoptag_, time_])
+
+def get_observed_arrival_time_impl(froute_, startstoptag_, deststoptag_, time_):
 	assert startstoptag_ != deststoptag_
 	time_ = massage_time_arg(time_)
 	ri = routes.routeinfo(froute_)
