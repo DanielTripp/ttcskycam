@@ -142,7 +142,7 @@ def get_est_arrival_time(froute_, start_stoptag_, dest_stoptag_, time_retrieved_
 		predictions_at_dest_stop = predictions.get_extrapolated_predictions(froute_, dest_stoptag_, None, time_retrieved_)
 		prediction_of_caught_vehicle_at_dest_stop = first(predictions_at_dest_stop, lambda p: p.vehicle_id == caught_prediction.vehicle_id)
 		if prediction_of_caught_vehicle_at_dest_stop is not None:
-			return prediction_of_caught_vehicle_at_dest_stop.time
+			return {'time_caught': caught_prediction.time, 'time_arrived': prediction_of_caught_vehicle_at_dest_stop.time}
 		else:
 			return None
 	elif ride_time_est_style_ == 'traffic':
@@ -150,10 +150,10 @@ def get_est_arrival_time(froute_, start_stoptag_, dest_stoptag_, time_retrieved_
 		ride_time_secs = traffic.get_est_riding_time_secs(froute_, start_mofr, dest_mofr, True, time_retrieved_)
 		if ride_time_secs is None:
 			return None
-		return caught_prediction.time + ride_time_secs*1000
+		return {'time_caught': caught_prediction.time, 'time_arrived': caught_prediction.time + ride_time_secs*1000}
 	elif ride_time_est_style_ == 'schedule':
 		ride_time = routes.schedule(froute_).get_ride_time(start_stoptag_, dest_stoptag_, caught_prediction.time)
-		return caught_prediction.time + ride_time
+		return {'time_caught': caught_prediction.time, 'time_arrived': caught_prediction.time + ride_time}
 	else:
 		raise Exception()
 
