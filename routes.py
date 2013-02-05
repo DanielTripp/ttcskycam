@@ -7,7 +7,7 @@ from misc import *
 from lru_cache import lru_cache
 
 FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301'], 'king': ['504'], 'spadina': ['510'], \
-'bathurst': ['511', '310'], 'dufferin': ['29', '329'], 'lansdowne': ['47'], 'ossington': ['63', '316'], 'college': ['506', '306'], \
+'bathurst': ['511', '310'], 'dufferin': ['29', '329'], 'lansdowne': ['47'], 'ossington': ['63', '316'], 'carlton': ['506', '306'], \
 'dupont': ['26']}
 
 CONFIGROUTE_TO_FUDGEROUTE = {}
@@ -768,4 +768,5 @@ if __name__ == '__main__':
 
 	import pprint
 
-	pprint.pprint(get_stops_dir_to_stoptag_to_latlng('college'))
+	pprint.pprint(get_stops_dir_to_stoptag_to_latlng('carlton'))
+
