@@ -39,6 +39,9 @@ function new_fudgeroute_data() {
 	};
 }
 
+// End of this list = highest zindex i.e. most visible.  
+var g_froute_zindexes = ['ossington', 'lansdowne', 'spadina', 'bathurst', 'dufferin', 'dupont', 'college', 'dundas', 'king', 'queen'];
+
 var g_framerate_period_times = new buckets.LinkedList();
 for(var i=0; i<15; i++) {
 	g_framerate_period_times.add(0);
@@ -639,7 +642,8 @@ function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
 			draggable: false,
 			icon: new google.maps.MarkerImage(get_vehicle_cgi_url(size, heading_, static_aot_moving_), 
 					null, null, new google.maps.Point(size/2, size/2)),
-			visible: false
+			visible: false, 
+			zIndex: 1
 		});
 	if(!TEST_INVISIBLE) marker.setVisible(true);
 	add_vid_mouseover_infowin(marker, size, vid_);
@@ -788,7 +792,7 @@ function remake_traffic_lines_singleroute(fudgeroute_) {
 	if(data != undefined) {
 		data.traffic_linedefs.forEach(function(linedef) {
 			var traf = data.traffic_mofr2speed.get(linedef.mofr);
-			var new_lines = make_traffic_line(linedef.start_latlon, linedef.end_latlon, (traf!=null ? traf.kmph : null), linedef.mofr, true);
+			var new_lines = make_traffic_line(fudgeroute_, linedef.start_latlon, linedef.end_latlon, (traf!=null ? traf.kmph : null), linedef.mofr, true);
 			add_all(data.traffic_lines, new_lines);
 		});
 	}
@@ -875,7 +879,7 @@ function initialize() {
 	set_selected((g_routeselect_auto_aot_manual ? 'routeselect_auto_radiobutton' : 'routeselect_manual_radiobutton'), true);
 	init_routeselect_controls();
 
-	init_trip_markers();
+	//init_trip_markers();
 
 	// The first 'get' of data from the server will happen due to a bounds_changed event on the map that happens to it on 
 	// initialization.  That will cause a 'get_fudgeroutes_for_map_bounds' which will cause a 'get' of traffic and vehicle 
@@ -1010,7 +1014,7 @@ function draw_trip_polyline() {
 
 function make_trip_polyline(path_) {
 	g_trip_polyline = new google.maps.Polyline({map: g_map, path: path_, strokeWeight: get_trip_path_line_width(), 
-		strokeColor: 'rgb(0,0,255)', strokeOpacity: 0.25, zIndex: -10});
+		strokeColor: 'rgb(0,0,255)', strokeOpacity: 0.25, zIndex: -50});
 }
 
 function get_est_trip_time() {
@@ -1451,31 +1455,6 @@ function get_datetime_from_gui() {
 	}
 }
 
-function draw_all_routes() {
-	callpy('routes.get_all_routes_latlons', 
-			function(r_) {
-				draw_routes(r_);
-			});
-}
-
-function draw_routes(routes_) {
-	for(var i=0; i<routes_.length; i++) {
-		var latlngs = new Array();
-		for(var j=0; j<routes_[i].length; j++) {
-			var pt = routes_[i][j];
-			latlngs.push(new google.maps.LatLng(pt[0], pt[1]));
-		}
-		var polyline = new google.maps.Polyline({
-			path: latlngs, 
-			strokeWeight: 3, 
-			strokeOpacity: 0.3, 
-			strokeColor: 'rgb(50,50,50)', 
-			zIndex: -10, 
-			map: g_map
-		});
-	}
-}
-
 function stop_refresh_data_from_server_timer() {
 	if(g_refresh_data_from_server_timer != null) {
 		clearTimeout(g_refresh_data_from_server_timer);
@@ -1522,24 +1501,25 @@ function get_trip_path_line_width() {
 // kmph_ == null ==> no data available. 
 // return: Either one or two two-point Polylines.  second one, if present, will be a background line, for the purpose of outlining.
 // 		both lines will have the same start- and end-position. 
-function make_traffic_line(start_latlon_, end_latlon_, kmph_, mofr_, visible_) {
+function make_traffic_line(froute_, start_latlon_, end_latlon_, kmph_, mofr_, visible_) {
 	var r = new buckets.LinkedList();
+	var draw_outline = traffic_line_warrants_outline(kmph_);
 	var line = new google.maps.Polyline({
 		path: [google_LatLng(start_latlon_), google_LatLng(end_latlon_)], 
 		map: g_map, 
 		strokeColor: kmph_to_color(kmph_), 
-		strokeWeight: get_traffic_line_width(),  
-		zIndex: -5,
+		strokeWeight: (draw_outline ? get_traffic_line_width()-1 : get_traffic_line_width()),  
+		zIndex: get_traffic_line_zindex(froute_, false), 
 		visible: visible_
 	});
 	r.add(line);
-	if(kmph_==null) {  // draw additional grey line behind, to make the white stand out. 
+	if(draw_outline) {
 		var line_behind = new google.maps.Polyline({
 			path: [google_LatLng(start_latlon_), google_LatLng(end_latlon_)], 
 			map: g_map, 
-			strokeColor: 'rgb(150,150,150)', 
-			strokeWeight: get_traffic_line_width()+1, 
-			zIndex: -6, 
+			strokeColor: get_outline_color(kmph_), 
+			strokeWeight: get_traffic_line_width(), 
+			zIndex: get_traffic_line_zindex(froute_, true),
 			visible: visible_
 		});
 		r.add(line_behind);
@@ -1550,6 +1530,37 @@ function make_traffic_line(start_latlon_, end_latlon_, kmph_, mofr_, visible_) {
 	add_mouseover_infowin(line, 0, infowin_text);
 
 	return r;
+}
+
+function get_outline_color(kmph_) {
+	if(kmph_==null) {
+		return 'rgb(150,150,150)';
+	} else {
+		var main_line_color = kmph_to_color_ints(kmph_);
+		var ratio = 0.75;
+		var r = [0, 0, 0];
+		r[0] = avg(0, main_line_color[0], ratio);
+		r[1] = avg(0, main_line_color[1], ratio);
+		r[2] = avg(0, main_line_color[2], ratio);
+		return sprintf('rgb(%d,%d,%d)', r[0], r[1], r[2]);
+	}
+}
+
+function traffic_line_warrants_outline(kmph_) {
+	return (kmph_==null) || (13 <= kmph_ && kmph_ <= 17);
+}
+
+function get_traffic_line_zindex(froute_, outline_) {
+	// Here we give foreground outlines (i.e. coloured lines) even zindexes eg. 
+	// queen = -2, lansdowne = -4, or something like that, and 
+	// outlines odd zindexes one less eg. queen = -3, lansdowne = -4.  
+	var idx = g_froute_zindexes.indexOf(froute_);
+	idx -= g_froute_zindexes.length;
+	idx *= 2;
+	if(outline_) {
+		idx -= 1;
+	}
+	return idx;
 }
 
 $(document).ready(initialize);
