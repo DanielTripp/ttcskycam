@@ -3,7 +3,7 @@
 import memcache
 import c
 
-g_memcache_client = memcache.Client(['127.0.0.1:%d' % (2029 if c.IS_DEV else 2030)], debug=0)
+g_memcache_client = memcache.Client(['127.0.0.1:2029'], debug=0)
 
 g_in_process_cache_key_to_value = {}
 
@@ -11,7 +11,7 @@ g_in_process_cache_key_to_value = {}
 # Unicode will cause an error right away. 
 def _make_key(func_, args_):
 	name = '%s.%s' % (func_.__module__, func_.__name__)
-	return '%s-%s(%s)' % (c.SITE_VERSION, name, ','.join([str(arg) for arg in args_]))
+	return '%s-%s(%s)' % (c.VERSION, name, ','.join([str(arg) for arg in args_]))
 
 def get(func_, args_=[]):
 	args_ = args_[:]
