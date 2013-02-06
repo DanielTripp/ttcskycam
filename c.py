@@ -1,5 +1,12 @@
+#!/usr/bin/python2.6
 
-SITE_VERSION = 'dev'
+with open('VERSION') as fin:
+	VERSION = fin.read().strip()
 
-IS_DEV = True
+if __name__ == '__main__':
+
+	pass
+
+
+
 

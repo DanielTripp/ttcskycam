@@ -1,5 +1,0 @@
-#!/usr/bin/env bash
-
-./mc-stop-dev
-./mc-start-dev
-
