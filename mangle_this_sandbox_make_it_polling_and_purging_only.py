@@ -41,7 +41,7 @@ if __name__ == '__main__':
 		
 		# The big part - deleting most of the sandbox: 
 		for dirpath, dirnames, filenames in os.walk('.'):
-			for dirname in [x for x in dirnames if x != '.psycopg2']:
+			for dirname in [x for x in dirnames if x != 'psycopg2']:
 				shutil.rmtree(os.path.join(dirpath, dirname))
 			break
 
