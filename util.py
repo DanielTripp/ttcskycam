@@ -104,10 +104,12 @@ class OurJSONEncoder(json.JSONEncoder):
 			return json.JSONEncoder.default(self, o)
 
 
+# Find the mid-point of a loop.  
+# Pass in a completed loop i.e. last point is equal to first point. 
 def split_route_loop(filename_):
 	latlngs = file_to_latlngs(filename_)
+	assert latlngs[0].dist_m(latlngs[-1]) < 0.01
 	total_metres = sum(p1.dist_m(p2) for p1, p2 in hopscotch(latlngs))
-
 	cur_metres = 0.0
 	for i in range(1, len(latlngs)):
 		cur_leg_metres = latlngs[i-1].dist_m(latlngs[i])
@@ -117,10 +119,19 @@ def split_route_loop(filename_):
 			prev_metres = cur_metres - cur_leg_metres
 			midpt = curpt.subtract(prevpt).scale((total_metres/2.0 - prev_metres)/float(cur_metres - prev_metres)).add(prevpt)
 			def p(latlngs__):
-				print json.dumps(latlngs__, indent=0, cls=OurJSONEncoder)
-			p(latlngs[0:i] + [midpt])
+				#print json.dumps(latlngs__, indent=0, cls=OurJSONEncoder)
+				print '['
+				for i, latlng in enumerate(latlngs__):
+					print '[%.6f, %.6f]%s' % (latlng.lat, latlng.lng, (',' if i < len(latlngs__)-1 else ''))
+				print ']'
+			def dist(pts_):
+				return sum(pt1.dist_m(pt2) for pt1, pt2 in hopscotch(pts_))
+			path1 = latlngs[0:i] + [midpt]
+			path2 = ([midpt] + latlngs[i:])[::-1]
+			assert abs(dist(path1) - dist(path2)) < 0.001
+			p(path1)
 			print
-			p(([midpt] + latlngs[i:] + [latlngs[0]])[::-1])
+			p(path2)
 			break
 
 if __name__ == '__main__':
