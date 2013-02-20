@@ -123,7 +123,7 @@ function init_snaptest_marker() {
 	google.maps.event.addListener(marker, 'dragend', function() {
 		var pos = marker.getPosition();
 		var route = radio_val('fudgeroute');
-		var snaptest_result = snaptest(pos, (route.substr(0,7) == 'spadina' ? 'spadina' : route));
+		var snaptest_result = snaptest(pos, route);
 		set_contents('snaptest_arg_pt', sprintf("Arg pt: ( %.6f, %.6f )", pos.lat(), pos.lng()));
 
 		if(snaptest_result[0] != null) {
@@ -232,14 +232,13 @@ function refresh_config_route() {
 function refresh_fudge_route() {
 	remove_existing_objects();
 	forget_built_fudgeroute();
-	set_fudge_route_routepts(radio_val('fudgeroute'));
+	set_fudge_route_routepts(radio_val('fudgeroute'), (is_selected('dir0button') ? 0 : 1));
 	set_fudge_route_stops_bothdirs(radio_val('fudgeroute'));
 }
 
 function set_fudge_route_stops_bothdirs(route_) {
-	var froute = (route_.substr(0, 7) == 'spadina' ? 'spadina' : route_);
 	g_stops_dir_to_stoptag_to_latlng = null;
-	g_stops_dir_to_stoptag_to_latlng = callpy_sync('routes.get_stops_dir_to_stoptag_to_latlng', froute);
+	g_stops_dir_to_stoptag_to_latlng = callpy_sync('routes.get_stops_dir_to_stoptag_to_latlng', route_);
 	for(var dir=0; dir<=1; dir++) {
 		var stoptag_to_latlng = g_stops_dir_to_stoptag_to_latlng[dir];
 		for(var stoptag in stoptag_to_latlng) {
@@ -285,22 +284,11 @@ function draw_stop(latlng_, dir_, stoptag_) {
 	});
 }
 
-function set_fudge_route_routepts(route_) {
-	if(route_ == 'spadinadir0' || route_ == 'spadinadir1') {
-		var filename = (route_ == 'spadinadir0' ? 'fudge_route_spadina_dir0.json' : 'fudge_route_spadina_dir1.json');
-		var route_points = $.parseJSON(get_sync(filename));
-		//draw_path_polyline(latlonfloatarrays_to_googlemaps(route_points), 'rgb(255,0,0)');
-		var glatlons = latlonfloatarrays_to_googlemaps(route_points);
-		for(var i=0; i<glatlons.length; i++) {
-			add_buildfudgeroute_marker(glatlons[i]);
-		}
-	} else {
-		var route_points = $.parseJSON(get_sync(sprintf('fudge_route_%s.json', route_), {cache: false}));
-		//draw_path_polyline(latlonfloatarrays_to_googlemaps(route_points), 'rgb(255,0,0)');
-		var glatlons = latlonfloatarrays_to_googlemaps(route_points);
-		for(var i=0; i<glatlons.length; i++) {
-			add_buildfudgeroute_marker(glatlons[i]);
-		}
+function set_fudge_route_routepts(route_, dir_) {
+	var route_points = callpy_sync('routes.routepts', route_, dir_);
+	var glatlons = latlonfloatarrays_to_googlemaps(route_points);
+	for(var i=0; i<glatlons.length; i++) {
+		add_buildfudgeroute_marker(glatlons[i]);
 	}
 }
 
@@ -503,6 +491,7 @@ function redraw_buildfudgeroute_path() {
 				</tr>
 				<tr>
 					<td>
+						<input id="bathurstradiobutton" type="radio" name="fudgeroute" value="bathurst" /><label for="bathurstradiobutton">Bathurst</label><br/>
 						<input id="carltonradiobutton" type="radio" name="fudgeroute" value="carlton" /><label for="carltonradiobutton">Carlton</label><br/>
 						<input id="dufferinradiobutton" type="radio" name="fudgeroute" value="dufferin" /><label for="dufferinradiobutton">Dufferin</label><br/>
 						<input id="dundasradiobutton" type="radio" name="fudgeroute" value="dundas" checked="checked" /><label for="dundasradiobutton">Dundas</label><br/>
@@ -511,10 +500,13 @@ function redraw_buildfudgeroute_path() {
 						<input id="lansdowneradiobutton" type="radio" name="fudgeroute" value="lansdowne" /><label for="lansdowneradiobutton">Lansdowne</label><br/>
 						<input id="ossingtonradiobutton" type="radio" name="fudgeroute" value="ossington" /><label for="ossingtonradiobutton">Ossington</label><br/>
 						<input id="queenradiobutton" type="radio" name="fudgeroute" value="queen" /><label for="queenradiobutton">Queen</label><br/>
-						<input id="spadinadir0radiobutton" type="radio" name="fudgeroute" value="spadinadir0" /><label for="spadinadir0radiobutton">Spadina dir 0</label><br/>
-						<input id="spadinadir1radiobutton" type="radio" name="fudgeroute" value="spadinadir1" /><label for="spadinadir1radiobutton">Spadina dir 1</label><br/>
+						<input id="spadinaradiobutton" type="radio" name="fudgeroute" value="spadina" /><label for="spadinaradiobutton">Spadina</label><br/>
 					</td>
 				</tr>
+					<td>
+						<input id="dir0button" type="radio" name="dir" value="dir0button" checked="checked" /><label for="dir0button">dir 0</label><br/>
+						<input id="dir1button" type="radio" name="dir" value="dir1button" /><label for="dir1button">dir 1</label><br/>
+					</td>
 				<tr>
 					<td>
 						<input type="button" onclick="refresh_fudge_route()" value="Submit" />

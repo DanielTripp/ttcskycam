@@ -116,7 +116,7 @@ def implies(a_, b_):
 	return not (a_ and not b_)
 
 def fdiv(x_, y_):
-	return int((x_ - math.fmod(x_, y_))/y_)
+	return int((x_ - (x_ % y_))/y_)
 
 # 'i' is for 'inclusive'
 def intervalii(a_, b_):
@@ -256,11 +256,17 @@ def round_down_off_step(x_, step_):
 
 def round_up(x_, step_):
 	r = round_down(x_, step_)
-	return r if r == x_ else r+step_
+	if isinstance(x_, float):
+		return r if abs(r - x_) < 0.00001 else r+step_
+	else:
+		return r if r == x_ else r+step_
 
 def round_down(x_, step_):
-	assert type(x_) in (int, long, float) and type(step_) in (int, long)
-	return (long(x_)/step_)*step_
+	assert type(x_) in (int, long, float) and (type(x_) is type(step_))
+	if type(step_) in (int, long):
+		return (long(x_)/step_)*step_
+	else:
+		return fdiv(x_, step_)*step_
 
 def round(x_, step_):
 	rd = round_down(x_, step_)
@@ -494,6 +500,21 @@ def redirect_stdstreams_to_file(filename_prefix_):
 	sys.stdout = fout
 	sys.stderr = fout
 
+def remove_consecutive_duplicates(list_, key=None):
+	if len(list_) < 2:
+		return
+	def get_key(val_):
+		return (val_ if key==None else key(val_))
+	curkey = get_key(list_[0]); prevkey = None
+	i = 1
+	while i < len(list_):
+		prevkey = curkey
+		curkey = get_key(list_[i])
+		if prevkey == curkey:
+			del list_[i]
+			i -= 1
+			curkey = prevkey
+		i += 1
 
 if __name__ == '__main__':
 

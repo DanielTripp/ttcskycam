@@ -39,6 +39,8 @@ function new_fudgeroute_data() {
 	};
 }
 
+var g_show_static_vehicles = true, g_show_moving_vehicles = true, g_show_traffic_lines = true;
+
 // End of this list = highest zindex i.e. most visible.  
 var g_froute_zindexes = ['ossington', 'lansdowne', 'spadina', 'bathurst', 'dufferin', 'dupont', 'carlton', 'dundas', 'king', 'queen'];
 
@@ -49,10 +51,6 @@ for(var i=0; i<15; i++) {
 var g_framerate_last_epochtime = (new Date()).getTime();
 
 var g_fudgeroute_data = new buckets.Dictionary();
-var g_routeselect_auto_aot_manual = true;
-var g_routeselectauto_compassdir = 'e', g_routeselectauto_maxroutes = 2;
-var g_fudgeroute_to_compassdir_to_intdir = null;
-var g_bounds_changed_listener_timer = null;
 var g_play_timer = null;
 /* current time location (index into g_times) of the animation. */
 var g_cur_minute_idx = 0;
@@ -65,14 +63,12 @@ var g_playing = true;
 var g_mouseover_infowin = null;
 var g_mouseover_infowin_timer = null;
 
+var g_max_routes = 5;
 var g_trip_orig_marker = null, g_trip_dest_marker = null;
-var g_trip_fudgeroute = null, g_trip_dir = 0;
-var g_trip_origmofr = 0, g_trip_destmofr = 0;
-var g_trip_polyline = null;
-var g_trip_infobox = null;
 
 var HEADING_ROUNDING_DEGREES = 5;
 var REFRESH_INTERVAL_MS = 15*1000;
+var REFRESH_INTERVAL_MS = 5*1000; // TDR 
 var MOVING_VEHICLES_OVERTIME_FLASH_INTERVAL_MS = 500;
 var MOVING_VEHICLES_ANIM_INTERVAL_MS = 100;
 var MOFR_STEP = parseInt(get_sync('MOFR_STEP'), 10);
@@ -137,9 +133,6 @@ function refresh_traffic_from_server(fudgeroute_) {
 				data.traffic_mofr2speed = to_buckets_dict(r_[1]);
 				update_last_updated_time();
 				remake_traffic_lines_singleroute(fudgeroute_);
-				if(g_trip_fudgeroute == fudgeroute_) {
-					update_trip_display();
-				}
 			}, 
 			error: function() {
 				var data = g_fudgeroute_data.get(fudgeroute_);
@@ -176,7 +169,7 @@ function refresh_vehicles_from_server(fudgeroute_) {
 						// then here we handle that.  Not worth it to fuss about overtime here. 
 					g_cur_minute_idx = 0;
 				}
-				update_time_display();
+				update_clock_show_cur_minute();
 				show_cur_minute_vehicles_singleroute(fudgeroute_);
 			}, 
 			error: function() {
@@ -310,6 +303,8 @@ function update_g_times() {
 		new_times_set = new buckets.Set();
 	}
 
+	var cur_time = g_times.elementAtIndex(Math.min(g_cur_minute_idx, g_times.size()-1));
+
 	// Go through some contortions to turn new_times_set into a sorted list: 
 	var new_times_sortedtree = new buckets.BSTree();
 	new_times_set.forEach(function(e) {
@@ -320,10 +315,10 @@ function update_g_times() {
 		g_times.add(e);
 	});
 
-	var old_cur_time = g_times.elementAtIndex(Math.min(g_cur_minute_idx, g_times.size()-1));
-	g_cur_minute_idx = g_times.indexOf(old_cur_time);
-	if(g_cur_minute_idx == -1) {
-		g_cur_minute_idx = 0;
+	// This is to try to stay showing the same minute (moving vehicles) even if g_times changes due to an update from the server: 
+	g_cur_minute_idx = g_times.indexOf(cur_time);
+	if(g_cur_minute_idx == -1) { // ... but sometimes that doesn't work out (like if it's 1:31, and we were showing 1:00, 
+		g_cur_minute_idx = 0; // but now we don't have that 1:00 data any more (earliest being 1:01 now.) 
 	}
 }
 
@@ -371,9 +366,7 @@ function update_last_updated_time() {
 }
 
 function refresh_data_from_server_timer_func() {
-	if(g_playing) {
-		refresh_data_from_server_allroutes();
-	}
+	refresh_data_from_server_allroutes();
 	schedule_refresh_data_from_server();
 }
 
@@ -411,7 +404,7 @@ function remake_static_vehicles_singleroute(fudgeroute_) {
 function moving_vehicles_timer_func() {
 	var method_start_epochtime = (new Date()).getTime();
 
-	if(!g_playing) {
+	if(!g_playing || !g_show_moving_vehicles) {
 		g_play_timer = setTimeout('moving_vehicles_timer_func()', MOVING_VEHICLES_ANIM_INTERVAL_MS);
 		return;
 	} else {
@@ -428,7 +421,7 @@ function moving_vehicles_timer_func() {
 		g_play_timer = setTimeout('moving_vehicles_timer_func()', timeout);
 	}
 
-	update_time_display();
+	update_clock_show_cur_minute();
 	move_vehicles_forward_one_minute();
 
 	if(SHOW_FRAMERATE) {
@@ -487,7 +480,7 @@ function move_vehicles_forward_one_minute_overtime() {
 	if(g_times.size() == 0) {
 		return;
 	}
-	if(g_cur_minute_idx == g_times.size()-1) {
+	if(g_cur_minute_idx == g_times.size()-1) { // special case, going into overtime: 
 		g_fudgeroute_data.forEach(function(fudgeroute, data) {
 			if(data.time_to_vid_to_vi.size() > 0) {
 				var prev_minute_vid_to_vi = data.time_to_vid_to_vi.get(g_times.elementAtIndex(g_times.size()-2));
@@ -497,7 +490,7 @@ function move_vehicles_forward_one_minute_overtime() {
 				});
 			}
 		});
-	} else {
+	} else { // somewhere in overtime, either flash on or flash off: 
 		g_fudgeroute_data.forEach(function(fudgeroute, data) {
 			if(data.time_to_vid_to_vi.size() > 0) {
 				var last_time = g_times.elementAtIndex(g_times.size()-1);
@@ -507,11 +500,13 @@ function move_vehicles_forward_one_minute_overtime() {
 					if(g_cur_minute_idx == g_times.size()) {
 						marker.setPosition(new google.maps.LatLng(vi.lat, vi.lon));
 					}
-					if(!TEST_INVISIBLE) marker.setVisible(!in_overtime_flash_on() && !g_hidden_vids.contains(vid));
+					if(!TEST_INVISIBLE) {
+						marker.setVisible(g_show_moving_vehicles && !in_overtime_flash_on() && !g_hidden_vids.contains(vid));
+					}
 				});
 			}
 		});
-		set_all_static_vehicle_markers_visible_allroutes(in_overtime_flash_on());
+		set_all_static_vehicle_markers_visible_allroutes(in_overtime_flash_on() && g_show_static_vehicles);
 	} 
 }
 
@@ -538,7 +533,9 @@ function move_vehicles_forward_one_minute_normal() {
 					if(cur_within_bounds) {
 						var marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(cur_heading);
 						marker.setPosition(new google.maps.LatLng(cur_minute_vi.lat, cur_minute_vi.lon));
-						if(!TEST_INVISIBLE)  marker.setVisible(true);
+						if(!TEST_INVISIBLE) {
+							marker.setVisible(g_show_moving_vehicles);
+						}
 					}
 				} else {
 					var prev_within_bounds = within_map_bounds(prev_minute_vi);
@@ -547,7 +544,7 @@ function move_vehicles_forward_one_minute_normal() {
 						if((prev_within_bounds && cur_within_bounds) || (!prev_within_bounds && cur_within_bounds)) {
 							var marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(cur_heading);
 							marker.setPosition(new google.maps.LatLng(cur_minute_vi.lat, cur_minute_vi.lon));
-							marker.setVisible(true);
+							marker.setVisible(g_show_moving_vehicles);
 						} else if(prev_within_bounds && !cur_within_bounds) {
 							var marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(cur_heading);
 							marker.setVisible(false);
@@ -558,20 +555,15 @@ function move_vehicles_forward_one_minute_normal() {
 							var cur_marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(cur_heading);
 							prev_marker.setVisible(false);
 							cur_marker.setPosition(new google.maps.LatLng(cur_minute_vi.lat, cur_minute_vi.lon));
-							cur_marker.setVisible(true);
+							cur_marker.setVisible(g_show_moving_vehicles);
 						} else if(prev_within_bounds && !cur_within_bounds) {
 							var prev_marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(prev_heading);
 							prev_marker.setVisible(false);
 						} else if(!prev_within_bounds && cur_within_bounds) {
 							var cur_marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(cur_heading);
 							cur_marker.setPosition(new google.maps.LatLng(cur_minute_vi.lat, cur_minute_vi.lon));
-							cur_marker.setVisible(true);
+							cur_marker.setVisible(g_show_moving_vehicles);
 						}
-						//var cur_marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(cur_heading);
-						//cur_marker.setPosition(new google.maps.LatLng(cur_minute_vi.lat, cur_minute_vi.lon));
-						//if(!TEST_INVISIBLE) cur_marker.setVisible(true);
-						//var prev_marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(prev_heading);
-						//if(!TEST_INVISIBLE) prev_marker.setVisible(false);
 					}
 				}
 			});
@@ -594,20 +586,29 @@ function within_map_bounds(vi_) {
 	return (sw.lat() <= vi_.lat && vi_.lat <= ne.lat()) && (sw.lng() <= vi_.lon && vi_.lon <= ne.lng());
 }
 
-function update_time_display() {
+// show cur minute unless we are not showing moving vehicles, in which case show the last time in g_times. 
+function update_clock_show_cur_minute() {
 	if(g_times.size() > 0) {
-		var timestr = g_times.elementAtIndex(Math.min(g_cur_minute_idx, g_times.size()-1));
-		set_analog_clock_timestr(timestr);
-		var cur_time_html = timestr.substr(0, 16);
+		var time_idx = (g_show_moving_vehicles ? Math.min(g_cur_minute_idx, g_times.size()-1) : g_times.size()-1);
+		var timestr = g_times.elementAtIndex(time_idx);
+		update_clock(timestr);
+	} else {
+		update_clock(null);
+	}
+}
+
+function update_clock(timestr_) {
+	if(timestr_ == null) {
+		set_analog_clock_hour_minute(0, 0);
+		set_contents('p_cur_time', ' ');
+	} else {
+		set_analog_clock_timestr(timestr_);
+		var cur_time_html = timestr_.substr(0, 16);
 		if((g_cur_minute_idx == g_times.size()-1) || (in_overtime() && in_overtime_flash_on())) {
 			cur_time_html = '<b>'+cur_time_html+'</b>';
 		}
 		set_contents('p_cur_time', cur_time_html);
-	} else {
-		set_analog_clock_hour_minute(0, 0);
-		set_contents('p_cur_time', ' ');
 	}
-
 }
 
 function set_analog_clock_timestr(timestr_) {
@@ -645,7 +646,11 @@ function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
 			visible: false, 
 			zIndex: 1
 		});
-	if(!TEST_INVISIBLE) marker.setVisible(true);
+	if(!TEST_INVISIBLE) {
+		if((static_aot_moving_ && g_show_static_vehicles) || (!static_aot_moving_ && g_show_moving_vehicles)) {
+			marker.setVisible(true);
+		}
+	}
 	add_vid_mouseover_infowin(marker, size, vid_);
 	add_solo_vid_click_listener(marker, vid_);
 	return marker;
@@ -790,9 +795,11 @@ function remake_traffic_lines_singleroute(fudgeroute_) {
 
 	var data = g_fudgeroute_data.get(fudgeroute_);
 	if(data != undefined) {
+		var visible = is_selected('show_traffic_lines_checkbox');
 		data.traffic_linedefs.forEach(function(linedef) {
 			var traf = data.traffic_mofr2speed.get(linedef.mofr);
-			var new_lines = make_traffic_line(fudgeroute_, linedef.start_latlon, linedef.end_latlon, (traf!=null ? traf.kmph : null), linedef.mofr, true);
+			var new_lines = make_traffic_line(fudgeroute_, linedef.start_latlon, linedef.end_latlon, (traf!=null ? traf.kmph : null), 
+					linedef.mofr);
 			add_all(data.traffic_lines, new_lines);
 		});
 	}
@@ -805,15 +812,6 @@ function forget_traffic_lines(fudgeroute_) {
 			e.setMap(null);
 		});
 		data.traffic_lines.clear();
-	}
-}
-
-function traffic_lines_set_visible(fudgeroute_, visible_) {
-	var data = g_fudgeroute_data.get(fudgeroute_);
-	if(data != undefined) {
-		data.traffic_lines.forEach(function(e) {
-			e.setVisible(visible_);
-		});
 	}
 }
 
@@ -844,9 +842,7 @@ function initialize() {
 	google.maps.event.addListener(g_map, 'zoom_changed', function() {
 		remake_traffic_lines_allroutes();
 		redraw_vehicle_markers();
-		redraw_trip_polyline();
 	});
-	google.maps.event.addListener(g_map, 'bounds_changed', schedule_bounds_changed_listener);
 	var origlat, origlon, destlat, destlon;
 	if(false) { // true for dundas 
 		var westlat = 43.65078;
@@ -876,26 +872,49 @@ function initialize() {
 		$('#div_framerate').remove();
 	}
 
-	set_selected((g_routeselect_auto_aot_manual ? 'routeselect_auto_radiobutton' : 'routeselect_manual_radiobutton'), true);
-	init_routeselect_controls();
+	init_max_routes_controls();
+	init_trip_markers();
 
-	//init_trip_markers();
-
+	// TODO: update this comment. 
 	// The first 'get' of data from the server will happen due to a bounds_changed event on the map that happens to it on 
 	// initialization.  That will cause a 'get_fudgeroutes_for_map_bounds' which will cause a 'get' of traffic and vehicle 
 	// data for each route individually, right away.
 	schedule_refresh_data_from_server(); // This will cause a periodic refresh of all routes.  The first refresh 
 			// caused by this will happen not right away, but in a few seconds. 
 
+	draw_pathgridsquares();
 }
 
-function redraw_trip_polyline() {
-	if(g_trip_polyline!=null) {
-		var path = g_trip_polyline.getPath();
-		g_trip_polyline.setMap(null);
-		g_trip_polyline = null;
-		make_trip_polyline(path);
+function draw_pathgridsquares() {
+	// these constants copied from paths.py: 
+	var LATSTEP = 0.00899830010516, LNGSTEP = 0.0124379992616;
+	var LATREF = 43.62696696859263, LNGREF = -79.4579391022553;
+
+	var minlat = LATREF-30*LATSTEP, maxlat = LATREF+60*LATSTEP;
+	var minlng = LNGREF-40*LNGSTEP, maxlng = LNGREF+60*LNGSTEP;
+
+	for(var lat=minlat; lat<=maxlat; lat+=LATSTEP) {
+		new google.maps.Polyline({map: g_map, path: [google_LatLng([lat, minlng]), google_LatLng([lat, maxlng])], 
+				strokeColor: 'rgb(0,0,0)', strokeWeight: 0.6});
+		new google.maps.Polyline({map: g_map, path: [google_LatLng([lat+LATSTEP/2, minlng]), google_LatLng([lat+LATSTEP/2, maxlng])], 
+				strokeColor: 'rgb(0,0,0)', strokeWeight: 0.2});
 	}
+	for(var lat=LATREF; lat<=LATREF+100*LATSTEP; lat+=10*LATSTEP) {
+		new google.maps.Polyline({map: g_map, path: [google_LatLng([lat, minlng]), google_LatLng([lat, maxlng])], 
+				strokeColor: 'rgb(0,255,0)', strokeWeight: 3, zIndex: -1});
+	}
+	for(var lng=minlng; lng<=maxlng; lng+=LNGSTEP) {
+		new google.maps.Polyline({map: g_map, path: [google_LatLng([minlat, lng]), google_LatLng([maxlat, lng])], 
+				strokeColor: 'rgb(0,0,0)', strokeWeight: 0.6});
+		new google.maps.Polyline({map: g_map, path: [google_LatLng([minlat, lng+LNGSTEP/2]), google_LatLng([maxlat, lng+LNGSTEP/2])], 
+				strokeColor: 'rgb(0,0,0)', strokeWeight: 0.2});
+	}
+	for(var lng=LNGREF; lng<=LNGREF+100*LNGSTEP; lng+=10*LNGSTEP) {
+		new google.maps.Polyline({map: g_map, path: [google_LatLng([minlat, lng]), google_LatLng([maxlat, lng])], 
+				strokeColor: 'rgb(0,255,0)', strokeWeight: 3, zIndex: -1});
+	}
+
+	draw_polygon('paths_db_hires_bounding_polygon.json');
 }
 
 function init_trip_markers() {
@@ -908,24 +927,20 @@ function init_trip_markers() {
 	google.maps.event.addListener(g_trip_dest_marker, 'dragend', on_trip_marker_moved);
 }
 
+var g_p = null; // TDR 
+
 function on_trip_marker_moved() {
-	callpy('routes.get_trip_endpoint_info', g_trip_orig_marker.getPosition(), g_trip_dest_marker.getPosition(), get_visible_fudgeroutendirs(), 
-		function(r_) {
-			if(r_!=null && g_fudgeroute_data.containsKey(r_.route)) {
-				// TODO: more checking here, that r_.route's dir in the get_visible_fudgeroutendirs() we passed to the server above 
-				// is still a dir that we have.  
-				g_trip_fudgeroute = r_.route;
-				g_trip_origmofr = r_.origmofr;
-				g_trip_destmofr = r_.destmofr;
-				g_trip_dir = g_fudgeroute_data.get(r_.route).dir;
-				g_trip_orig_marker.setPosition(google_LatLng(r_.origlatlng));
-				g_trip_dest_marker.setPosition(google_LatLng(r_.destlatlng));
-			} else {
-				g_trip_fudgeroute = null;
-			}
-			update_trip_display();
+	//console.log(callpy_sync('paths.get_pathgridsquare', g_trip_orig_marker.getPosition())); // TDR 
+	if(false) { // TDR 
+		var r = callpy_sync('t.t', g_trip_orig_marker.getPosition(), g_trip_dest_marker.getPosition()); // TDR 
+		console.log(r);
+		if(g_p == null) {
+			g_p = new google.maps.Polyline({map: g_map, strokeColor: 'rgb(0,0,255)'});
 		}
-	);
+		g_p.setPath([google_LatLng(r[0]), new google.maps.LatLng(r[1][0], r[0][1]), google_LatLng(r[1]), 
+				new google.maps.LatLng(r[0][0], r[1][1]), google_LatLng(r[0])]);
+	}
+	figure_out_which_froutendirs_are_selected_then_get_data_for_them();
 }
 
 function get_visible_fudgeroutendirs() {
@@ -934,132 +949,6 @@ function get_visible_fudgeroutendirs() {
 		r.add([fudgeroute, data.dir]);
 	});
 	return r;
-}
-
-function update_trip_display() {
-	forget_trip_display();
-
-	if(!g_fudgeroute_data.containsKey(g_trip_fudgeroute) || g_fudgeroute_data.get(g_trip_fudgeroute).dir != g_trip_dir) {
-		return;
-	}
-
-	var text = '';
-	if(g_trip_fudgeroute!=null) {
-		var trip_time_minutes = get_est_trip_time();
-		if(trip_time_minutes >= 0) {
-			var km_to_travel = Math.abs(g_trip_origmofr - g_trip_destmofr)/1000.0;
-			var avg_speed_kmph = km_to_travel/(trip_time_minutes/60.0);
-			text = sprintf('Estimated trip time: %d minutes.<br/>(%.1f kilometres,<br/>%.1f km/hour on average.)',
-					Math.round(trip_time_minutes), km_to_travel, avg_speed_kmph);
-
-			draw_trip_polyline();
-		} else {
-			text = 'Could not estimate trip time.<br/>No recent traffic for some parts of the trip.';
-		}
-	} else {
-		text = 'Could not estimate trip time.<br/>Both the start and end markers need to select a currently visible route and direction.';
-	}
-	if(g_trip_infobox!=null) {
-		g_trip_infobox.close();
-		g_trip_infobox = null;
-	}
-	var infobox_width_px = Math.floor($('#map_canvas').width()/2);
-	g_trip_infobox = new InfoBox({content: text, disableAutoPan: true, position: get_trip_infowin_desired_pos(), 
-			boxStyle: { border: "1px solid black" , textAlign: "center", fontSize: "14pt", width: ''+infobox_width_px+'px', 
-				background: 'rgb(255,255,255)' }, 
-			pixelOffset: new google.maps.Size(-infobox_width_px/2, 0)
-		});
-	g_trip_infobox.open(g_map);
-}
-
-function get_trip_infowin_desired_pos() {
-	var sw = g_map.getBounds().getSouthWest(), ne = g_map.getBounds().getNorthEast();
-	var lat = (ne.lat() - sw.lat())*0.70 + sw.lat();
-	var lng = (ne.lng() - sw.lng())*0.50 + sw.lng();
-	return new google.maps.LatLng(lat, lng);
-}
-
-function forget_trip_display() {
-	if(g_trip_polyline!=null) {
-		g_trip_polyline.setMap(null);
-		g_trip_polyline = null;
-	}
-	if(g_trip_infobox!=null) {
-		g_trip_infobox.close();
-		g_trip_infobox = null;
-	}
-}
-
-function draw_trip_polyline() {
-	var data = g_fudgeroute_data.get(g_trip_fudgeroute);
-	var lo_mofr = (data.dir == 0 ? g_trip_origmofr : g_trip_destmofr);
-	var hi_mofr = (data.dir == 0 ? g_trip_destmofr : g_trip_origmofr);
-	var path = [];
-	path.push(g_trip_orig_marker.getPosition());
-	var last_endlatlng = null;
-	for(var linedefi=0; linedefi<data.traffic_linedefs.size(); linedefi++) {
-		var linedef = data.traffic_linedefs.elementAtIndex(linedefi);
-		if(lo_mofr <= linedef.start_mofr && linedef.start_mofr <= hi_mofr && 
-				lo_mofr <= linedef.end_mofr && linedef.end_mofr <= hi_mofr) {
-			path.push(google_LatLng(linedef.start_latlon));
-			last_endlatlng = google_LatLng(linedef.end_latlon);
-		}
-	}
-	if(last_endlatlng!=null) {
-		path.push(last_endlatlng);
-		path.push(g_trip_dest_marker.getPosition());
-		make_trip_polyline(path);
-	}
-}
-
-function make_trip_polyline(path_) {
-	g_trip_polyline = new google.maps.Polyline({map: g_map, path: path_, strokeWeight: get_trip_path_line_width(), 
-		strokeColor: 'rgb(0,0,255)', strokeOpacity: 0.25, zIndex: -50});
-}
-
-function get_est_trip_time() {
-	var startmofr, endmofr;
-	if(g_fudgeroute_data.get(g_trip_fudgeroute).dir == 0) {
-		startmofr = g_trip_origmofr;
-		endmofr = g_trip_destmofr;
-	} else {
-		startmofr = g_trip_destmofr;
-		endmofr = g_trip_origmofr;
-	}
-	var r_secs = 0;
-	if(startmofr != round_up_off_step(startmofr, MOFR_STEP)) {
-		var dist_m = round_up_off_step(startmofr, MOFR_STEP) - startmofr;
-		var speed_kmph = get_traffic_kmph(g_trip_fudgeroute, round(startmofr, MOFR_STEP));
-		if(speed_kmph == -1) {
-			return -1;
-		}
-		var speed_mps = kmph_to_mps(speed_kmph);
-		//alert('adding distance '+dist_m+', speed '+speed_mps+', makes for '+(dist_m/speed_mps));
-		r_secs += dist_m/speed_mps;
-	}
-	var cur_offstep_mofr = round_up_off_step(startmofr, MOFR_STEP);
-	while(cur_offstep_mofr < round_down_off_step(endmofr, MOFR_STEP)) {
-		var mofr_with_ref_speed = round_up(cur_offstep_mofr, MOFR_STEP);
-		var speed_kmph = get_traffic_kmph(g_trip_fudgeroute, mofr_with_ref_speed);
-		if(speed_kmph == -1) {
-			return -1;
-		}
-		var speed_mps = kmph_to_mps(speed_kmph);
-		//alert('adding distance '+MOFR_STEP+', speed '+speed_mps+', makes for '+(MOFR_STEP/speed_mps));
-		r_secs += MOFR_STEP/speed_mps;
-		cur_offstep_mofr += MOFR_STEP;
-	}
-	if(endmofr != round_down_off_step(endmofr, MOFR_STEP)) {
-		dist_m = endmofr - round_down_off_step(endmofr, MOFR_STEP);
-		var speed_kmph = get_traffic_kmph(g_trip_fudgeroute, round(endmofr, MOFR_STEP));
-		if(speed_kmph == -1) {
-			return -1;
-		}
-		var speed_mps = kmph_to_mps(speed_kmph);
-		//alert('adding distance '+dist_m+', speed '+speed_mps+', makes for '+(dist_m/speed_mps));
-		r_secs += dist_m/speed_mps;
-	}
-	return r_secs/60;
 }
 
 // returns -1 if we have no traffic data for that mofr step. 
@@ -1106,168 +995,50 @@ function round(x_, step_) {
 	return (x_ - rd < ru - x_ ? rd : ru);
 }
 
-function init_routeselect_controls() {
-	init_routeselect_auto_controls();
-	init_routeselect_manual_controls();
-	show_appropriate_routeselect_controls();
+function get_data_for_selected_routes() {
+	get_fudgeroutes_for_map_bounds();
+	update_selected_fudgeroutendirs(new_fudgeroutendirs_);
 }
 
-function show_appropriate_routeselect_controls() {
-	if(g_routeselect_auto_aot_manual) {
-		$('#routeselectmanual_controls_div').hide();
-		$('#routeselectauto_controls_div').show();
-	} else {
-		$('#routeselectauto_controls_div').hide();
-		$('#routeselectmanual_controls_div').show();
+function figure_out_which_froutendirs_are_selected_then_get_data_for_them() {
+	callpy('paths.get_path_froutendirs_by_latlng', g_trip_orig_marker.getPosition(), g_trip_dest_marker.getPosition(), 
+			function(r_) {
+				console.error(r_);
+			});
+	//update_selected_fudgeroutendirs(new_fudgeroutendirs_);
+}
+
+function init_max_routes_controls() {
+	set_contents('span_max_routes', ''+g_max_routes);
+
+	$('#down_img').on({'click': on_max_routes_down_clicked});
+	$('#up_img').on({'click': on_max_routes_up_clicked});
+}
+
+function on_max_routes_down_clicked() {
+	if(g_max_routes > 1) {
+		g_max_routes -= 1;
+		set_contents('span_max_routes', ''+g_max_routes);
+		figure_out_which_froutendirs_are_selected_then_get_data_for_them();
 	}
 }
 
-function init_routeselect_auto_controls() {
-	init_routeselectauto_direction_buttons();
-	init_routeselectauto_max_routes_controls();
-}
-
-function on_routeselect_radiobutton_clicked() {
-	g_routeselect_auto_aot_manual = is_selected('routeselect_auto_radiobutton');
-	show_appropriate_routeselect_controls();
-	get_data_for_selected_routes_appropriate_for_routeselect_type();
-}
-
-function get_data_for_selected_routes_appropriate_for_routeselect_type() {
-	if(g_routeselect_auto_aot_manual) {
-		get_fudgeroutes_for_map_bounds();
-	} else {
-		routeselectmanual_on_gui_selections_changed();
+function on_max_routes_up_clicked() {
+	if(g_max_routes < 99) {
+		g_max_routes += 1;
+		set_contents('span_max_routes', ''+g_max_routes);
+		figure_out_which_froutendirs_are_selected_then_get_data_for_them();
 	}
-}
-
-function init_routeselect_manual_controls() {
-	get_fudgeroute_to_compassdir_to_intdir_from_server();
-
-	var html = '';
-	g_fudgeroute_to_compassdir_to_intdir.forEach(function(fudgeroute, compassdir_to_intdir) {
-		var capitalized_fudgeroute = fudgeroute.charAt(0).toUpperCase()+fudgeroute.substring(1, fudgeroute.length);
-		var checkbox_id = routeselectmanual_checkbox_id(fudgeroute);
-		html += sprintf('<input type="checkbox" id="%s" onclick="%s"/><label for="%s" onclick="">%s</label> ', 
-				checkbox_id, 'routeselectmanual_on_gui_selections_changed()', checkbox_id, capitalized_fudgeroute);
-			<!-- that onclick="" is a work-around for mobile Safari --> 
-		var radiogroup = sprintf('routeselectmanual_%s_dirs_radiogroup', fudgeroute);
-		var first_dir_found = true;
-		compassdir_to_intdir.forEach(function(compassdir, intdir) {
-			var radiobutton_id = routeselectmanual_direction_radiobutton_id(fudgeroute, intdir);
-			html += sprintf('<input type="radio" %s id="%s" name="%s" onclick="%s"/><label for="%s" onclick="">%s</label>', 
-				(first_dir_found ? 'checked="checked"' : ''), 
-				radiobutton_id, radiogroup, 'routeselectmanual_on_gui_selections_changed()', radiobutton_id, compassdir.toUpperCase());
-					<!-- that onclick="" is a work-around for mobile Safari --> 
-				first_dir_found = false;
-		});
-		html += '<br/>';
-	});
-	set_contents('routeselectmanual_controls_div', html);
-}
-
-function routeselectmanual_checkbox_id(fudgeroute_) {
-	return sprintf('routeselectmanual_checkbox_%s', fudgeroute_);
-}
-
-function routeselectmanual_direction_radiobutton_id(fudgeroute_, intdir_) {
-	return sprintf('routeselectmanual_%s_%s_radiobutton', fudgeroute_, intdir_);
-}
-
-function get_routeselectmanual_selected_fudgeroutendirs() {
-	var r = new Array();
-	g_fudgeroute_to_compassdir_to_intdir.forEach(function(fudgeroute, compassdir_to_intdir) {
-		if(is_selected(routeselectmanual_checkbox_id(fudgeroute))) {
-			if(is_selected(routeselectmanual_direction_radiobutton_id(fudgeroute, 0))) {
-				r.push([fudgeroute, 0]);
-			} else {
-				r.push([fudgeroute, 1]);
-			}
-		}
-	});
-	return r;
-}
-
-function routeselectmanual_on_gui_selections_changed() {
-	update_selected_fudgeroutendirs(get_routeselectmanual_selected_fudgeroutendirs());
-}
-
-// sets g_fudgeroute_to_compassdir_to_intdir.  will be a buckets.Dictionary of buckets.Dictionary. 
-function get_fudgeroute_to_compassdir_to_intdir_from_server() {
-	g_fudgeroute_to_compassdir_to_intdir = new buckets.Dictionary();
-	var fudgeroute_to_compassdir_to_intdir = callpy_sync('routes.get_fudgeroute_to_compassdir_to_intdir');
-	var froutes = sorted_keys(fudgeroute_to_compassdir_to_intdir);
-	for(var i in froutes) {
-		var froute = froutes[i];
-		var compassdir_to_intdir = fudgeroute_to_compassdir_to_intdir[froute];
-		g_fudgeroute_to_compassdir_to_intdir.set(froute, new buckets.Dictionary());
-		for(var compassdir in compassdir_to_intdir) {
-			var intdir = compassdir_to_intdir[compassdir];
-			g_fudgeroute_to_compassdir_to_intdir.get(froute).set(compassdir, intdir);
-		}
-	}
-}
-
-function schedule_bounds_changed_listener() {
-	if(g_bounds_changed_listener_timer!=null) {
-		clearTimeout(g_bounds_changed_listener_timer);
-		g_bounds_changed_listener_timer = null;
-	}
-	g_bounds_changed_listener_timer = setTimeout('bounds_changed_listener()', 1000);
-}
-
-function bounds_changed_listener() {
-	g_bounds_changed_listener_timer = null;
-	if(g_routeselect_auto_aot_manual) {
-		get_fudgeroutes_for_map_bounds();
-	}
-}
-
-function init_routeselectauto_max_routes_controls() {
-	set_contents('span_max_routes', ''+g_routeselectauto_maxroutes);
-
-	$('#down_img').on({'click': on_maxroutes_down_clicked});
-	$('#up_img').on({'click': on_maxroutes_up_clicked});
-}
-
-function on_maxroutes_down_clicked() {
-	if(g_routeselectauto_maxroutes > 1) {
-		g_routeselectauto_maxroutes -= 1;
-		set_contents('span_max_routes', ''+g_routeselectauto_maxroutes);
-		get_fudgeroutes_for_map_bounds();
-	}
-}
-
-function on_maxroutes_up_clicked() {
-	if(g_routeselectauto_maxroutes < 99) {
-		g_routeselectauto_maxroutes += 1;
-		set_contents('span_max_routes', ''+g_routeselectauto_maxroutes);
-		get_fudgeroutes_for_map_bounds();
-	}
-}
-
-function get_fudgeroutes_for_map_bounds() {
-	callpy('routes.get_fudgeroutes_for_map_bounds', g_map.getBounds().getSouthWest(), g_map.getBounds().getNorthEast(), 
-			g_routeselectauto_compassdir, g_routeselectauto_maxroutes, 
-			function(r_) { update_selected_fudgeroutendirs(r_); });
 }
 
 function update_selected_fudgeroutendirs(new_fudgeroutendirs_) {
-	var trip_fudgeroutendir_is_in_old_list = false, trip_fudgeroutendir_is_in_new_list = false;
-
 	var new_routes = new buckets.LinkedList();
 	for(var i in new_fudgeroutendirs_) {
 		var fudgeroutendir = new_fudgeroutendirs_[i];
 		new_routes.add(fudgeroutendir[0]);
-		if(fudgeroutendir[0] == g_trip_fudgeroute && fudgeroutendir[1] == g_trip_dir) {
-			trip_fudgeroutendir_is_in_new_list = true;
-		}
 	}
 
 	g_fudgeroute_data.forEach(function(fudgeroute, data) {
-		if(fudgeroute == g_trip_fudgeroute && data.dir == g_trip_dir) {
-			trip_fudgeroutendir_is_in_old_list = true;
-		}
 		if(!new_routes.contains(fudgeroute)) {
 			forget_data_singleroute(fudgeroute);
 		}
@@ -1285,46 +1056,7 @@ function update_selected_fudgeroutendirs(new_fudgeroutendirs_) {
 		}
 	}
 
-	if(trip_fudgeroutendir_is_in_old_list != trip_fudgeroutendir_is_in_new_list) {
-		update_trip_display();
-	}
-
 	refresh_vid_checkboxes_html();
-}
-
-function init_routeselectauto_direction_buttons() {
-	var dirs = ['n', 'e', 'w', 's', 'ne', 'se', 'sw', 'nw'];
-	for(var i in dirs) {
-		var dir = dirs[i];
-		var img_id = sprintf('%s_img', dir);
-		var func = function() {
-			on_dir_button_pressed(arguments.callee.dir); 
-		};
-		func.dir = dir;
-		$('#'+img_id).on({'click': func});
-	}
-	refresh_compassdir_buttons_imgs();
-}
-
-function on_dir_button_pressed(dir_) {
-	g_routeselectauto_compassdir = dir_;
-	refresh_compassdir_buttons_imgs();
-	get_fudgeroutes_for_map_bounds();
-}
-
-function refresh_compassdir_buttons_imgs() {
-	var pressed_img_id = sprintf('%s_img', g_routeselectauto_compassdir);
-	var pressed_img = sprintf('%s_pressed.png', g_routeselectauto_compassdir);
-	$('#'+pressed_img_id).attr('src', pressed_img);
-	var dirs = ['n', 'e', 'w', 's', 'ne', 'se', 'sw', 'nw'];
-	for(var i in dirs) {
-		var dir = dirs[i];
-		if(dir != g_routeselectauto_compassdir) {
-			var nonpressed_img_id = sprintf('%s_img', dir);
-			var nonpressed_img = sprintf('%s.png', dir);
-			$('#'+nonpressed_img_id).attr('src', nonpressed_img);
-		}
-	}
 }
 
 function set_play_buttons_appropriately() {
@@ -1339,13 +1071,12 @@ function on_playpause_clicked() {
 	if(g_playing) { // go from paused to playing: 
 		schedule_refresh_data_from_server();
 	} else { // go from playing to paused: 
-		stop_refresh_data_from_server_timer();
 		if(g_times.size() > 0) {
 			if(g_cur_minute_idx > g_times.size()-1) {
 				g_cur_minute_idx = g_times.size()-1;
 			}
 			show_cur_minute_vehicles_allroutes();
-			update_time_display();
+			update_clock_show_cur_minute();
 		}
 	}
 }
@@ -1357,12 +1088,15 @@ function show_cur_minute_vehicles_allroutes() {
 }
 
 function show_cur_minute_vehicles_singleroute(fudgeroute_) {
-	set_all_static_vehicle_markers_visible_singleroute(fudgeroute_, true);
+	set_all_static_vehicle_markers_visible_singleroute(fudgeroute_, g_show_static_vehicles);
 
 	var data = g_fudgeroute_data.get(fudgeroute_);
+	// TODO: could optimize this I think - hide only previous frame. 
 	data.vid_to_heading_to_moving_vehicle_marker.forEach(function(vid, heading_to_marker) {
 		heading_to_marker.forEach(function(heading, marker) {
-			if(!TEST_INVISIBLE) marker.setVisible(false);
+			if(!TEST_INVISIBLE) {
+				marker.setVisible(false);
+			}
 		});
 	});
 	var vid_to_vi = data.time_to_vid_to_vi.get(g_times.elementAtIndex(g_cur_minute_idx));
@@ -1371,7 +1105,11 @@ function show_cur_minute_vehicles_singleroute(fudgeroute_) {
 			if(!g_hidden_vids.contains(vid)) {
 				var marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(round_heading(vi.heading));
 				marker.setPosition(google_LatLng([vi.lat, vi.lon]));
-				if(!TEST_INVISIBLE) marker.setVisible(true);
+				if(!TEST_INVISIBLE) {
+					if(g_show_moving_vehicles) {
+						marker.setVisible(true);
+					}
+				}
 			}
 		});
 	}
@@ -1382,7 +1120,7 @@ function on_forward_clicked() {
 		return;
 	}
 	g_cur_minute_idx = Math.min(g_cur_minute_idx+1, g_times.size()-1);
-	update_time_display();
+	update_clock_show_cur_minute();
 	show_cur_minute_vehicles_allroutes();
 }
 
@@ -1391,7 +1129,7 @@ function on_back_clicked() {
 		return;
 	}
 	g_cur_minute_idx = Math.max(g_cur_minute_idx-1, 0);
-	update_time_display();
+	update_clock_show_cur_minute();
 	show_cur_minute_vehicles_allroutes();
 }
 
@@ -1419,7 +1157,7 @@ function on_traffictype_changed() {
 	stop_refresh_data_from_server_timer();
 	forget_data_allroutes();
 	update_g_times();
-	get_data_for_selected_routes_appropriate_for_routeselect_type();
+	get_data_for_selected_routes();
 	if(is_traffictype_current()) {
 		schedule_refresh_data_from_server();
 	}
@@ -1494,14 +1232,10 @@ function get_traffic_line_width() {
 	return get_vehicle_size()/9;
 }
 
-function get_trip_path_line_width() {
-	return get_traffic_line_width()*4;
-}
-
 // kmph_ == null ==> no data available. 
 // return: Either one or two two-point Polylines.  second one, if present, will be a background line, for the purpose of outlining.
 // 		both lines will have the same start- and end-position. 
-function make_traffic_line(froute_, start_latlon_, end_latlon_, kmph_, mofr_, visible_) {
+function make_traffic_line(froute_, start_latlon_, end_latlon_, kmph_, mofr_) {
 	var r = new buckets.LinkedList();
 	var draw_outline = traffic_line_warrants_outline(kmph_);
 	var line = new google.maps.Polyline({
@@ -1510,7 +1244,7 @@ function make_traffic_line(froute_, start_latlon_, end_latlon_, kmph_, mofr_, vi
 		strokeColor: kmph_to_color(kmph_), 
 		strokeWeight: (draw_outline ? get_traffic_line_width()-1 : get_traffic_line_width()),  
 		zIndex: get_traffic_line_zindex(froute_, false), 
-		visible: visible_
+		visible: g_show_traffic_lines 
 	});
 	r.add(line);
 	if(draw_outline) {
@@ -1520,7 +1254,7 @@ function make_traffic_line(froute_, start_latlon_, end_latlon_, kmph_, mofr_, vi
 			strokeColor: get_outline_color(kmph_), 
 			strokeWeight: get_traffic_line_width(), 
 			zIndex: get_traffic_line_zindex(froute_, true),
-			visible: visible_
+			visible: g_show_traffic_lines 
 		});
 		r.add(line_behind);
 	}
@@ -1563,6 +1297,31 @@ function get_traffic_line_zindex(froute_, outline_) {
 	return idx;
 }
 
+function on_show_static_vehicles_checkbox_clicked() {
+	g_show_static_vehicles = is_selected('show_static_vehicles_checkbox');
+	g_fudgeroute_data.forEach(function(froute, data) {
+		data.vid_to_static_vehicle_marker.forEach(function(vid, marker) {
+			marker.setVisible(g_show_static_vehicles);
+		});
+	});
+}
+
+function on_show_moving_vehicles_checkbox_clicked() {
+	g_show_moving_vehicles = is_selected('show_moving_vehicles_checkbox');
+	set_visible('animation_controls_div', g_show_moving_vehicles);
+	update_clock_show_cur_minute();
+	show_cur_minute_vehicles_allroutes();
+}
+
+function on_show_traffic_lines_checkbox_clicked() {
+	g_show_traffic_lines = is_selected('show_traffic_lines_checkbox');
+	g_fudgeroute_data.forEach(function(froute, data) {
+		data.traffic_lines.forEach(function(line) {
+			line.setVisible(g_show_traffic_lines);
+		});
+	});
+}
+
 $(document).ready(initialize);
 
     </script>
@@ -1602,9 +1361,28 @@ $(document).ready(initialize);
 				<br/><p id='p_worktime'/>
 			</div>
 			<br/>
-			<img src="traffic-color-legend.gif"/><br/>
-			<img id="legend_static_vehicle_img" src="static-vehicle-for-legend.png"/> indicates where a streetcar or bus is right now.&nbsp;&nbsp;
-			<img id="legend_moving_vehicle_img" src="moving-vehicle-for-legend.png"/> indicates where one has been at some point in the last 30 minutes.
+
+			<input type="checkbox" id="show_static_vehicles_checkbox" checked="checked" onclick="on_show_static_vehicles_checkbox_clicked()"/>
+			<label for="show_static_vehicles_checkbox" onclick=""> 
+			Show current vehicle locations (stationary markers) - 
+			<img src="static-vehicle-for-legend.png"/> 
+			</label> 
+			<br/>
+
+			<input type="checkbox" id="show_moving_vehicles_checkbox" checked="checked" onclick="on_show_moving_vehicles_checkbox_clicked()"/>
+			<label for="show_moving_vehicles_checkbox" onclick=""> 
+			Show past 30 minutes of vehicle locations (animated markers) - 
+			<img src="moving-vehicle-for-legend.png"/> 
+			</label> 
+			<br/>
+
+			<input type="checkbox" id="show_traffic_lines_checkbox" checked="checked" onclick="on_show_traffic_lines_checkbox_clicked()"/>
+			<label for="show_traffic_lines_checkbox" onclick=""> 
+			Show recent traffic speed (coloured lines) - 
+			<img src="traffic-color-legend.gif" style="float: bottom;"/><br/>
+			</label> 
+			<br/>
+
 			<hr>
 			<div style="float: left;  width: 45%;">
 				<svg id="clock" viewBox="0 0 100 100" width="100" height="100">
@@ -1628,49 +1406,34 @@ $(document).ready(initialize);
 				<span id="p_last_updated"></span>
 			</div>
 			<div style="float: right; width: 55%;">
-				<div style="clear: both; float: right;">Select routes:
-					<input type="radio" id="routeselect_manual_radiobutton" name="routeselect_type" onclick="on_routeselect_radiobutton_clicked()" >
-						<label for="routeselect_manual_radiobutton">manually</label></input>
-					<input type="radio" id="routeselect_auto_radiobutton" name="routeselect_type" onclick="on_routeselect_radiobutton_clicked()" >
-						<label for="routeselect_auto_radiobutton">automatically</label></input><br/>
-				</div>
-				<div id="routeselectauto_controls_div" style="clear: both; float: right; display: none;">
-					<div style="clear: both; float: right;">
-						<img id="nw_img" title="North West" src="nw_pressed.png"/> 
-						<img id="n_img" title="North" src="n_pressed.png"/> 
-						<img id="ne_img" title="North East" src="ne_pressed.png"/> <br/>
-
-						<img id="w_img" title="West" src="w_pressed.png"/> 
-						<img src="blank_32x32.png"/> 
-						<img id="e_img" title="East" src="e_pressed.png"/> <br/>
-
-						<img id="sw_img" title="South West" src="sw_pressed.png"/> 
-						<img id="s_img" title="South" src="s_pressed.png"/> 
-						<img id="se_img" title="South East" src="se_pressed.png"/> <br/>
-					</div>
+				<!--<div id="routeselectauto_controls_div" style="clear: both; float: right; display: none;"> -->
 					<div style="clear: both; float: right;">
 						<br/>
 						Max routes to show:<br/><font size="+2"><span id="span_max_routes"></span></font>  
 						<img id="down_img" src="down.png"/> <img id="up_img" src="up.png"/> <br/>
 					</div>
-				</div>
-				<div id="routeselectmanual_controls_div" style="clear: both; float: right; overflow:scroll; height:150px; display: none;">
-				</div>
+				<!-- </div> -->
 			</div>
-			<div style="clear: both;">
-				<hr>
+			<div>
+			</div>
+			<div id="animation_controls_div" style="clear: both;">
 				Animated vehicles: 
 				<input type="button" id="playpause_button" onclick="on_playpause_clicked()" value="" />
 				<input type="button" id="back_button" onclick="on_back_clicked()" value="<" />
 				<input type="button" id="forward_button" onclick="on_forward_clicked()" value=">" />
-				<br/>
+			</div>
+			<hr/>
+			<br/>
+			<div>
 				<font size="-1">
 				<p>Details:</p>
 				<p id="p_vid_checkboxes">&nbsp;</p>
 			</div>
 			<div id="div_time_selector">
-			<input id="current_button" type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"  checked="checked"  />Now
-			<input id="historical_button" type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()" />Past
+			<input id="current_button" type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"  checked="checked"  />
+			<label for="current_button">Now</label>
+			<input id="historical_button" type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()" />
+			<label for="historical_button">Past</label>
 			<input id="datetimepicker_textfield" type="text" name="datetimepicker_textfield" value="" />
 			</div>
 			</font>

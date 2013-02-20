@@ -7,13 +7,6 @@ from misc import *
 # Bounding boxes for each yard polygon are maintained as a performance optimization for the operation of determining
 # whether a point is within the yard polygon or not.
 
-class BoundingBox:
-	
-	def __init__(self, polygon_pts_):
-		assert isinstance(polygon_pts_[0], geom.LatLng)
-		self.southwest = geom.LatLng(min(pt.lat for pt in polygon_pts_), min(pt.lng for pt in polygon_pts_))
-		self.northeast = geom.LatLng(max(pt.lat for pt in polygon_pts_), max(pt.lng for pt in polygon_pts_))
-
 
 def get_polygon_n_boundingboxes():
 	return mc.get(get_polygon_n_boundingboxes_impl)
@@ -25,7 +18,7 @@ def get_polygon_n_boundingboxes_impl():
 			polypts = []
 			for raw_pt in raw_pts:
 				polypts.append(geom.LatLng(raw_pt[0], raw_pt[1]))
-			r.append((polypts, BoundingBox(polypts)))
+			r.append((polypts, geom.BoundingBox(polypts)))
 		return r
 
 def remove_vehicles_in_yards(vis_):

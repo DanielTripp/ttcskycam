@@ -181,6 +181,10 @@ function set_selected(checkboxname_, selected_) {
 	return $('#'+checkboxname_).prop('checked', selected_);
 }
 
+function set_visible(objectid_, visible_) {
+	document.getElementById(objectid_).style.visibility = (visible_ ? 'visible' : 'hidden');
+}
+
 function ord(char_) {
 	return char_.charCodeAt(0);
 }
@@ -393,6 +397,17 @@ function sorted_keys(dict_) {
         }
     }
     return keys.sort();
+}
+
+function draw_polygon(filename_) {
+	var glatlngs = [];
+	var raw_latlngs = $.parseJSON(get_sync(filename_));
+	for(var i in raw_latlngs) {
+		var raw_latlng = raw_latlngs[i];
+		glatlngs.push(google_LatLng(raw_latlng));
+	}
+	glatlngs.push(google_LatLng(raw_latlngs[0]));
+	new google.maps.Polyline({map: g_map, path: glatlngs, strokeColor: 'rgb(255,0,0)'});
 }
 
 

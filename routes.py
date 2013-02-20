@@ -15,9 +15,15 @@ for fudgeroute, configroutes in FUDGEROUTE_TO_CONFIGROUTES.items():
 	for configroute in configroutes:
 		CONFIGROUTE_TO_FUDGEROUTE[configroute] = fudgeroute
 
-FUDGEROUTES = FUDGEROUTE_TO_CONFIGROUTES.keys()
+SUBWAY_FUDGEROUTES = ['bloor_danforth']
+NON_SUBWAY_FUDGEROUTES = FUDGEROUTE_TO_CONFIGROUTES.keys()
+FUDGEROUTES = NON_SUBWAY_FUDGEROUTES + SUBWAY_FUDGEROUTES
 CONFIGROUTES = reduce(lambda x, y: x + y, FUDGEROUTE_TO_CONFIGROUTES.values(), [])
 
+
+def is_subway(froute_):
+	assert froute_ in FUDGEROUTES
+	return froute_ in SUBWAY_FUDGEROUTES
 
 class Schedule(object):
 
@@ -242,6 +248,8 @@ class Stop:
 
 	@property 
 	def is_sunday_only(self):
+		if len(self.dirtags_serviced) == 0: # route must be a subway 
+			return False
 		for dirtag in self.dirtags_serviced:
 			if not dirtag[-3:].lower() == 'sun':
 				return False
@@ -288,8 +296,8 @@ class RouteInfo:
 						self.routeptaddr_to_mofr[dir].append(self.routeptaddr_to_mofr[dir][i-1] + prevpt.dist_m(curpt))
 			assert len(self.routeptaddr_to_mofr[dir]) == len(self.routepts(dir))
 		if self.is_split_by_dir:
-			assert (sum(pt1.dist_m(pt2) for pt1, pt2 in hopscotch(self.routepts(0))) - \
-					sum(pt1.dist_m(pt2) for pt1, pt2 in hopscotch(self.routepts(1)))) < 0.01
+			assert abs(sum(pt1.dist_m(pt2) for pt1, pt2 in hopscotch(self.routepts(0))) - \
+					sum(pt1.dist_m(pt2) for pt1, pt2 in hopscotch(self.routepts(1)))) < 0.1
 
 	def init_stops(self):
 		self.init_stops_dir_to_stoptag_to_stop()
@@ -301,20 +309,36 @@ class RouteInfo:
 		self.dir_to_stoptag_to_stop = {}
 		with open('stops_%s.json' % self.name, 'r') as fin:
 			stops_file_content_json = json.load(fin)
-			assert sorted(int(x) for x in stops_file_content_json.keys()) == [0, 1] # The direction signifiers in the file, 0 and 1, 
-					# will be strings because JSON doesn't allow ints as keys. 
-			for direction_str in stops_file_content_json.keys():
-				direction_int = int(direction_str)
-				self.dir_to_stoptag_to_stop[direction_int] = {}
-				for stoptag, stopdetails in stops_file_content_json[direction_str].iteritems():
-					assert set(stopdetails.keys()) == set(['lat', 'lon', 'dirtags_serviced'])
-					stoptag = str(stoptag)
-					stopdetails['dirtags_serviced'] = [str(x) for x in stopdetails['dirtags_serviced']]
-					latlng = geom.LatLng(stopdetails['lat'], stopdetails['lon']); dirtags_serviced = stopdetails['dirtags_serviced']
-					new_stop = Stop(stoptag, latlng, direction_int, self.latlon_to_mofr(latlng), dirtags_serviced)
-					if new_stop.mofr != -1 and not new_stop.is_sunday_only:
-						self.dir_to_stoptag_to_stop[direction_int][stoptag] = new_stop
+		if self.is_subway():
+			self.init_stops_dir_to_stoptag_to_stop_subway(stops_file_content_json)
+		else:
+			self.init_stops_dir_to_stoptag_to_stop_surface_route(stops_file_content_json)
 		assert set(self.dir_to_stoptag_to_stop[0].keys()).isdisjoint(self.dir_to_stoptag_to_stop[1].keys())
+
+	def init_stops_dir_to_stoptag_to_stop_surface_route(self, stops_file_content_json_):
+		assert sorted(int(x) for x in stops_file_content_json_.keys()) == [0, 1] # The direction signifiers in the file, 0 and 1, 
+				# will be strings because JSON doesn't allow ints as keys. 
+		for direction_str in stops_file_content_json_.keys():
+			direction_int = int(direction_str)
+			self.dir_to_stoptag_to_stop[direction_int] = {}
+			for stoptag, stopdetails in stops_file_content_json_[direction_str].iteritems():
+				assert set(stopdetails.keys()) == set(['lat', 'lon', 'dirtags_serviced'])
+				stoptag = str(stoptag)
+				stopdetails['dirtags_serviced'] = [str(x) for x in stopdetails['dirtags_serviced']]
+				latlng = geom.LatLng(stopdetails['lat'], stopdetails['lon']); dirtags_serviced = stopdetails['dirtags_serviced']
+				new_stop = Stop(stoptag, latlng, direction_int, self.latlon_to_mofr(latlng), dirtags_serviced)
+				if new_stop.mofr != -1 and not new_stop.is_sunday_only:
+					self.dir_to_stoptag_to_stop[direction_int][stoptag] = new_stop
+
+	def init_stops_dir_to_stoptag_to_stop_subway(self, stops_file_content_json_):
+		for direction in (0, 1):
+			self.dir_to_stoptag_to_stop[direction] = {}
+			for stopname, raw_latlng in stops_file_content_json_.iteritems():
+				stoptag = '%s %d' % (str(stopname), direction)
+				latlng = geom.LatLng(raw_latlng[0], raw_latlng[1])
+				new_stop = Stop(stoptag, latlng, direction, self.latlon_to_mofr(latlng, tolerance_=1), [])
+				assert new_stop.mofr != -1
+				self.dir_to_stoptag_to_stop[direction][stoptag] = new_stop
 
 	def init_stops_dir_to_mofr_to_stop(self):
 		self.dir_to_mofr_to_stop = {} # This is a redundant data structure for fast lookups.
@@ -344,6 +368,9 @@ class RouteInfo:
 			if stoptag_ in self.dir_to_stoptag_to_stop[direction]:
 				return self.dir_to_stoptag_to_stop[direction][stoptag_]
 		return None
+
+	def is_subway(self):
+		return is_subway(self.name)
 
 	@lru_cache(5000)
 	def latlon_to_mofr(self, post_, tolerance_=0):
@@ -381,6 +408,7 @@ class RouteInfo:
 		r = self.mofr_to_latlonnheading(mofr_, dir_)
 		return (r[1] if r != None else None)
 
+	@lru_cache(5000)
 	def mofr_to_latlonnheading(self, mofr_, dir_):
 		assert dir_ in (0, 1)
 		if mofr_ < 0:
@@ -479,8 +507,8 @@ def latlon_to_mofr(route_, latlon_, tolerance_=0):
 	else:
 		return routeinfo(route_).latlon_to_mofr(latlon_, tolerance_)
 
-def mofr_to_latlon(route_, mofr_):
-	return routeinfo(route_).mofr_to_latlon(mofr_)
+def mofr_to_latlon(route_, mofr_, dir_):
+	return routeinfo(route_).mofr_to_latlon(mofr_, dir_)
 
 def mofr_to_latlonnheading(route_, mofr_, dir_):
 	return routeinfo(route_).mofr_to_latlonnheading(mofr_, dir_)
@@ -559,13 +587,14 @@ class FactoredSampleScorer(object):
 	def num_factors(self):
 		return len(self.min_max_inverse)
 
-def get_fudgeroutes_for_map_bounds(southwest_, northeast_, compassdir_, maxroutes_):
+def get_fudgeroutes_for_map_bounds(southwest_, northeast_, compassdir_or_heading_, maxroutes_):
 	assert isinstance(southwest_, geom.LatLng) and isinstance(northeast_, geom.LatLng) and isinstance(maxroutes_, int)
-	heading = get_heading_from_compassdir(compassdir_)
+	assert isinstance(compassdir_or_heading_, str) or isinstance(compassdir_or_heading_, int)
+	heading = (get_heading_from_compassdir(compassdir_or_heading_) if isinstance(compassdir_or_heading_, str) else compassdir_or_heading_)
 	bounds_midpt = southwest_.avg(northeast_)
 	scorer = FactoredSampleScorer([[0, southwest_.dist_m(northeast_), False], [0, 90, True], [0, bounds_midpt.dist_m(northeast_), True]])
 	fudgeroute_n_dir_to_score = {}
-	for fudgeroute in FUDGEROUTES:
+	for fudgeroute in NON_SUBWAY_FUDGEROUTES:
 		for dir in (0, 1):
 			fudgeroute_n_dir_to_score[(fudgeroute, dir)] = 0.0
 			for routelineseg_pt1, routelineseg_pt2 in hopscotch(routeinfo(fudgeroute).routepts(dir)):
@@ -593,7 +622,8 @@ def get_fudgeroutes_for_map_bounds(southwest_, northeast_, compassdir_, maxroute
 	# Because I don't know how to show both directions of a route on a map at the same time. 
 	if 0:
 		printerr([x for x in sorted(fudgeroute_n_dir_to_score.items(), key=lambda x: x[1], reverse=True)])
-	top_fudgeroute_n_dirs = [x[0] for x in sorted(fudgeroute_n_dir_to_score.items(), key=lambda x: x[1], reverse=True) if x[1] > 0.05]
+	printerr([x for x in sorted(fudgeroute_n_dir_to_score.items(), key=lambda x: x[1], reverse=True)]) # TDR 
+	top_fudgeroute_n_dirs = [x[0] for x in sorted(fudgeroute_n_dir_to_score.items(), key=lambda x: x[1], reverse=True) if x[1] > 0.15]
 	for i in range(len(top_fudgeroute_n_dirs)-1, -1, -1):
 		fudgeroute, dir = top_fudgeroute_n_dirs[i]
 		opposite_dir = int(not dir)
@@ -610,7 +640,7 @@ def get_fudgeroutes_for_map_bounds(southwest_, northeast_, compassdir_, maxroute
 # But I know of no guarantee for this.
 def get_fudgeroute_to_compassdir_to_intdir():
 	r = {}
-	for fudgeroute in FUDGEROUTES:
+	for fudgeroute in NON_SUBWAY_FUDGEROUTES:
 		r[fudgeroute] = {}
 		for intdir in (0, 1):
 			routepts = routeinfo(fudgeroute).routepts(intdir)
@@ -712,11 +742,13 @@ def get_recorded_froutenstoptags():
 def get_recorded_froutenstoptags_impl():
 	r = []
 	for i in get_intersections():
-		r.append((i.froute1, i.froute1_dir0_stoptag))
-		r.append((i.froute1, i.froute1_dir1_stoptag))
-		r.append((i.froute2, i.froute2_dir0_stoptag))
-		r.append((i.froute2, i.froute2_dir1_stoptag))
-	for ri in [routeinfo(froute) for froute in FUDGEROUTES]:
+		if not is_subway(i.froute1):
+			r.append((i.froute1, i.froute1_dir0_stoptag))
+			r.append((i.froute1, i.froute1_dir1_stoptag))
+		if not is_subway(i.froute2):
+			r.append((i.froute2, i.froute2_dir0_stoptag))
+			r.append((i.froute2, i.froute2_dir1_stoptag))
+	for ri in [routeinfo(froute) for froute in NON_SUBWAY_FUDGEROUTES]:
 		dir0_last_stop = ri.dir_to_mofr_to_stop[0][ri.dir_to_mofr_to_stop[0].sortedkeys()[-1]]
 		dir1_last_stop = ri.dir_to_mofr_to_stop[1][ri.dir_to_mofr_to_stop[1].sortedkeys()[0]]
 		r.append((ri.name, dir0_last_stop.stoptag))
@@ -763,10 +795,13 @@ def get_stops_dir_to_stoptag_to_latlng(froute_):
 			r[direction][stoptag] = (stop.latlng.lat, stop.latlng.lng)
 	return r
 
+def routepts(froute_, dir_):
+	return routeinfo(froute_).routepts(dir_)
+
 
 if __name__ == '__main__':
 
-	import pprint
+	import pprint 
 
-	pprint.pprint(get_stops_dir_to_stoptag_to_latlng('carlton'))
+	pprint.pprint(routeinfo('bloor_danforth').dir_to_stoptag_to_stop)
 
