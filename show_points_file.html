@@ -48,17 +48,49 @@ function get_latlngs_from_file() {
 		var contents_latlng_list = null;
 		try {
 			contents_latlng_list = $.parseJSON(contents_str);
-		} catch(e if e instanceof SyntaxError) {
+		} catch(e) {
 			// So it wasn't JSON.    Maybe it's XML: 
-			var dom = $.parseXML(contents_str);
-			contents_latlng_list = [];
+			try {
+				var dom = $.parseXML(contents_str);
+				contents_latlng_list = [];
 
-			$(dom).find('*').each(function() {
-				var lat = $(this).attr('lat'), lng = $(this).attr('lon');
-				if(lat != undefined && lng != undefined) {
-					contents_latlng_list.push([lat, lng]);
+				$(dom).find('*').each(function() {
+					var lat = $(this).attr('lat'), lng = $(this).attr('lon');
+					if(lat != undefined && lng != undefined) {
+						contents_latlng_list.push([lat, lng]);
+					}
+				});
+			} catch(err) {
+				var lines = contents_str.split('\n');
+				var latindex = -1; var lngindex = -1;
+				var first_line_fields = flatfile_get_fields_from_line(lines[0]);
+				for(var fieldidx in first_line_fields) {
+					var first_line_field = first_line_fields[fieldidx];
+					var floatval = parseFloat(first_line_field);
+					if(floatval == NaN) {
+						continue;
+					}
+					if(floatval > -80 && floatval < -78) {
+						lngindex = fieldidx;
+					} else if(floatval > 43 && floatval < 45) {
+						latindex = fieldidx;
+					}
+					if(latindex != -1 && lngindex != -1) {
+						break;
+					}
 				}
-			});
+
+				if(latindex != -1 && lngindex != -1) {
+					contents_latlng_list = [];
+					for(var i=1; i<lines.length; i++) {
+						var line = lines[i];
+						var fields = flatfile_get_fields_from_line(line);
+						if(fields.length >= Math.max(latindex, lngindex)+1) {
+							contents_latlng_list.push([fields[latindex], fields[lngindex]]);
+						}
+					}
+				}
+			}
 		}
 		if(contents_latlng_list != null) {
 			for(var i in contents_latlng_list) {
@@ -68,6 +100,27 @@ function get_latlngs_from_file() {
 			}
 		}
 	}
+}
+
+function flatfile_get_fields_from_line(line_) {
+	var line = line_;
+	while(true) {
+		var c = line.charAt(line.length-1);
+		if(c == '\n' || c == '\r' || c == ' ') {
+			line = line.substring(0, line.length-1);
+		} else {
+			break;
+		}
+	}
+	var r = line.split(',');
+	for(var i in r) {
+		r[i] = cleanup_field(r[i]);
+	}
+	return r;
+}
+
+function cleanup_field(val_) {
+  return val_.replace(/.*?([-]?\d+\.\d+).*/g, "$1");
 }
 
 function redraw_objects() {
@@ -91,21 +144,36 @@ function forget_drawn_objects() {
 function draw_all_points() {
 	var minlat=90, maxlat=0, minlng=0, maxlng=-180;
 
+	var i=0;
 	g_latlngs.forEach(function(glatlng) {
-		var polyline = new google.maps.Polyline({map: g_map, strokeWeight: get_dot_size(), strokeOpacity: g_dot_opacity, 
-				path: [glatlng, glatlng]});
-		g_polylines.add(polyline);
+
+		make_line(glatlng, i);
 
 		minlat = Math.min(minlat, glatlng.lat());
 		maxlat = Math.max(maxlat, glatlng.lat());
 		minlng = Math.min(minlng, glatlng.lng());
 		maxlng = Math.max(maxlng, glatlng.lng());
+
+		i += 1;
 	});
 
 	var rect_bounds = new google.maps.LatLngBounds(
 			new google.maps.LatLng(minlat, minlng), new google.maps.LatLng(maxlat, maxlng));
 	g_bounding_rect = new google.maps.Rectangle({bounds: rect_bounds, map: g_map, strokeColor: 'rgb(0,0,0)', 
-			strokeOpacity: 0.5, strokeWeight: 1, fillOpacity: 0});
+			strokeOpacity: 0.5, strokeWeight: 1, fillOpacity: 0, zIndex: -10});
+}
+
+function make_line(latlng_, i_) {
+	var polyline = new google.maps.Polyline({map: g_map, strokeWeight: get_dot_size(), strokeOpacity: g_dot_opacity, 
+			path: [latlng_, latlng_]});
+	var infowin = new google.maps.InfoWindow({position: polyline.getPath().getAt(0), content: ''+i_, disableAutoPan: true});
+	google.maps.event.addListener(polyline, 'mouseover', function() {
+		infowin.open(g_map);
+	});
+	google.maps.event.addListener(polyline, 'mouseout', function() {
+		infowin.close();
+	});
+	g_polylines.add(polyline);
 }
 
 function get_dot_size() {

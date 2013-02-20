@@ -13,6 +13,7 @@ def get_recent_vehicle_locations_dirfromlatlngs(fudgeroute_name_, latlng1_, latl
 	return get_recent_vehicle_locations(fudgeroute_name_, routes.routeinfo(fudgeroute_name_).dir_from_latlngs(latlng1_, latlng2_), current_, time_, log_)
 
 def get_recent_vehicle_locations(fudgeroute_, dir_, current_, time_, log_=False):
+	assert (fudgeroute_ in routes.NON_SUBWAY_FUDGEROUTES)
 	time_ = massage_time_arg(time_, 15*1000)
 	return mc.get(get_recent_vehicle_locations_impl, [fudgeroute_, dir_, current_, time_, log_])
 
@@ -52,6 +53,7 @@ def get_traffics_dirfromlatlngs(fudgeroute_name_, latlng1_, latlng2_, current_, 
 # returns elem 0: visuals list - [[timestamp, vi dict, vi dict, ...], ...] 
 #         elem 1: speed map - {mofr1: {'kmph': kmph, 'weight': weight}, ...} 
 def get_traffics(fudgeroute_name_, dir_, current_, time_, window_minutes_=TIME_WINDOW_MINUTES, log_=False):
+	assert (fudgeroute_name_ in routes.NON_SUBWAY_FUDGEROUTES)
 	time_ = massage_time_arg(time_, 60*1000)
 	return mc.get(get_traffics_impl, [fudgeroute_name_, dir_, current_, time_, window_minutes_, log_])
 

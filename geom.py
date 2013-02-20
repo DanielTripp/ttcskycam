@@ -73,6 +73,7 @@ class LatLng:
 		assert isinstance(other_, LatLng)
 		return LatLng(avg(self.lat, other_.lat, ratio_), avg(self.lng, other_.lng, ratio_))
 
+	# This only works for concave polygons.  TODO: handle all polygons. 
 	def inside_polygon(self, poly_):
 		assert all(isinstance(x, LatLng) for x in poly_)
 		sum_angles = 0
@@ -179,20 +180,6 @@ def remove_bad_gps_readings(vis_):
 		r += vis_single_vid
 	r.sort(key=lambda vi: vi.time, reverse=True)
 	vis_[:] = r
-
-def remove_consecutive_duplicates(list_, key=None):
-	def get_key(val_):
-		return (val_ if key==None else key(val_))
-	curkey = get_key(list_[0]); prevkey = None
-	i = 1
-	while i < len(list_):
-		prevkey = curkey
-		curkey = get_key(list_[i])
-		if prevkey == curkey:
-			del list_[i]
-			i -= 1
-			curkey = prevkey
-		i += 1
 
 def kmph_to_mps(kmph_):
 	return kmph_*1000.0/(60*60)
@@ -330,6 +317,13 @@ def constrain_line_segment_to_box(linesegpt1_, linesegpt2_, box_sw_, box_ne_):
 		if len(box_side_intersections) > 0:
 			line[i] = min(box_side_intersections, key=lambda pt: pt.dist_m(linept))
 	return tuple(line)
+
+class BoundingBox:
+	
+	def __init__(self, polygon_pts_):
+		assert isinstance(polygon_pts_[0], geom.LatLng)
+		self.southwest = geom.LatLng(min(pt.lat for pt in polygon_pts_), min(pt.lng for pt in polygon_pts_))
+		self.northeast = geom.LatLng(max(pt.lat for pt in polygon_pts_), max(pt.lng for pt in polygon_pts_))
 
 if __name__ == '__main__':
 

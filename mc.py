@@ -26,6 +26,12 @@ def get(func_, args_=[]):
 		g_in_process_cache_key_to_value[key] = r
 	return r
 
+def decorate(user_function_):
+	def decorating_function(*args):
+		return get(user_function_, args)
+	
+	return decorating_function
+
 
 if __name__ == '__main__':
 

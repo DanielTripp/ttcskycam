@@ -235,7 +235,11 @@ def get_display_grid(southwest_latlng_, northeast_latlng_):
 
 if __name__ == '__main__':
 
-	pprint.pprint(get_display_grid(geom.LatLng(43.634359782072586, -79.45922656258244), geom.LatLng(43.66888894444148, -79.39116282662053)))
+	start = geom.LatLng(43.659854903367034, -79.43536563118596)
+	end = start.clone()
+	while start.dist_m(end) < 1000:
+		end.lat += 0.0000001
+	print end.lat - start.lat
 
 
 
