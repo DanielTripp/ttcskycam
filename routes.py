@@ -15,7 +15,7 @@ for fudgeroute, configroutes in FUDGEROUTE_TO_CONFIGROUTES.items():
 	for configroute in configroutes:
 		CONFIGROUTE_TO_FUDGEROUTE[configroute] = fudgeroute
 
-SUBWAY_FUDGEROUTES = ['bloor_danforth']
+SUBWAY_FUDGEROUTES = ['bloor_danforth', 'yonge_university_spadina']
 NON_SUBWAY_FUDGEROUTES = FUDGEROUTE_TO_CONFIGROUTES.keys()
 FUDGEROUTES = NON_SUBWAY_FUDGEROUTES + SUBWAY_FUDGEROUTES
 CONFIGROUTES = reduce(lambda x, y: x + y, FUDGEROUTE_TO_CONFIGROUTES.values(), [])
