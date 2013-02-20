@@ -133,11 +133,11 @@ def get_path_rough_time_estimate_secs(path_):
 	walking_dist_m = sum(leg.dist_m for leg in path_ if leg.mode == 'walking')
 	r += walking_dist_m/WALKING_SPEED_MPS
 
-	NON_SUBWAY_TRANSIT_SPEED_MPS = 20*(1000.0/(60*60))
+	NON_SUBWAY_TRANSIT_SPEED_MPS = 15*(1000.0/(60*60))
 	non_subway_transit_dist_m = sum(leg.dist_m for leg in path_ if leg.mode == 'transit' and not routes.is_subway(leg.froute))
 	r += non_subway_transit_dist_m/NON_SUBWAY_TRANSIT_SPEED_MPS
 
-	SUBWAY_TRANSIT_SPEED_MPS = 40*(1000.0/(60*60))
+	SUBWAY_TRANSIT_SPEED_MPS = 45*(1000.0/(60*60))
 	subway_transit_dist_m = sum(leg.dist_m for leg in path_ if leg.mode == 'transit' and routes.is_subway(leg.froute))
 	r += subway_transit_dist_m/SUBWAY_TRANSIT_SPEED_MPS
 
@@ -533,8 +533,10 @@ def get_path_froutendirs_by_pathgridsquare_far(orig_pathgridsquare_, dest_pathgr
 	paths = get_paths_by_latlngs(orig_pathgridsquare_.midpt_latlng(), dest_pathgridsquare_.midpt_latlng(), radius_m)
 	if len(paths) == 0:
 		return []
-	if 1: # TDR 
+	if 0: # TDR
+		printerr('------------------')
 		for path in paths:
+			printerr('minutes: %.1f' % (get_path_rough_time_estimate_secs(path)/60.0))
 			for leg in path:
 				printerr(leg)
 			printerr('---')
