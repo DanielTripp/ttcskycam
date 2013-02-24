@@ -590,8 +590,7 @@ def pathgridsquares_bothres():
 def pathgridsquares_bothres_combos_gen():
 	for orig_square in pathgridsquares_bothres():
 		for dest_square in pathgridsquares_bothres():
-			if orig_square != dest_square:
-				yield (orig_square, dest_square)
+			yield (orig_square, dest_square)
 
 def get_pathgridsquare(latlng_):
 	return str(PathGridSquare(latlng_))
@@ -601,27 +600,40 @@ HEADING_ROUND = 30
 def round_heading_for_paths_db(heading_):
 	return geom.normalize_heading(round(heading_, HEADING_ROUND))
 
-def build_db_main():
-	if os.path.exists(PATHS_DB_FILENAME):
-		os.remove(PATHS_DB_FILENAME)
+def build_db_main(fill_in_):
+	if not fill_in_:
+		if os.path.exists(PATHS_DB_FILENAME):
+			os.remove(PATHS_DB_FILENAME)
 	init_dbconn()
-	g_dbconn.execute('create table t (key text unique, value text)')
-	def insert(orig__, dest__, heading__, value__):
-		orig_dest_key = orig_dest_squares_key(orig__, dest__, heading__)
-		g_dbconn.execute('insert into t values (?, ?)', [orig_dest_key, json.dumps(value__)])
-	for i, (orig_square, dest_square) in enumerate(pathgridsquares_bothres_combos_gen()):
+	if not fill_in_:
+		g_dbconn.execute('create table t (key text unique, value text)')
+
+	num_inserts = 0
+
+	def calc_and_insert(orig_square_, dest_square_, heading_):
+		orig_dest_key = orig_dest_squares_key(orig_square_, dest_square_, heading_)
+		if (not fill_in_) or (g_dbconn.execute('select * from t where key = ?', [orig_dest_key]).fetchone() is None):
+			value = find_paths_by_pathgridsquare(orig_square_, dest_square_, heading_)
+			g_dbconn.execute('insert into t values (?, ?)', [orig_dest_key, json.dumps(value)])
+			return True
+		return False
+
+	for num_keys_visited, (orig_square, dest_square) in enumerate(pathgridsquares_bothres_combos_gen()):
 		if get_paths_use_near_algo(orig_square, dest_square):
-			midpt_to_midpt_heading = round_heading_for_paths_db(orig_square.midpt_latlng().heading(dest_square.midpt_latlng()))
-			for heading_offset in range(-90, 91, HEADING_ROUND):
-				heading = geom.normalize_heading(midpt_to_midpt_heading + heading_offset)
-				value = find_paths_by_pathgridsquare(orig_square, dest_square, heading)
-				insert(orig_square, dest_square, heading, value)
+			if orig_square == dest_square:
+				for heading in range(0, 360, HEADING_ROUND):
+					num_inserts += int(calc_and_insert(orig_square, dest_square, heading))
+			else:
+				midpt_to_midpt_heading = round_heading_for_paths_db(orig_square.midpt_latlng().heading(dest_square.midpt_latlng()))
+				for heading_offset in range(-90, 91, HEADING_ROUND):
+					heading = geom.normalize_heading(midpt_to_midpt_heading + heading_offset)
+					num_inserts += int(calc_and_insert(orig_square, dest_square, heading))
 		else:
-			value = find_paths_by_pathgridsquare(orig_square, dest_square)
-			insert(orig_square, dest_square, None, value)
-		if i % 10:
+			num_inserts += int(calc_and_insert(orig_square, dest_square, None))
+		if num_keys_visited % 100 == 0:
+			print 'keys visited: %d.  inserts: %d' % (num_keys_visited, num_inserts)
+		if num_inserts % 10 == 0:
 			g_dbconn.commit()
-		print i
 	g_dbconn.commit()
 
 
