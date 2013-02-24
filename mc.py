@@ -9,9 +9,14 @@ g_in_process_cache_key_to_value = {}
 
 # Important that the return value of this is a str because that's what the memcache g_memcache_client insists on.  
 # Unicode will cause an error right away. 
+# Also - memcached can't handle spaces in keys, so we avoid that. 
 def _make_key(func_, args_):
 	name = '%s.%s' % (func_.__module__, func_.__name__)
-	return '%s-%s(%s)' % (c.VERSION, name, ','.join([str(arg) for arg in args_]))
+	r = '%s-%s(%s)' % (c.VERSION, name, ','.join([str(arg) for arg in args_]))
+	SPACE_REPLACER = '________'
+	assert SPACE_REPLACER not in r
+	r = r.replace(' ', SPACE_REPLACER)
+	return r
 
 def get(func_, args_=[]):
 	args_ = args_[:]

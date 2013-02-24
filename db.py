@@ -349,16 +349,22 @@ def query1(whereclause_, maxrows_, interp_by_time_):
 def make_whereclause_safe(whereclause_):
 	return re.sub('(?i)insert|delete|drop|create|truncate|alter|update|;', '', whereclause_)
 
+# direction_ can be an integer direction (0 or 1) or a pair of LatLngs from which we will infer that integer direction.
 def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, current_conditions_, time_window_end_, log_=False):
-	assert (fudgeroute_ in routes.NON_SUBWAY_FUDGEROUTES) and type(num_minutes_) == int and direction_ in (0,1)
-	vid_to_vis = get_vid_to_vis(fudgeroute_, direction_, num_minutes_, time_window_end_, False, current_conditions_, log_=log_)
+	assert direction_ in (0, 1) or (len(direction_) == 2 and all(isinstance(e, geom.LatLng) for e in direction_))
+	assert (fudgeroute_ in routes.NON_SUBWAY_FUDGEROUTES) and type(num_minutes_) == int
+	if direction_ in (0, 1):
+		direction = direction_
+	else:
+		direction = routes.routeinfo(fudgeroute_).dir_from_latlngs(direction_[0], direction_[1])
+	vid_to_vis = get_vid_to_vis(fudgeroute_, direction, num_minutes_, time_window_end_, False, current_conditions_, log_=log_)
 	r = []
 	for vid, vis in vid_to_vis.iteritems():
 		if log_: printerr('For locations, pre-interp: vid %s: %d vis, from %s to %s (widemofrs %d to %d)' \
 				% (vid, len(vis), em_to_str_hms(vis[-1].time), em_to_str_hms(vis[0].time), vis[-1].widemofr, vis[0].widemofr))
 		r += [vi for vi in vis if vi.widemofr != -1]
 	starttime = time_window_end_ - num_minutes_*60*1000
-	r = interp_by_time(r, True, True, current_conditions_, direction_, starttime, time_window_end_, log_=log_)
+	r = interp_by_time(r, True, True, current_conditions_, direction, starttime, time_window_end_, log_=log_)
 	return r
 
 # The idea here is, for each vid, to get one more vi from the db, greater in time than the pre-existing

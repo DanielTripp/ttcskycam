@@ -24,16 +24,18 @@ var TEST_INVISIBLE = false;
 var DISABLE_OVERTIME = false;
 var SHOW_FRAMERATE = false;
 var SHOW_TIME_SELECTOR = true;
+var SHOW_PATHS_TEXT = true;
+var SHOW_LOADING_URLS = true;
 
 function new_fudgeroute_data() {
 	return {
 		traffic_mofr2speed: new buckets.Dictionary(), 
 		traffic_linedefs: new buckets.LinkedList(), 
-		traffic_lines: new buckets.LinkedList(), 
+		traffic_lines: new buckets.LinkedList(),  // if this is a subway, these aren't really traffic lines - rather, plain old route lines. 
 		time_to_vid_to_vi: new buckets.Dictionary(), // key: date/time string.  value: dictionary (key: vid string, value: VehicleInfo object) 
 		vid_to_static_vehicle_marker: new buckets.Dictionary(), 
 		vid_to_heading_to_moving_vehicle_marker: new buckets.Dictionary(), 
-		dir: null, 
+		dir: null, // will be 0 or 1 or a pair a latlngs (orig and dest). 
 		traffic_request_pending: false, 
 		vehicles_request_pending: false
 	};
@@ -43,6 +45,9 @@ var g_show_static_vehicles = true, g_show_moving_vehicles = true, g_show_traffic
 
 // End of this list = highest zindex i.e. most visible.  
 var g_froute_zindexes = ['ossington', 'lansdowne', 'spadina', 'bathurst', 'dufferin', 'dupont', 'carlton', 'dundas', 'king', 'queen'];
+
+var g_subway_froutes = to_buckets_set(['bloor_danforth', 'yonge_university_spadina']);
+var g_subway_froute_to_route_latlngs = {};
 
 var g_framerate_period_times = new buckets.LinkedList();
 for(var i=0; i<15; i++) {
@@ -65,13 +70,17 @@ var g_mouseover_infowin_timer = null;
 
 var g_max_routes = 5;
 var g_trip_orig_marker = null, g_trip_dest_marker = null;
+var g_route_options_dialog_froute = null;
+var g_force_show_froutes = new buckets.Set(), g_force_hide_froutes = new buckets.Set();
+var g_force_dir0_froutes = new buckets.Set(), g_force_dir1_froutes = new buckets.Set();
+var g_main_path = [], g_extra_path_froutendirs = [];
 
 var HEADING_ROUNDING_DEGREES = 5;
 var REFRESH_INTERVAL_MS = 15*1000;
-var REFRESH_INTERVAL_MS = 5*1000; // TDR 
 var MOVING_VEHICLES_OVERTIME_FLASH_INTERVAL_MS = 500;
 var MOVING_VEHICLES_ANIM_INTERVAL_MS = 100;
 var MOFR_STEP = parseInt(get_sync('MOFR_STEP'), 10);
+var FROUTE_TO_INTDIR_TO_ENGLISHDESC = callpy_sync('routes.get_fudgeroute_to_intdir_to_englishdesc');
 
 var g_zoom_to_vehicle_size = [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 10, 13, 15, 25, 40, 50, 60, 70, 80, 100, 130, 100, ];
 
@@ -372,7 +381,9 @@ function refresh_data_from_server_timer_func() {
 
 function refresh_data_from_server_allroutes() {
 	g_fudgeroute_data.forEach(function(fudgeroute, data) {
-		refresh_data_from_server_singleroute(fudgeroute);
+		if(!is_subway(fudgeroute)) {
+			refresh_data_from_server_singleroute(fudgeroute);
+		}
 	});
 }
 
@@ -644,15 +655,15 @@ function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
 			icon: new google.maps.MarkerImage(get_vehicle_cgi_url(size, heading_, static_aot_moving_), 
 					null, null, new google.maps.Point(size/2, size/2)),
 			visible: false, 
-			zIndex: 1
+			zIndex: 5
 		});
 	if(!TEST_INVISIBLE) {
 		if((static_aot_moving_ && g_show_static_vehicles) || (!static_aot_moving_ && g_show_moving_vehicles)) {
 			marker.setVisible(true);
 		}
 	}
-	add_vid_mouseover_infowin(marker, size, vid_);
-	add_solo_vid_click_listener(marker, vid_);
+	//add_vid_mouseover_infowin(marker, size, vid_);
+	//add_solo_vid_click_listener(marker, vid_);
 	return marker;
 }
 
@@ -795,13 +806,16 @@ function remake_traffic_lines_singleroute(fudgeroute_) {
 
 	var data = g_fudgeroute_data.get(fudgeroute_);
 	if(data != undefined) {
-		var visible = is_selected('show_traffic_lines_checkbox');
-		data.traffic_linedefs.forEach(function(linedef) {
-			var traf = data.traffic_mofr2speed.get(linedef.mofr);
-			var new_lines = make_traffic_line(fudgeroute_, linedef.start_latlon, linedef.end_latlon, (traf!=null ? traf.kmph : null), 
-					linedef.mofr);
-			add_all(data.traffic_lines, new_lines);
-		});
+		if(is_subway(fudgeroute_)) {
+			make_subway_lines(fudgeroute_);
+		} else {
+			data.traffic_linedefs.forEach(function(linedef) {
+				var traf = data.traffic_mofr2speed.get(linedef.mofr);
+				var new_lines = make_traffic_line(fudgeroute_, linedef.start_latlon, linedef.end_latlon, (traf!=null ? traf.kmph : null), 
+						linedef.mofr);
+				add_all(data.traffic_lines, new_lines);
+			});
+		}
 	}
 }
 
@@ -815,27 +829,17 @@ function forget_traffic_lines(fudgeroute_) {
 	}
 }
 
-function add_text_to_marker(marker_, string_) {
-	var text_marker = new RichMarker({
-		position: marker_.getPosition(),
-		map: g_map,
-		draggable: false,
-		flat: true,
-		anchor: new google.maps.Size(-40, -60), 
-		content: sprintf('<svg width="120px" height="25px" version="1.1">' +
-				'<text x="0" y="20" font-size="20" stroke="rgb(0,0,0)" stroke-width="0.3" fill="rgb(255,124,112)">%s</text>' +
-				'</svg>', string_)
-		});
-	google.maps.event.addListener(marker_, 'position_changed', function() {
-		text_marker.setPosition(marker_.getPosition());
-	});
-}
-
 function initialize() {
 
 	init_datetimepicker();
 	if(!SHOW_TIME_SELECTOR) {
 		$('#div_time_selector').remove();
+	}
+	if(!SHOW_PATHS_TEXT) {
+		$('#p_paths_text').remove();
+	}
+	if(!SHOW_LOADING_URLS) {
+		$('#p_loading_urls').remove();
 	}
 
 	init_map();
@@ -882,7 +886,134 @@ function initialize() {
 	schedule_refresh_data_from_server(); // This will cause a periodic refresh of all routes.  The first refresh 
 			// caused by this will happen not right away, but in a few seconds. 
 
-	draw_pathgridsquares();
+	add_invisible_route_lines();
+
+	//draw_pathgridsquares();
+
+	init_route_options_dialog();
+
+	on_trip_marker_moved();
+}
+
+function init_route_options_dialog() {
+	$("#route-options-dialog").dialog({
+	 resizable: false,
+		autoOpen: false,
+		//height:340,
+		modal: true,
+		buttons: {
+			'Ok': function() { on_route_options_dialog_ok_clicked(); $(this).dialog('close'); },
+			'Cancel': function() { $(this).dialog('close'); }
+		}
+	});
+}
+
+function on_route_options_dialog_ok_clicked() {
+	update_force_sets_from_dialog_gui();
+	recalc_display_set();
+}
+
+function update_force_sets_from_dialog_gui() {
+	assert_force_sets_consistent();
+	var show = radio_val('show');
+	if(show == 'show') {
+		g_force_show_froutes.add(g_route_options_dialog_froute);
+		g_force_hide_froutes.remove(g_route_options_dialog_froute);
+	} else if(show == 'hide') {
+		g_force_show_froutes.remove(g_route_options_dialog_froute);
+		g_force_hide_froutes.add(g_route_options_dialog_froute);
+	} else {
+		g_force_show_froutes.remove(g_route_options_dialog_froute);
+		g_force_hide_froutes.remove(g_route_options_dialog_froute);
+	}
+
+	var dir = radio_val('dir');
+	if(dir == 'dir0') {
+		g_force_dir0_froutes.add(g_route_options_dialog_froute);
+		g_force_dir1_froutes.remove(g_route_options_dialog_froute);
+	} else if(dir == 'dir1') {
+		g_force_dir0_froutes.remove(g_route_options_dialog_froute);
+		g_force_dir1_froutes.add(g_route_options_dialog_froute);
+	} else {
+		g_force_dir0_froutes.remove(g_route_options_dialog_froute);
+		g_force_dir1_froutes.remove(g_route_options_dialog_froute);
+	}
+
+	assert_force_sets_consistent();
+}
+
+function is_subway(froute_) {
+	return g_subway_froutes.contains(froute_);
+}
+
+function add_invisible_route_lines() {
+	var froute_to_latlngs = callpy_sync('routes.get_all_froute_latlngs');
+	for(var froute in froute_to_latlngs) {
+		var latlngs = froute_to_latlngs[froute];
+		add_invisible_route_line(froute, latlngs);
+		if(is_subway(froute)) { // then save these for later. 
+			g_subway_froute_to_route_latlngs[froute] = latlngs;
+		}
+	}
+}
+
+function add_invisible_route_line(froute_, latlngs_) {
+	var line = new google.maps.Polyline({map: g_map, path: google_LatLngs(latlngs_), strokeWeight: 20, strokeOpacity: 0, zIndex: 10});
+	google.maps.event.addListener(line, 'click', function(mouse_event_) {
+			on_route_clicked(froute_, mouse_event_.latLng);
+		});
+}
+
+function assert_force_sets_consistent() {
+	if(!((intersection(g_force_show_froutes, g_force_hide_froutes).size() == 0) 
+			&& intersection(g_force_dir0_froutes, g_force_dir1_froutes).size() == 0)) {
+		throw sprintf('force sets inconsistent - %s %s %s %s', 
+				buckets_set_to_string(g_force_show_froutes), buckets_set_to_string(g_force_hide_froutes), 
+				buckets_set_to_string(g_force_dir0_froutes), buckets_set_to_string(g_force_dir1_froutes));
+	}
+}
+
+function on_route_clicked(froute_, latlng_) {
+	g_route_options_dialog_froute = froute_;
+	assert_force_sets_consistent();
+	function s(bool_) {
+		return (bool_ ? ' checked="checked" ' : ' ');
+	}
+	var show = 'auto';
+	if(g_force_show_froutes.contains(froute_)) {
+		show = 'show';
+	} else if(g_force_hide_froutes.contains(froute_)) {
+		show = 'hide';
+	}
+	html = sprintf('<b>- %(froute)s -</b><br>'
+		+ 'Show this route:<br>'
+		+ '<input id="showshowbutton" type="radio" name="show" value="show" onclick="" %(showchecked)s />'
+		+ '<label for="showshowbutton" onclick="">Show</label><br>'
+		+ '<input id="showhidebutton" type="radio" name="show" value="hide" onclick="" %(hidechecked)s />'
+		+ '<label for="showhidebutton" onclick="">Hide</label><br>'
+		+ '<input id="showautobutton" type="radio" name="show" value="auto" onclick="" %(autochecked)s />'
+		+ '<label for="showautobutton" onclick="">Auto</label><br>', 
+		{froute: froute_, showchecked: s(show == 'show'), 
+			hidechecked: s(show == 'hide'), autochecked: s(show == 'auto')});
+	if(!is_subway(froute_)) {
+		var dir = 'auto';
+		if(g_force_dir0_froutes.contains(froute_)) {
+			dir = '0';
+		} else if(g_force_dir1_froutes.contains(froute_)) {
+			dir = '1';
+		}
+		html += sprintf('Direction:<br>'
+			+ '<input id="dir0button" type="radio" name="dir" value="dir0" onclick="" %(dir0checked)s />'
+			+ '<label for="dir0button" onclick="">%(dir0text)s</label><br>'
+			+ '<input id="dir1button" type="radio" name="dir" value="dir1" onclick="" %(dir1checked)s />'
+			+ '<label for="dir1button" onclick="">%(dir1text)s</label><br>'
+			+ '<input id="dirautobutton" type="radio" name="dir" value="dirauto" onclick="" %(dirautochecked)s />'
+			+ '<label for="dirautobutton" onclick="">Auto</label><br>', 
+			{dir0text: FROUTE_TO_INTDIR_TO_ENGLISHDESC[froute_][0], dir1text: FROUTE_TO_INTDIR_TO_ENGLISHDESC[froute_][1], 
+			dir0checked: s(dir == '0'), dir1checked: s(dir == '1'), dirautochecked: s(dir == 'auto')});
+	}
+	$('#route-options-dialog').html(html);
+	$('#route-options-dialog').dialog('open');
 }
 
 function draw_pathgridsquares() {
@@ -895,23 +1026,23 @@ function draw_pathgridsquares() {
 
 	for(var lat=minlat; lat<=maxlat; lat+=LATSTEP) {
 		new google.maps.Polyline({map: g_map, path: [google_LatLng([lat, minlng]), google_LatLng([lat, maxlng])], 
-				strokeColor: 'rgb(0,0,0)', strokeWeight: 0.6});
+				strokeColor: 'rgb(0,0,0)', strokeWeight: 0.6, zIndex: -100});
 		new google.maps.Polyline({map: g_map, path: [google_LatLng([lat+LATSTEP/2, minlng]), google_LatLng([lat+LATSTEP/2, maxlng])], 
-				strokeColor: 'rgb(0,0,0)', strokeWeight: 0.2});
+				strokeColor: 'rgb(0,0,0)', strokeWeight: 0.2, zIndex: -100});
 	}
 	for(var lat=LATREF; lat<=LATREF+100*LATSTEP; lat+=10*LATSTEP) {
 		new google.maps.Polyline({map: g_map, path: [google_LatLng([lat, minlng]), google_LatLng([lat, maxlng])], 
-				strokeColor: 'rgb(0,255,0)', strokeWeight: 3, zIndex: -1});
+				strokeColor: 'rgb(0,255,0)', strokeWeight: 3, zIndex: -100});
 	}
 	for(var lng=minlng; lng<=maxlng; lng+=LNGSTEP) {
 		new google.maps.Polyline({map: g_map, path: [google_LatLng([minlat, lng]), google_LatLng([maxlat, lng])], 
-				strokeColor: 'rgb(0,0,0)', strokeWeight: 0.6});
+				strokeColor: 'rgb(0,0,0)', strokeWeight: 0.6, zIndex: -100});
 		new google.maps.Polyline({map: g_map, path: [google_LatLng([minlat, lng+LNGSTEP/2]), google_LatLng([maxlat, lng+LNGSTEP/2])], 
-				strokeColor: 'rgb(0,0,0)', strokeWeight: 0.2});
+				strokeColor: 'rgb(0,0,0)', strokeWeight: 0.2, zIndex: -100});
 	}
 	for(var lng=LNGREF; lng<=LNGREF+100*LNGSTEP; lng+=10*LNGSTEP) {
 		new google.maps.Polyline({map: g_map, path: [google_LatLng([minlat, lng]), google_LatLng([maxlat, lng])], 
-				strokeColor: 'rgb(0,255,0)', strokeWeight: 3, zIndex: -1});
+				strokeColor: 'rgb(0,255,0)', strokeWeight: 3, zIndex: -100});
 	}
 
 	draw_polygon('paths_db_hires_bounding_polygon.json');
@@ -920,27 +1051,15 @@ function draw_pathgridsquares() {
 function init_trip_markers() {
 	g_trip_orig_marker = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.64939110196153, -79.42446513374944), 
 		draggable: true});
-	g_trip_dest_marker = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.65305519238468, -79.40163417061467), 
+	g_trip_dest_marker = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.664, -79.40369410713811), 
 		draggable: true});
 
 	google.maps.event.addListener(g_trip_orig_marker, 'dragend', on_trip_marker_moved);
 	google.maps.event.addListener(g_trip_dest_marker, 'dragend', on_trip_marker_moved);
 }
 
-var g_p = null; // TDR 
-
 function on_trip_marker_moved() {
-	//console.log(callpy_sync('paths.get_pathgridsquare', g_trip_orig_marker.getPosition())); // TDR 
-	if(false) { // TDR 
-		var r = callpy_sync('t.t', g_trip_orig_marker.getPosition(), g_trip_dest_marker.getPosition()); // TDR 
-		console.log(r);
-		if(g_p == null) {
-			g_p = new google.maps.Polyline({map: g_map, strokeColor: 'rgb(0,0,255)'});
-		}
-		g_p.setPath([google_LatLng(r[0]), new google.maps.LatLng(r[1][0], r[0][1]), google_LatLng(r[1]), 
-				new google.maps.LatLng(r[0][0], r[1][1]), google_LatLng(r[0])]);
-	}
-	figure_out_which_froutendirs_are_selected_then_get_data_for_them();
+	get_paths_from_server();
 }
 
 function get_visible_fudgeroutendirs() {
@@ -997,15 +1116,81 @@ function round(x_, step_) {
 
 function get_data_for_selected_routes() {
 	get_fudgeroutes_for_map_bounds();
-	update_selected_fudgeroutendirs(new_fudgeroutendirs_);
+	recalc_display_set();
 }
 
-function figure_out_which_froutendirs_are_selected_then_get_data_for_them() {
-	callpy('paths.get_path_froutendirs_by_latlng', g_trip_orig_marker.getPosition(), g_trip_dest_marker.getPosition(), 
-			function(r_) {
-				console.error(r_);
-			});
-	//update_selected_fudgeroutendirs(new_fudgeroutendirs_);
+function get_paths_from_server() {
+	callpy('paths.get_paths_by_latlngs', g_trip_orig_marker.getPosition(), g_trip_dest_marker.getPosition(), 
+		function(r_) {
+			if(SHOW_PATHS_TEXT) {
+				set_contents('p_paths_text', toJsonString(r_));
+			}
+			g_main_path = r_[0];
+			g_extra_path_froutendirs = r_[1];
+			recalc_display_set();
+		});
+}
+
+// Combines paths indicated by markers with the per-route override settings, and maxroutes/num-extra-routes-to-show. 
+// return list of (froute, dir) pairs.  dir will be 0 or 1 except for when we need the server to figure it out, 
+// then it will be a pair of latlngs representing orig and dest points (latlngs in raw 2-element array format.) 
+function get_display_set() {
+	assert_force_sets_consistent();
+	var r = [];
+
+	for(var i in g_main_path) {
+		var froute = g_main_path[i][0], dir = g_main_path[i][1];
+		if(!g_force_hide_froutes.contains(froute)) {
+			if(g_force_dir0_froutes.contains(froute)) {
+				dir = 0;
+			} else if(g_force_dir1_froutes.contains(froute)) {
+				dir = 1;
+			}
+			r.push([froute, dir]);
+		}
+	}
+
+	function in_r(froute__) {
+		for(var i in r) {
+			var froutendir = r[i];
+			if(froutendir[0] == froute__) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	var extras_added = 0;
+	for(var i in g_extra_path_froutendirs) {
+		var froute = g_extra_path_froutendirs[i][0], dir = g_extra_path_froutendirs[i][1];
+		if(extras_added >= g_max_routes) {
+			break;
+		}
+		if(!in_r(froute) && !g_force_hide_froutes.contains(froute)) {
+			if(g_force_dir0_froutes.contains(froute)) {
+				dir = 0;
+			} else if(g_force_dir1_froutes.contains(froute)) {
+				dir = 1;
+			}
+			r.push([froute, dir]);
+			extras_added += 1;
+		}
+	}
+
+	g_force_show_froutes.forEach(function(froute) {
+		if(!in_r(froute)) {
+			var dir = null;
+			if(g_force_dir0_froutes.contains(froute)) {
+				dir = 0;
+			} else if(g_force_dir1_froutes.contains(froute)) {
+				dir = 1;
+			} else {
+				dir = [from_google_LatLng(g_trip_orig_marker.getPosition()), from_google_LatLng(g_trip_dest_marker.getPosition())];
+			}
+			r.push([froute, dir]);
+		}
+	});
+	return r;
 }
 
 function init_max_routes_controls() {
@@ -1031,32 +1216,47 @@ function on_max_routes_up_clicked() {
 	}
 }
 
-function update_selected_fudgeroutendirs(new_fudgeroutendirs_) {
+function recalc_display_set() {
+	var new_froutendirs = get_display_set();
+
 	var new_routes = new buckets.LinkedList();
-	for(var i in new_fudgeroutendirs_) {
-		var fudgeroutendir = new_fudgeroutendirs_[i];
-		new_routes.add(fudgeroutendir[0]);
+	for(var i in new_froutendirs) {
+		var froutendir = new_froutendirs[i];
+		new_routes.add(froutendir[0]);
 	}
 
-	g_fudgeroute_data.forEach(function(fudgeroute, data) {
-		if(!new_routes.contains(fudgeroute)) {
-			forget_data_singleroute(fudgeroute);
+	g_fudgeroute_data.forEach(function(froute, data) {
+		if(!new_routes.contains(froute)) {
+			forget_data_singleroute(froute);
 		}
 	});
 
-	for(var i in new_fudgeroutendirs_) {
-		var fudgeroutendir = new_fudgeroutendirs_[i];
-		var fudgeroute = fudgeroutendir[0], dir = fudgeroutendir[1];
-		if(g_fudgeroute_data.get(fudgeroute) == undefined || g_fudgeroute_data.get(fudgeroute).dir != dir) {
-			forget_data_singleroute(fudgeroute);
+	for(var i in new_froutendirs) {
+		var froutendir = new_froutendirs[i];
+		var froute = froutendir[0], dir = froutendir[1];
+		if(g_fudgeroute_data.get(froute) == undefined || g_fudgeroute_data.get(froute).dir != dir) {
+			forget_data_singleroute(froute);
 			var data = new_fudgeroute_data();
 			data.dir = dir;
-			g_fudgeroute_data.set(fudgeroute, data);
-			refresh_data_from_server_singleroute(fudgeroute);
+			g_fudgeroute_data.set(froute, data);
+			if(is_subway(froute)) {
+				make_subway_lines(froute);
+			} else {
+				refresh_data_from_server_singleroute(froute);
+			}
 		}
 	}
 
 	refresh_vid_checkboxes_html();
+}
+
+function make_subway_lines(froute_) {
+	var data = g_fudgeroute_data.get(froute_);
+	var latlngs = g_subway_froute_to_route_latlngs[froute_];
+	var width = get_traffic_line_width()*3;
+	var line = new google.maps.Polyline({map: g_map, path: google_LatLngs(latlngs), strokeWeight: width, strokeOpacity: 0.5, 
+			strokeColor: 'rgb(0,0,255)', zIndex: -30}); 
+	data.traffic_lines.add(line);
 }
 
 function set_play_buttons_appropriately() {
@@ -1209,17 +1409,23 @@ function forget_data_allroutes() {
 function forget_data_singleroute(fudgeroute_) {
 	var data = g_fudgeroute_data.get(fudgeroute_);
 	if(data != undefined) {
-		data.traffic_lines.forEach(function(line) {
-			line.setMap(null);
-		});
-		data.vid_to_static_vehicle_marker.forEach(function(vid, marker) {
-			marker.setMap(null);
-		});
-		data.vid_to_heading_to_moving_vehicle_marker.forEach(function(vid, heading_to_moving_vehicle_marker) {
-			heading_to_moving_vehicle_marker.forEach(function(heading, marker) {
+		if(data.traffic_lines != null) {
+			data.traffic_lines.forEach(function(line) {
+				line.setMap(null);
+			});
+		}
+		if(data.vid_to_static_vehicle_marker != null) {
+			data.vid_to_static_vehicle_marker.forEach(function(vid, marker) {
 				marker.setMap(null);
 			});
-		});
+		}
+		if(data.vid_to_heading_to_moving_vehicle_marker != null) {
+			data.vid_to_heading_to_moving_vehicle_marker.forEach(function(vid, heading_to_moving_vehicle_marker) {
+				heading_to_moving_vehicle_marker.forEach(function(heading, marker) {
+					marker.setMap(null);
+				});
+			});
+		}
 		g_fudgeroute_data.remove(fudgeroute_);
 	}
 }
@@ -1356,6 +1562,8 @@ $(document).ready(initialize);
   <body>
 		<div id="map_canvas" style="width:100%; height:100%"></div>
 		<div>
+			<p id="p_paths_text"/>
+			<p id="p_loading_urls"/>
 			<div id="div_framerate">
 				<br/><p id='p_framerate'/>
 				<br/><p id='p_worktime'/>
@@ -1442,5 +1650,6 @@ $(document).ready(initialize);
 			<p><a href="about.html">About this website.</a></p>
 			<p></p>
 		</div>
+		<div id="route-options-dialog"><div>
   </body>
 </html>

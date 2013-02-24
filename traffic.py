@@ -9,9 +9,6 @@ with open('MOFR_STEP') as f:
 
 TIME_WINDOW_MINUTES = 30
 
-def get_recent_vehicle_locations_dirfromlatlngs(fudgeroute_name_, latlng1_, latlng2_, current_, time_, log_=False):
-	return get_recent_vehicle_locations(fudgeroute_name_, routes.routeinfo(fudgeroute_name_).dir_from_latlngs(latlng1_, latlng2_), current_, time_, log_)
-
 def get_recent_vehicle_locations(fudgeroute_, dir_, current_, time_, log_=False):
 	assert (fudgeroute_ in routes.NON_SUBWAY_FUDGEROUTES)
 	time_ = massage_time_arg(time_, 15*1000)
@@ -45,10 +42,7 @@ def get_vid_to_vis_from_db_for_traffic(fudgeroute_name_, dir_, time_, window_min
 def between(bound1_, value_, bound2_):
 	return (bound1_ < value_ < bound2_) or (bound1_ > value_ > bound2_) 
 
-def get_traffics_dirfromlatlngs(fudgeroute_name_, latlng1_, latlng2_, current_, time_, log_=False):
-	return get_traffics(fudgeroute_name_, routes.dir_from_latlngs(fudgeroute_name_, latlng1_, latlng2_), current_, time_, log_)
-
-# time_ - 0 for now 
+# time_ - 0 for now
 # 
 # returns elem 0: visuals list - [[timestamp, vi dict, vi dict, ...], ...] 
 #         elem 1: speed map - {mofr1: {'kmph': kmph, 'weight': weight}, ...} 
@@ -58,8 +52,13 @@ def get_traffics(fudgeroute_name_, dir_, current_, time_, window_minutes_=TIME_W
 	return mc.get(get_traffics_impl, [fudgeroute_name_, dir_, current_, time_, window_minutes_, log_])
 
 def get_traffics_impl(fudgeroute_name_, dir_, current_, time_, window_minutes_, log_=False):
-	mofr_to_avgspeedandweight = get_traffic_avgspeedsandweights(fudgeroute_name_, dir_, time_, current_, window_minutes_, log_=log_)
-	return [get_traffics_visuals(mofr_to_avgspeedandweight, fudgeroute_name_, dir_), \
+	assert dir_ in (0, 1) or (len(dir_) == 2 and all(isinstance(e, geom.LatLng) for e in dir_))
+	if dir_ in (0, 1):
+		direction = dir_
+	else:
+		direction = routes.routeinfo(fudgeroute_name_).dir_from_latlngs(dir_[0], dir_[1])
+	mofr_to_avgspeedandweight = get_traffic_avgspeedsandweights(fudgeroute_name_, direction, time_, current_, window_minutes_, log_=log_)
+	return [get_traffics_visuals(mofr_to_avgspeedandweight, fudgeroute_name_, direction), \
 			get_traffics__mofr2speed(mofr_to_avgspeedandweight)]
 
 def get_traffics__mofr2speed(mofr_to_avgspeedandweight_):
