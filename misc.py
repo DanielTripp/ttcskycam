@@ -262,9 +262,12 @@ def round_up(x_, step_):
 		return r if r == x_ else r+step_
 
 def round_down(x_, step_):
-	assert type(x_) in (int, long, float) and (type(x_) is type(step_))
-	if type(step_) in (int, long):
-		return (long(x_)/step_)*step_
+	assert type(x_) in (int, long, float)
+	if type(x_) in (int, long):
+		r = (long(x_)/step_)*step_
+		if type(x_) is int:
+			r = int(r)
+		return r
 	else:
 		return fdiv(x_, step_)*step_
 

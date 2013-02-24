@@ -426,7 +426,7 @@ class RouteInfo:
 
 	def general_heading(self, dir_):
 		assert dir_ in (0, 1)
-		startpt, endpt = self.routepts(0)[0], self.routepts(0)[-1]
+		startpt, endpt = self.routepts(dir_)[0], self.routepts(dir_)[-1]
 		if dir_:
 			startpt, endpt = endpt, startpt
 		return startpt.heading(endpt)
@@ -441,10 +441,16 @@ class RouteInfo:
 	def dir_from_latlngs(self, latlng1_, latlng2_):
 		mofr1 = self.latlon_to_mofr(latlng1_, tolerance_=2)
 		mofr2 = self.latlon_to_mofr(latlng2_, tolerance_=2)
-		if mofr1 == -1 or mofr2 == -1:
-			raise Exception('Invalid (off-route) latlng argument (or arguments) to dir_from_latlngs.  (%s, %s, %s)' 
-					% (self.name, latlng1_, latlng2_))
-		return (0 if mofr2 > mofr1 else 1)
+		if mofr1 != -1 and mofr2 != -1:
+			return (0 if mofr2 > mofr1 else 1)
+		else:
+			latlngs_heading = latlng1_.heading(latlng2_)
+			dir0_heading = self.general_heading(0)
+			dir1_heading = self.general_heading(1)
+			if geom.diff_headings(latlngs_heading, dir0_heading) < geom.diff_headings(latlngs_heading, dir1_heading):
+				return 0
+			else:
+				return 1
 
 	def dir_of_stoptag(self, stoptag_):
 		for direction in (0, 1):
@@ -622,7 +628,7 @@ def get_fudgeroutes_for_map_bounds(southwest_, northeast_, compassdir_or_heading
 	# Because I don't know how to show both directions of a route on a map at the same time. 
 	if 0:
 		printerr([x for x in sorted(fudgeroute_n_dir_to_score.items(), key=lambda x: x[1], reverse=True)])
-	printerr([x for x in sorted(fudgeroute_n_dir_to_score.items(), key=lambda x: x[1], reverse=True)]) # TDR 
+	#printerr([x for x in sorted(fudgeroute_n_dir_to_score.items(), key=lambda x: x[1], reverse=True)])
 	top_fudgeroute_n_dirs = [x[0] for x in sorted(fudgeroute_n_dir_to_score.items(), key=lambda x: x[1], reverse=True) if x[1] > 0.15]
 	for i in range(len(top_fudgeroute_n_dirs)-1, -1, -1):
 		fudgeroute, dir = top_fudgeroute_n_dirs[i]
@@ -634,11 +640,12 @@ def get_fudgeroutes_for_map_bounds(southwest_, northeast_, compassdir_or_heading
 
 	return top_fudgeroute_n_dirs
 
-# For each route, tells us which way dir 0 points (eg. East or North) and which way dir 1 points (West or South).
+# For each non-subway route, gives us an english description of which way dir 0 points (eg. East or North) 
+# and which way dir 1 points (West or South). 
 # For all routes that I've looked at, our dir 0 (which corresponds to NextBus's _0_ in a dirtag) is east for a
 # route that goes east-west, and south for one that goes north-south.  (1 for the other direction, of course.)
 # But I know of no guarantee for this.
-def get_fudgeroute_to_compassdir_to_intdir():
+def get_fudgeroute_to_intdir_to_englishdesc():
 	r = {}
 	for fudgeroute in NON_SUBWAY_FUDGEROUTES:
 		r[fudgeroute] = {}
@@ -648,19 +655,19 @@ def get_fudgeroute_to_compassdir_to_intdir():
 				heading = routepts[0].heading(routepts[-1])
 			else:
 				heading = routepts[-1].heading(routepts[0])
-			r[fudgeroute][heading_to_compassdir(heading)] = intdir
+			r[fudgeroute][intdir] = heading_to_englishdesc(heading)
 	return r
 
-def heading_to_compassdir(heading_):
+def heading_to_englishdesc(heading_):
 	assert isinstance(heading_, int) and (0 <= heading_  < 360)
 	if heading_ <= 45 or heading_ >= 315:
-		return 'n'
+		return 'North'
 	elif heading_ <= 135:
-		return 'e'
+		return 'East'
 	elif heading_ <= 225:
-		return 's'
+		return 'South'
 	else:
-		return 'w'
+		return 'West'
 
 
 def snaptest(fudgeroutename_, pt_, tolerance_=0):
@@ -798,6 +805,15 @@ def get_stops_dir_to_stoptag_to_latlng(froute_):
 def routepts(froute_, dir_):
 	return routeinfo(froute_).routepts(dir_)
 
+@mc.decorate
+def get_all_froute_latlngs():
+	r = {}
+	for froute in FUDGEROUTES:
+		r[froute] = routeinfo(froute).routepts(0)
+	return r
+	
+def dir_from_latlngs(froute_, latlng1_, latlng2_):
+	return routeinfo(froute_).dir_from_latlngs(latlng1_, latlng2_)
 
 if __name__ == '__main__':
 

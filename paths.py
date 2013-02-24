@@ -223,20 +223,16 @@ def get_est_arrival_time(froute_, start_stoptag_, dest_stoptag_, time_retrieved_
 # cases where we already know the stoptag, because we just got the mofr from an intersection definition. 
 # 
 # return list of list of PathLeg.
-def get_transit_paths_by_mofrs(start_froute_, start_mofr_, start_stoptag_hints_, dest_froute_, dest_mofr_, dest_stoptag_hints_, \
+def find_transit_paths_by_mofrs(start_froute_, start_mofr_, start_stoptag_hints_, dest_froute_, dest_mofr_, dest_stoptag_hints_, \
 		max_transit_routes_, max_dist_m_, visited_froutes_=set()):
 	assert max_transit_routes_ >= 1
 	visited_froutes = visited_froutes_.copy()
 	visited_froutes.add(start_froute_)
 
-	start_latlng = routes.mofr_to_latlon(start_froute_, start_mofr_, 0) # TDR ?? 
-	dest_latlng = routes.mofr_to_latlon(dest_froute_, dest_mofr_, 0) # TDR ?? 
 	r = []
 	if start_froute_ == dest_froute_:
 		new_path = [PathLeg.make_transit_leg(start_froute_, start_mofr_, start_stoptag_hints_, dest_mofr_, dest_stoptag_hints_)]
-		#if get_path_legs_beeline_dist_m(new_path) < max_dist_m_:
-		if 1: # TDR 
-			r.append(new_path)
+		r.append(new_path)
 	else:
 		for mofrndirnstoptag, halfint in routes.get_mofrndirnstoptag_to_halfintersection(start_froute_, start_mofr_).iteritems():
 			startroutes_crossmofr, direction, startroutes_crossstoptag = mofrndirnstoptag
@@ -247,14 +243,11 @@ def get_transit_paths_by_mofrs(start_froute_, start_mofr_, start_stoptag_hints_,
 				leg2_start_stoptag_hints = {0: halfint.dir0_stoptag, 1: halfint.dir1_stoptag}
 				new_path = [PathLeg.make_transit_leg(start_froute_, start_mofr_, start_stoptag_hints_, startroutes_crossmofr, leg1_dest_stoptag_hints), 
 						PathLeg.make_transit_leg(dest_froute_, halfint.mofr, leg2_start_stoptag_hints, dest_mofr_, dest_stoptag_hints_)]
-				#if get_path_legs_beeline_dist_m(new_path) < max_dist_m_:
-				#if not path_contains_wrong_way_legs(new_path, start_latlng, dest_latlng):
-				if 1: # TDR 
-					r.append(new_path)
+				r.append(new_path)
 			else:
 				if max_transit_routes_ > 1:
 					halfint_stoptag_hints = {0: halfint.dir0_stoptag, 1: halfint.dir1_stoptag}
-					for subpath in get_transit_paths_by_mofrs(halfint.froute, halfint.mofr, halfint_stoptag_hints, \
+					for subpath in find_transit_paths_by_mofrs(halfint.froute, halfint.mofr, halfint_stoptag_hints, \
 								dest_froute_, dest_mofr_, dest_stoptag_hints_, \
 								max_transit_routes_-1, max_dist_m_, visited_froutes):
 						num_transit_routes_in_subpath = len(uniq([x.froute for x in subpath]))
@@ -262,17 +255,10 @@ def get_transit_paths_by_mofrs(start_froute_, start_mofr_, start_stoptag_hints_,
 							new_leg = PathLeg.make_transit_leg(start_froute_, start_mofr_, start_stoptag_hints_, \
 									startroutes_crossmofr, {direction: startroutes_crossstoptag})
 							new_path = [new_leg] + subpath
-							#if get_path_legs_beeline_dist_m(new_path) < max_dist_m_:
-							#if not path_contains_wrong_way_legs(new_path, start_latlng, dest_latlng):
-							if 1: # TDR 
-								r.append(new_path)
+							r.append(new_path)
 	for path in r:
 		filter_in_place(path, lambda leg: leg.start_stoptag != leg.dest_stoptag)
 	filter_in_place(r, lambda path: len(path) > 0)
-	#start_latlng = routes.mofr_to_latlon(start_froute_, start_mofr_, 0)  # TDR all this? 
-	#dest_latlng = routes.mofr_to_latlon(dest_froute_, dest_mofr_, 0)
-	#beeline_dist_start_to_dest_m = start_latlng.dist_m(dest_latlng)
-	#filter_in_place(r, lambda path: get_path_legs_beeline_dist_m(path) < 3*beeline_dist_start_to_dest_m)
 	return r
 
 def path_contains_wrong_way_legs(path_, start_latlng_, dest_latlng_):
@@ -302,14 +288,14 @@ def find_nearby_froutenmofrs(latlng_, radius_):
 	return r
 			
 # return list of list of PathLeg.
-def get_paths_by_latlngs(start_latlng_, dest_latlng_, radius_m_=1000):
+def find_paths_by_latlngs(start_latlng_, dest_latlng_, radius_m_=1000):
 	paths = []
 	max_dist_m = start_latlng_.dist_m(dest_latlng_)*3
 	start_nearby_froutenmofrs = find_nearby_froutenmofrs(start_latlng_, radius_m_)
 	dest_nearby_froutenmofrs = find_nearby_froutenmofrs(dest_latlng_, radius_m_)
 	for start_froute, start_mofr in start_nearby_froutenmofrs:
 		for dest_froute, dest_mofr in dest_nearby_froutenmofrs:
-			for transit_path in get_transit_paths_by_mofrs(start_froute, start_mofr, None, dest_froute, dest_mofr, None, 4, max_dist_m):
+			for transit_path in find_transit_paths_by_mofrs(start_froute, start_mofr, None, dest_froute, dest_mofr, None, 4, max_dist_m):
 				start_walking_leg = PathLeg.make_walking_leg(start_latlng_, transit_path[0].start_latlng)
 				dest_walking_leg = PathLeg.make_walking_leg(transit_path[-1].dest_latlng, dest_latlng_)
 				total_path = [start_walking_leg] + transit_path + [dest_walking_leg]
@@ -416,6 +402,7 @@ class PathGridSquare(object):
 	def __hash__(self):
 		return self.gridlat + self.gridlng + self.hires_quadrant
 
+	# Be careful changing this, because it's used in database keys.
 	def __str__(self):
 		r = '(%d,%d)' % (self.gridlat, self.gridlng)
 		if self.hires_quadrant is not None:
@@ -472,24 +459,35 @@ class PathGridSquare(object):
 		assert isinstance(other_, PathGridSquare)
 		return (self != other_) and (abs(self.gridlat - other_.gridlat) <= 1) and (abs(self.gridlng - other_.gridlng) <= 1)
 
-def get_path_froutendirs_by_latlng(orig_latlng_, dest_latlng_):
+	def copy(self):
+		r = PathGridSquare((self.gridlat, self.gridlng))
+		r.hires_quadrant = self.hires_quadrant
+		return r
+
+@mc.decorate
+def get_paths_by_latlngs(orig_latlng_, dest_latlng_):
 	assert isinstance(orig_latlng_, geom.LatLng) and isinstance(dest_latlng_, geom.LatLng)
-	return get_path_froutendirs_by_pathgridsquare(PathGridSquare(orig_latlng_), PathGridSquare(dest_latlng_), 
-			orig_latlng_.heading(dest_latlng_))
+	heading = round_heading_for_paths_db(orig_latlng_.heading(dest_latlng_))
+	return find_paths_by_pathgridsquare(PathGridSquare(orig_latlng_), PathGridSquare(dest_latlng_), heading)
 
-#@mc.decorate
-def get_path_froutendirs_by_pathgridsquare(orig_pathgridsquare_, dest_pathgridsquare_, heading_):
+def get_paths_use_near_algo(orig_square_, dest_square_):
+	return (orig_square_ == dest_square_) or orig_square_.is_adjacent(dest_square_)
+
+@mc.decorate
+def find_paths_by_pathgridsquare(orig_pathgridsquare_, dest_pathgridsquare_, heading_=None):
 	assert isinstance(orig_pathgridsquare_, PathGridSquare) and isinstance(dest_pathgridsquare_, PathGridSquare)
-	if (orig_pathgridsquare_ == dest_pathgridsquare_) or orig_pathgridsquare_.is_adjacent(dest_pathgridsquare_):
-		return get_path_froutendirs_by_pathgridsquare_near(orig_pathgridsquare_, dest_pathgridsquare_, heading_)
+	if get_paths_use_near_algo(orig_pathgridsquare_, dest_pathgridsquare_):
+		return find_paths_by_pathgridsquare_near(orig_pathgridsquare_, dest_pathgridsquare_, heading_)
 	else:
-		return get_path_froutendirs_by_pathgridsquare_far(orig_pathgridsquare_, dest_pathgridsquare_)
+		return find_paths_by_pathgridsquare_far(orig_pathgridsquare_, dest_pathgridsquare_)
 
-def get_path_froutendirs_by_pathgridsquare_near(orig_pathgridsquare_, dest_pathgridsquare_, heading_):
-	sw, ne = get_path_froutendirs_by_pathgridsquare_near_bounding_box_latlngs(orig_pathgridsquare_, dest_pathgridsquare_)
-	return routes.get_fudgeroutes_for_map_bounds(sw, ne, heading_, 99999)
+def find_paths_by_pathgridsquare_near(orig_pathgridsquare_, dest_pathgridsquare_, heading_):
+	assert heading_ is not None
+	sw, ne = find_paths_by_pathgridsquare_near_bounding_box_latlngs(orig_pathgridsquare_, dest_pathgridsquare_)
+	froutendirs = routes.get_fudgeroutes_for_map_bounds(sw, ne, heading_, 99999)
+	return ([froutendirs[0]] if froutendirs else [], froutendirs)
 
-def get_path_froutendirs_by_pathgridsquare_near_bounding_box_latlngs(orig_pathgridsquare_, dest_pathgridsquare_):
+def find_paths_by_pathgridsquare_near_bounding_box_latlngs(orig_pathgridsquare_, dest_pathgridsquare_):
 	def to_fake_gridsquare(sq__):
 		r = [sq__.gridlat*2, sq__.gridlng*2]
 		if sq__.hires_quadrant in (1, 2):
@@ -523,17 +521,17 @@ def get_path_froutendirs_by_pathgridsquare_near_bounding_box_latlngs(orig_pathgr
 	ne_square = from_fake_gridsquare(ne, True)
 	return (sw_square.sw_latlng(), ne_square.ne_latlng())
 
-def get_path_froutendirs_by_pathgridsquare_far(orig_pathgridsquare_, dest_pathgridsquare_):
+def find_paths_by_pathgridsquare_far(orig_pathgridsquare_, dest_pathgridsquare_):
 	def get_max_midpt_to_corner_dist_m(gridsquare__):
 		dist_midpt_to_sw = gridsquare__.midpt_latlng().dist_m(gridsquare__.sw_latlng())
 		dist_midpt_to_ne = gridsquare__.midpt_latlng().dist_m(gridsquare__.ne_latlng())
 		return max(dist_midpt_to_sw, dist_midpt_to_ne)
 	radius_m = int(max(get_max_midpt_to_corner_dist_m(orig_pathgridsquare_), get_max_midpt_to_corner_dist_m(dest_pathgridsquare_)))
 	radius_m += 500
-	paths = get_paths_by_latlngs(orig_pathgridsquare_.midpt_latlng(), dest_pathgridsquare_.midpt_latlng(), radius_m)
+	paths = find_paths_by_latlngs(orig_pathgridsquare_.midpt_latlng(), dest_pathgridsquare_.midpt_latlng(), radius_m)
 	if len(paths) == 0:
 		return []
-	if 0: # TDR
+	if 0: 
 		printerr('------------------')
 		for path in paths:
 			printerr('minutes: %.1f' % (get_path_rough_time_estimate_secs(path)/60.0))
@@ -569,62 +567,62 @@ def get_pathgridsquares_lores():
 				r.append(sq)
 	return r
 
-def square_key(gridsq_, quadrant_):
-	assert isinstance(gridsq_, PathGridSquare) and quadrant_ in (1, 2, 3, 4, None)
-	return '%d,%d%s' % (gridsq_.gridlat, gridsq_.gridlng, ('' if quadrant_ is None else '|'+str(quadrant_)))
+def orig_dest_squares_key(orig_, dest_, heading_):
+	assert isinstance(orig_, PathGridSquare) and isinstance(dest_, PathGridSquare) and (heading_ is None or 0 <= heading_ <= 359)
+	r = '%s %s' % (orig_, dest_)
+	if heading_ is not None:
+		r += ' %d' % heading_
+	return r
 
 @mc.decorate
 def pathgridsquares_bothres():
 	r = []
-	hires_bounding_polygon = get_hires_bounding_polygon()
 	for pathgridsquare in get_pathgridsquares_lores():
-		if any(latlng.inside_polygon(hires_bounding_polygon) for latlng in pathgridsquare.corner_latlngs()):
+		if pathgridsquare.should_be_hires():
 			for quadrant in (1, 2, 3, 4):
-				r.append((pathgridsquare, quadrant))
+				hires_square = pathgridsquare.copy()
+				hires_square.hires_quadrant = quadrant
+				r.append(hires_square)
 		else:
-			r.append((pathgridsquare, None))
+			r.append(pathgridsquare)
 	return r
 
-@mc.decorate
-def pathgridsquares_bothres_ew():
-	r = []
-	hires_bounding_polygon = get_hires_bounding_polygon()
-	lores_bounding_polygons = get_lores_bounding_polygons()
-	for square in get_pathgridsquares_lores():
-		if any(square.midpt_latlng().inside_polygon(poly) for poly in lores_bounding_polygons):
-			for part in ('e', 'w'):
-				r.append((square, part))
-		elif any(latlng.inside_polygon(hires_bounding_polygon) for latlng in square.corner_latlngs()):
-			for part in range(16):
-				r.append((square, part))
-		else:
-			for part in ('a', 'b', 'c', 'd'):
-				r.append((square, part))
-	return r
-
-def orig_dest_latlngs_and_key_bothres_gen():
-	for orig_square, orig_quadrant in pathgridsquares_bothres():
-		for dest_square, dest_quadrant in pathgridsquares_bothres():
-			if (orig_square, orig_quadrant) != (dest_square, dest_quadrant):
-				orig_latlng = orig_square.midpt_latlng(orig_quadrant)
-				dest_latlng = dest_square.midpt_latlng(dest_quadrant)
-				orig_key = square_key(orig_square, orig_quadrant)
-				dest_key = square_key(dest_square, dest_quadrant)
-				yield (orig_latlng, dest_latlng, '%s %s' % (orig_key, dest_key))
+def pathgridsquares_bothres_combos_gen():
+	for orig_square in pathgridsquares_bothres():
+		for dest_square in pathgridsquares_bothres():
+			if orig_square != dest_square:
+				yield (orig_square, dest_square)
 
 def get_pathgridsquare(latlng_):
 	return str(PathGridSquare(latlng_))
 
+HEADING_ROUND = 30
+
+def round_heading_for_paths_db(heading_):
+	return geom.normalize_heading(round(heading_, HEADING_ROUND))
+
 def build_db_main():
+	if os.path.exists(PATHS_DB_FILENAME):
+		os.remove(PATHS_DB_FILENAME)
 	init_dbconn()
 	g_dbconn.execute('create table t (key text unique, value text)')
-	for i, (orig_latlng, dest_latlng, orig_dest_key) in enumerate(orig_dest_latlngs_and_key_bothres_gen()):
-		val = None
-		g_dbconn.execute('insert into t values (?, ?)', [orig_dest_key, ])
-		#if i % 10000 == 0:
-		if 1:
+	def insert(orig__, dest__, heading__, value__):
+		orig_dest_key = orig_dest_squares_key(orig__, dest__, heading__)
+		g_dbconn.execute('insert into t values (?, ?)', [orig_dest_key, json.dumps(value__)])
+	for i, (orig_square, dest_square) in enumerate(pathgridsquares_bothres_combos_gen()):
+		if get_paths_use_near_algo(orig_square, dest_square):
+			midpt_to_midpt_heading = round_heading_for_paths_db(orig_square.midpt_latlng().heading(dest_square.midpt_latlng()))
+			for heading_offset in range(-90, 91, HEADING_ROUND):
+				heading = geom.normalize_heading(midpt_to_midpt_heading + heading_offset)
+				value = find_paths_by_pathgridsquare(orig_square, dest_square, heading)
+				insert(orig_square, dest_square, heading, value)
+		else:
+			value = find_paths_by_pathgridsquare(orig_square, dest_square)
+			insert(orig_square, dest_square, None, value)
+		if i % 10:
 			g_dbconn.commit()
-			print i
+		print i
+	g_dbconn.commit()
 
 
 
@@ -670,7 +668,7 @@ if __name__ == '__main__':
 		#d = PathGridSquare(geom.LatLng(43.66690219292239, -79.40558238228459))
 		d = PathGridSquare(geom.LatLng(43.695331309135526, -79.4498710175385)) # way up dufferin 
 		t0 = time.time()
-		print get_path_froutendirs_by_pathgridsquare_far(o, d)
+		print find_paths_by_pathgridsquare_far(o, d)
 		print (time.time() - t0)
 		print approx_route_combos(o, d)
 
@@ -685,7 +683,7 @@ if __name__ == '__main__':
 				num_combos = approx_route_combos(origsquare, destsquare)
 				if 0:
 					t0 = time.time()
-					get_path_froutendirs_by_pathgridsquare_far(origsquare, destsquare)
+					find_paths_by_pathgridsquare_far(origsquare, destsquare)
 					print 'finding paths took %.1f seconds' % ((time.time() - t0))
 					print 'nearby route combos: %d' % num_combos
 				numcombos_to_count[num_combos] += 1

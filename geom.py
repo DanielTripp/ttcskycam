@@ -101,7 +101,9 @@ class LatLng:
 		return int(self.lat*1000 + self.lng*1000)
 
 	def __str__(self):
-		return '(%.6f, %.6f)' % (self.lat, self.lng)
+		return '(%.6f,%.6f)' % (self.lat, self.lng) # Avoiding spaces in case one of these ends up in a memcache key.
+			 # memcache doesn't handle spaces in keys.  We prevent memcache from seeing spaces in keys by replacing spaces with
+			 # a big ugly string.  So really we avoiding spaces here in order to minimize use of that big ugly string.
 
 	def __repr__(self):
 		return self.__str__()
@@ -321,9 +323,9 @@ def constrain_line_segment_to_box(linesegpt1_, linesegpt2_, box_sw_, box_ne_):
 class BoundingBox:
 	
 	def __init__(self, polygon_pts_):
-		assert isinstance(polygon_pts_[0], geom.LatLng)
-		self.southwest = geom.LatLng(min(pt.lat for pt in polygon_pts_), min(pt.lng for pt in polygon_pts_))
-		self.northeast = geom.LatLng(max(pt.lat for pt in polygon_pts_), max(pt.lng for pt in polygon_pts_))
+		assert isinstance(polygon_pts_[0], LatLng)
+		self.southwest = LatLng(min(pt.lat for pt in polygon_pts_), min(pt.lng for pt in polygon_pts_))
+		self.northeast = LatLng(max(pt.lat for pt in polygon_pts_), max(pt.lng for pt in polygon_pts_))
 
 if __name__ == '__main__':
 

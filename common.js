@@ -14,51 +14,65 @@ function hashCode(str_) {
 
 eval(get_sync("sprintf.js"));
 
-g_loading_get_count = 0;
+g_loading_urls = new buckets.LinkedList();
 
-function inc_loading_get_count() {
-	g_loading_get_count++;
-	if(g_loading_get_count == 1) {
+function add_to_loading_urls(url_) {
+	g_loading_urls.add(url_)
+	if(g_loading_urls.size() == 1) {
 		if(g_loading_gif_marker!=null) {
 			g_loading_gif_marker.setVisible(true);
 		}
-        var img = document.getElementById('loading_img');
-        if(img != null) {
-            img.style.visibility = 'visible';
-        }
+		var img = document.getElementById('loading_img');
+		if(img != null) {
+			img.style.visibility = 'visible';
+		}
+	}
+	update_p_loading_urls();
+}
+
+function update_p_loading_urls() {
+	var p_loading_urls = document.getElementById('p_loading_urls');
+	if(p_loading_urls != null) {
+		var html = "";
+		g_loading_urls.forEach(function(url) {
+			html += url+"<br>";
+		});
+		p_loading_urls.innerHTML = html;
 	}
 }
 
-function dec_loading_get_count() {
-	g_loading_get_count--;
-	if(g_loading_get_count == 0) {
+function remove_from_loading_urls(url_) {
+	var was_removed = g_loading_urls.remove(url_);
+	assert(was_removed, "url "+url_+" not found in list.");
+	if(g_loading_urls.size() == 0) {
 		if(g_loading_gif_marker!=null) {
 			g_loading_gif_marker.setVisible(false);
 		}
-        var img = document.getElementById('loading_img');
-        if(img != null) {
-            img.style.visibility = 'hidden';
-        }
+		var img = document.getElementById('loading_img');
+		if(img != null) {
+			img.style.visibility = 'hidden';
+		}
 	}
+	update_p_loading_urls();
 }
 
 // funcs_arg_ can be a single callable (success function) or an object with 'success' and/or 'error' members. 
 function get(url_, funcs_arg_) {
-	inc_loading_get_count();
+	add_to_loading_urls(url_);
 	var success_func = funcs_arg_.success, error_func = funcs_arg_.error;
 	if(success_func == undefined && error_func == undefined) {
 		success_func = funcs_arg_;
 	}
 	$.ajax({url:url_, async:true, 
 		error: function(jqXHR_, textStatus_, errorThrown_) {
-			dec_loading_get_count();
+			remove_from_loading_urls(url_);
 			if(error_func != undefined) {
 				error_func();
 			}
 			alert(sprintf("Error %s %s %s", jqXHR_, textStatus_, errorThrown_));
 		}, 
 		success: function(data_, textStatus_, jqXHR_) {
-			dec_loading_get_count();
+			remove_from_loading_urls(url_);
 			success_func($.parseJSON(data_));
 		}
 	});
@@ -201,6 +215,19 @@ function google_LatLng(latlon_) {
 	return new google.maps.LatLng(latlon_[0], latlon_[1]);
 }
 
+function from_google_LatLng(glatlng_) {
+	return [glatlng_.lat(), glatlng_.lng()];
+}
+
+// arg: array of float pairs representing latlngs. 
+function google_LatLngs(latlngs_) {
+	var r = [];
+	for(var i in latlngs_) {
+		r.push(google_LatLng(latlngs_[i]));
+	}
+	return r;
+}
+
 function callpy(module_and_funcname_) {
 	var func_args = new Array();
 	for(var i=1; i<arguments.length-1; i++) {
@@ -237,6 +264,10 @@ function callpy_url(module_and_funcname_, func_args_) {
 		paramstr += "&arg"+i+"="+encode_url_paramval(argval_json);
 	}
 	return "callpy.cgi?"+paramstr;
+}
+
+function toJsonString(obj_) {
+	return window.JSON.stringify(obj_);
 }
 
 function cgi_url(cgi_path_, func_args_) {
@@ -316,6 +347,15 @@ function add_all(dest_list_, src_list_) {
 
 function to_buckets_list(array_) {
 	var r = new buckets.LinkedList();
+	for(var i in array_) {
+		var e = array_[i];
+		r.add(e);
+	}
+	return r;
+}
+
+function to_buckets_set(array_) {
+	var r = new buckets.Set();
 	for(var i in array_) {
 		var e = array_[i];
 		r.add(e);
@@ -408,6 +448,21 @@ function draw_polygon(filename_) {
 	}
 	glatlngs.push(google_LatLng(raw_latlngs[0]));
 	new google.maps.Polyline({map: g_map, path: glatlngs, strokeColor: 'rgb(255,0,0)'});
+}
+
+function shallow_clone_set(set_) {
+	var r = new buckets.Set();
+	set_.forEach(function(e) {
+		r.add(e);
+	});
+	return r;
+}
+
+// buckets.Set's own intersection method modified the 'this' object.  This method doesn't. 
+function intersection(set1_, set2_) {
+	var set1_clone = shallow_clone_set(set1_);
+	set1_clone.intersection(set2_);
+	return set1_clone;
 }
 
 
