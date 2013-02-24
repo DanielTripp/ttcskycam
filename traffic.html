@@ -68,7 +68,7 @@ var g_playing = true;
 var g_mouseover_infowin = null;
 var g_mouseover_infowin_timer = null;
 
-var g_max_routes = 5;
+var g_num_extra_routes_to_show = 5;
 var g_trip_orig_marker = null, g_trip_dest_marker = null;
 var g_route_options_dialog_froute = null;
 var g_force_show_froutes = new buckets.Set(), g_force_hide_froutes = new buckets.Set();
@@ -662,7 +662,7 @@ function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
 			marker.setVisible(true);
 		}
 	}
-	//add_vid_mouseover_infowin(marker, size, vid_);
+	add_vid_mouseover_infowin(marker, size, vid_);
 	//add_solo_vid_click_listener(marker, vid_);
 	return marker;
 }
@@ -876,7 +876,7 @@ function initialize() {
 		$('#div_framerate').remove();
 	}
 
-	init_max_routes_controls();
+	init_num_extra_routes_controls();
 	init_trip_markers();
 
 	// TODO: update this comment. 
@@ -1163,7 +1163,7 @@ function get_display_set() {
 	var extras_added = 0;
 	for(var i in g_extra_path_froutendirs) {
 		var froute = g_extra_path_froutendirs[i][0], dir = g_extra_path_froutendirs[i][1];
-		if(extras_added >= g_max_routes) {
+		if(extras_added >= g_num_extra_routes_to_show) {
 			break;
 		}
 		if(!in_r(froute) && !g_force_hide_froutes.contains(froute)) {
@@ -1193,26 +1193,26 @@ function get_display_set() {
 	return r;
 }
 
-function init_max_routes_controls() {
-	set_contents('span_max_routes', ''+g_max_routes);
+function init_num_extra_routes_controls() {
+	set_contents('span_num_extra_routes', ''+g_num_extra_routes_to_show);
 
-	$('#down_img').on({'click': on_max_routes_down_clicked});
-	$('#up_img').on({'click': on_max_routes_up_clicked});
+	$('#down_img').on({'click': on_num_extra_routes_down_clicked});
+	$('#up_img').on({'click': on_num_extra_routes_up_clicked});
 }
 
-function on_max_routes_down_clicked() {
-	if(g_max_routes > 1) {
-		g_max_routes -= 1;
-		set_contents('span_max_routes', ''+g_max_routes);
-		figure_out_which_froutendirs_are_selected_then_get_data_for_them();
+function on_num_extra_routes_down_clicked() {
+	if(g_num_extra_routes_to_show > 0) {
+		g_num_extra_routes_to_show -= 1;
+		set_contents('span_num_extra_routes', ''+g_num_extra_routes_to_show);
+		recalc_display_set();
 	}
 }
 
-function on_max_routes_up_clicked() {
-	if(g_max_routes < 99) {
-		g_max_routes += 1;
-		set_contents('span_max_routes', ''+g_max_routes);
-		figure_out_which_froutendirs_are_selected_then_get_data_for_them();
+function on_num_extra_routes_up_clicked() {
+	if(g_num_extra_routes_to_show < 99) {
+		g_num_extra_routes_to_show += 1;
+		set_contents('span_num_extra_routes', ''+g_num_extra_routes_to_show);
+		recalc_display_set();
 	}
 }
 
@@ -1617,7 +1617,7 @@ $(document).ready(initialize);
 				<!--<div id="routeselectauto_controls_div" style="clear: both; float: right; display: none;"> -->
 					<div style="clear: both; float: right;">
 						<br/>
-						Max routes to show:<br/><font size="+2"><span id="span_max_routes"></span></font>  
+						# extra routes to show:<br/><font size="+2"><span id="span_num_extra_routes"></span></font>  
 						<img id="down_img" src="down.png"/> <img id="up_img" src="up.png"/> <br/>
 					</div>
 				<!-- </div> -->
