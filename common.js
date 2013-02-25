@@ -429,6 +429,62 @@ function add_delayed_event_listener(listenee_, eventname_, real_listener_func_, 
 	google.maps.event.addListener(listenee_, eventname_, delaying_listener);
 }
 
+var g_hover_listener_mousein_listenee_objectid_to_closeable = new buckets.Dictionary();
+
+// listener_func_ should return something that we can all close() on.
+// delay_millis_ - we will use this for the delay in both calling listener_func_, and calling close() on the
+// 		object that it returns.
+function add_hover_listener(listenee_, listener_func_, delay_millis_) {
+	google.maps.event.addListener(listenee_, 'mouseover', function() { 
+		g_hover_listener_mousein_listenee_objectid_to_closeable.set(object_id(listenee_), null);
+		setTimeout(function() {
+			if(g_hover_listener_mousein_listenee_objectid_to_closeable.containsKey(object_id(listenee_))) {
+				var closeable = listener_func_();
+				g_hover_listener_mousein_listenee_objectid_to_closeable.set(object_id(listenee_), closeable);
+			}
+		}, delay_millis_);
+	});
+	google.maps.event.addListener(listenee_, 'mouseout', function() { 
+		var closeable = g_hover_listener_mousein_listenee_objectid_to_closeable.get(object_id(listenee_));
+		g_hover_listener_mousein_listenee_objectid_to_closeable.remove(object_id(listenee_));
+		var close_it = function() {
+			if(closeable != null) {
+				closeable.close();
+			}
+		};
+		setTimeout(close_it, delay_millis_);
+	});
+}
+
+var g_next_objid = 1;
+
+// adapted from http://stackoverflow.com/questions/2020670/javascript-object-id 
+function object_id(obj_) {
+    if(obj_==null) {
+			return null;
+		}
+    if(obj_.__obj_id==undefined) {
+			obj_.__obj_id = g_next_objid++;
+		}
+    return obj_.__obj_id;
+}
+
+// adapted from http://ejohn.org/blog/javascript-array-remove/ 
+function array_remove(array_, from_, to_) {
+	var rest = array_.slice((to_ || from_) + 1 || array_.length);
+	array_.length = from_ < 0 ? array_.length + from_ : from_;
+	return array_.push.apply(array_, rest);
+};
+
+function array_indexof_identity(array_, object_) {
+	for(var i in array_) {
+		if(array_[i] === object_) {
+			return i;
+		}
+	}
+	return -1;
+}
+
 function sorted_keys(dict_) {
     var keys = [];
     for(var key in dict_) {
