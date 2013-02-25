@@ -717,7 +717,13 @@ function is_solo_already() {
 }
 
 function add_vid_mouseover_infowin(vehicle_marker_, vehicle_marker_size_, vid_) {
-	add_mouseover_infowin(vehicle_marker_, vehicle_marker_size_/3, 'Vehicle ID: '+vid_);
+	add_hover_listener(vehicle_marker_, function() {
+		var infowin = new google.maps.InfoWindow({content: sprintf('Vehicle ID %s', vid_), 
+			position: vehicle_marker_.getPosition()});
+		infowin.open(g_map);
+		return infowin;
+	}, 1000);
+
 }
 
 function add_mouseover_infowin(map_object_, offset_, text_) {
@@ -1465,9 +1471,11 @@ function make_traffic_line(froute_, start_latlon_, end_latlon_, kmph_, mofr_) {
 		r.add(line_behind);
 	}
 
+	/*
 	var infowin_text = sprintf("The average speed here, in this direction, is %s.", 
 			(kmph_==null ? 'not available' : sprintf('%.1f kmph', kmph_)));
 	add_mouseover_infowin(line, 0, infowin_text);
+	*/
 
 	return r;
 }
