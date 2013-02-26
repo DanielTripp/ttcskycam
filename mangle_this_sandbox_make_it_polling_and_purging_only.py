@@ -45,4 +45,5 @@ if __name__ == '__main__':
 				shutil.rmtree(os.path.join(dirpath, dirname))
 			break
 
+		os.remove('paths.sqlitedb')
 
