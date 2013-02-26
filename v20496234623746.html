@@ -294,7 +294,7 @@ function slider_float_to_timeidx(floatval_) {
 }
 
 function run_query1(whereclause_, maxrows_, interpbytime_) {
-	inc_loading_get_count();
+	add_to_loading_urls('sql');
 	try {
 		display_vis(get_sync("debug-vehicle-query1.cgi?whereclause="+encode_url_paramval(whereclause_)+"&maxrows="+maxrows_+"&interpbytime="+interpbytime_));
 		if($('#collapseanimation_checkbox').is(":checked")) {
@@ -302,7 +302,7 @@ function run_query1(whereclause_, maxrows_, interpbytime_) {
 		}
 		recreate_slider();
 	} finally {
-		dec_loading_get_count();
+		remove_from_loading_urls('sql');
 	}
 }
 

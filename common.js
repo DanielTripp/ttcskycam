@@ -13,8 +13,9 @@ function hashCode(str_) {
 }
 
 eval(get_sync("sprintf.js"));
+eval(get_sync("js/buckets-minified.js"));
 
-g_loading_urls = new buckets.LinkedList();
+var g_loading_urls = new buckets.LinkedList();
 
 function add_to_loading_urls(url_) {
 	g_loading_urls.add(url_)
@@ -431,7 +432,7 @@ function add_delayed_event_listener(listenee_, eventname_, real_listener_func_, 
 
 var g_hover_listener_mousein_listenee_objectid_to_closeable = new buckets.Dictionary();
 
-// listener_func_ should return something that we can all close() on.
+// listener_func_ should return something that we can all close() on. 
 // delay_millis_ - we will use this for the delay in both calling listener_func_, and calling close() on the
 // 		object that it returns.
 function add_hover_listener(listenee_, listener_func_, delay_millis_) {
