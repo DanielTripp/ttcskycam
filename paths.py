@@ -464,16 +464,24 @@ class PathGridSquare(object):
 		r.hires_quadrant = self.hires_quadrant
 		return r
 
-@mc.decorate
 def get_paths_by_latlngs(orig_latlng_, dest_latlng_):
 	assert isinstance(orig_latlng_, geom.LatLng) and isinstance(dest_latlng_, geom.LatLng)
-	heading = round_heading_for_paths_db(orig_latlng_.heading(dest_latlng_))
-	return find_paths_by_pathgridsquare(PathGridSquare(orig_latlng_), PathGridSquare(dest_latlng_), heading)
+	orig_square = PathGridSquare(orig_latlng_)
+	dest_square = PathGridSquare(dest_latlng_)
+	if get_paths_use_near_algo(orig_square, dest_square):
+		heading = round_heading_for_paths_db(orig_latlng_.heading(dest_latlng_))
+	else:
+		heading = None
+	key = orig_dest_squares_key(orig_square, dest_square, heading)
+	init_dbconn()
+	r_row = g_dbconn.execute('select value from t where key = ?', [key]).fetchone()
+	if r_row is None:
+		raise Exception('key "%s" not found in database.' % key)
+	return json.loads(r_row[0])
 
 def get_paths_use_near_algo(orig_square_, dest_square_):
 	return (orig_square_ == dest_square_) or orig_square_.is_adjacent(dest_square_)
 
-@mc.decorate
 def find_paths_by_pathgridsquare(orig_pathgridsquare_, dest_pathgridsquare_, heading_=None):
 	assert isinstance(orig_pathgridsquare_, PathGridSquare) and isinstance(dest_pathgridsquare_, PathGridSquare)
 	if get_paths_use_near_algo(orig_pathgridsquare_, dest_pathgridsquare_):
