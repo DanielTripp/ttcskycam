@@ -46,6 +46,10 @@ var g_show_static_vehicles = true, g_show_moving_vehicles = true, g_show_traffic
 // End of this list = highest zindex i.e. most visible.  
 var g_froute_zindexes = ['ossington', 'lansdowne', 'spadina', 'bathurst', 'dufferin', 'dupont', 'carlton', 'dundas', 'king', 'queen'];
 
+ // complete list of all froutes, whether they are shown or not.  
+// This will be filled in later, then after that will remain unchanged.  
+var g_all_froutes = [];
+
 var g_subway_froutes = to_buckets_set(['bloor_danforth', 'yonge_university_spadina']);
 var g_subway_froute_to_route_latlngs = {};
 
@@ -922,12 +926,29 @@ function on_route_options_dialog_ok_clicked() {
 function update_force_sets_from_dialog_gui() {
 	assert_force_sets_consistent();
 	var show = radio_val('show');
+
+	var was_solo = showing_route_solo(g_route_options_dialog_froute);
+	if(was_solo && show != 'solo') {
+		g_force_show_froutes.clear();
+		g_force_hide_froutes.clear();
+	}
+
 	if(show == 'show') {
 		g_force_show_froutes.add(g_route_options_dialog_froute);
 		g_force_hide_froutes.remove(g_route_options_dialog_froute);
 	} else if(show == 'hide') {
 		g_force_show_froutes.remove(g_route_options_dialog_froute);
 		g_force_hide_froutes.add(g_route_options_dialog_froute);
+	} else if(show == 'solo') {
+		g_force_show_froutes.clear();
+		g_force_show_froutes.add(g_route_options_dialog_froute);
+		g_force_hide_froutes.clear();
+		for(var i in g_all_froutes) {
+			var froute = g_all_froutes[i];
+			if(froute != g_route_options_dialog_froute) {
+				g_force_hide_froutes.add(froute);
+			}
+		}
 	} else {
 		g_force_show_froutes.remove(g_route_options_dialog_froute);
 		g_force_hide_froutes.remove(g_route_options_dialog_froute);
@@ -960,6 +981,8 @@ function add_invisible_route_lines() {
 		if(is_subway(froute)) { // then save these for later. 
 			g_subway_froute_to_route_latlngs[froute] = latlngs;
 		}
+
+		g_all_froutes.push(froute); // using this opportunity to build a complete list of froute names on the client side here. 
 	}
 }
 
@@ -986,7 +1009,9 @@ function on_route_clicked(froute_, latlng_) {
 		return (bool_ ? ' checked="checked" ' : ' ');
 	}
 	var show = 'auto';
-	if(g_force_show_froutes.contains(froute_)) {
+	if(showing_route_solo(froute_)) {
+		show = 'solo';
+	} else if(g_force_show_froutes.contains(froute_)) {
 		show = 'show';
 	} else if(g_force_hide_froutes.contains(froute_)) {
 		show = 'hide';
@@ -998,9 +1023,11 @@ function on_route_clicked(froute_, latlng_) {
 		+ '<input id="showhidebutton" type="radio" name="show" value="hide" onclick="" %(hidechecked)s />'
 		+ '<label for="showhidebutton" onclick="">Hide</label><br>'
 		+ '<input id="showautobutton" type="radio" name="show" value="auto" onclick="" %(autochecked)s />'
-		+ '<label for="showautobutton" onclick="">Auto</label><br>', 
-		{froute: froute_, showchecked: s(show == 'show'), 
-			hidechecked: s(show == 'hide'), autochecked: s(show == 'auto')});
+		+ '<label for="showautobutton" onclick="">Auto</label><br>'
+		+ '<input id="showsolobutton" type="radio" name="show" value="solo" onclick="" %(solochecked)s />'
+		+ '<label for="showsolobutton" onclick="">Show this route only</label><br>', 
+		{froute: froute_, showchecked: s(show == 'show'), hidechecked: s(show == 'hide'), 
+			autochecked: s(show == 'auto'), solochecked: s(show == 'solo')});
 	if(!is_subway(froute_)) {
 		var dir = 'auto';
 		if(g_force_dir0_froutes.contains(froute_)) {
@@ -1020,6 +1047,13 @@ function on_route_clicked(froute_, latlng_) {
 	}
 	$('#route-options-dialog').html(html);
 	$('#route-options-dialog').dialog('open');
+}
+
+function showing_route_solo(froute_) {
+	assert_force_sets_consistent();
+	assert(g_all_froutes.indexOf(froute_) != -1, "unknown froute '"+froute_+"'");
+	return (g_force_show_froutes.size() == 1 && g_force_show_froutes.contains(froute_) 
+			&& g_force_hide_froutes.size() == g_all_froutes.length-1);
 }
 
 function draw_pathgridsquares() {
@@ -1455,7 +1489,7 @@ function make_traffic_line(froute_, start_latlon_, end_latlon_, kmph_, mofr_) {
 		map: g_map, 
 		strokeColor: kmph_to_color(kmph_), 
 		strokeWeight: (draw_outline ? get_traffic_line_width()-1 : get_traffic_line_width()),  
-		zIndex: get_traffic_line_zindex(froute_, false), 
+		zIndex: get_traffic_line_zindex(froute_, false),
 		visible: g_show_traffic_lines 
 	});
 	r.add(line);
@@ -1466,7 +1500,7 @@ function make_traffic_line(froute_, start_latlon_, end_latlon_, kmph_, mofr_) {
 			strokeColor: get_outline_color(kmph_), 
 			strokeWeight: get_traffic_line_width(), 
 			zIndex: get_traffic_line_zindex(froute_, true),
-			visible: g_show_traffic_lines 
+			visible: g_show_traffic_lines
 		});
 		r.add(line_behind);
 	}
