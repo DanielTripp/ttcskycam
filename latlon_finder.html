@@ -31,11 +31,18 @@ function initialize() {
 
 	google.maps.event.addListener(g_marker, 'drag', show_latlng);
 
+	google.maps.event.addListener(g_map, 'zoom_changed', on_zoom_changed);
+
+	on_zoom_changed();
 	show_latlng();
 }
 
+function on_zoom_changed() {
+	set_contents('p_zoom', ""+(g_map.getZoom())); 
+}
+
 function show_latlng() {
-	set_contents('p1', sprintf("%f, %f", g_marker.getPosition().lat(), g_marker.getPosition().lng()));
+	set_contents('p_latlng', sprintf("%f, %f", g_marker.getPosition().lat(), g_marker.getPosition().lng()));
 }
 
 
@@ -44,6 +51,7 @@ function show_latlng() {
   </head>
   <body onload="initialize()" >
 		<div id="map_canvas" style="width:80%; height:100%"></div>
-		<p id="p1"/>
+		<p id="p_zoom"/>
+		<p id="p_latlng"/>
   </body>
 </html>
