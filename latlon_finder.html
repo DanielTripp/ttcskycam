@@ -17,6 +17,7 @@
 
 
 var g_marker = null;
+var g_geocoder = new google.maps.Geocoder();
 
 function initialize() {
 
@@ -29,21 +30,52 @@ function initialize() {
 		draggable: true
 		});
 
-	google.maps.event.addListener(g_marker, 'drag', show_latlng);
+	google.maps.event.addListener(g_marker, 'drag', show_latlng_text);
 
 	google.maps.event.addListener(g_map, 'zoom_changed', on_zoom_changed);
 
 	on_zoom_changed();
-	show_latlng();
+	show_latlng_text();
+
+	$('#search_address').keydown(function (e){
+		if(e.keyCode == 13) {
+			$('#search_button').trigger('click');
+		}
+	});
+
+	document.getElementById('search_address').focus();
+	document.getElementById('search_address').select();
+
 }
 
 function on_zoom_changed() {
-	set_contents('p_zoom', ""+(g_map.getZoom())); 
+	set_contents('p_zoom', "Zoom: "+(g_map.getZoom())); 
 }
 
-function show_latlng() {
-	set_contents('p_latlng', sprintf("%f, %f", g_marker.getPosition().lat(), g_marker.getPosition().lng()));
+function show_latlng_text() {
+	set_contents('p_latlng', sprintf("Marker's position:   %.7f, %.7f", g_marker.getPosition().lat(), g_marker.getPosition().lng()));
 }
+
+function search() {
+    g_geocoder.geocode(
+        {'address': document.getElementById('search_address').value}, 
+        function(results, status) { 
+            if (status == google.maps.GeocoderStatus.OK) { 
+                var pos = results[0].geometry.location;
+                g_marker.setPosition(pos);
+								show_latlng_text();
+
+								var sw = g_map.getBounds().getSouthWest(), ne = g_map.getBounds().getNorthEast();
+								if(pos.lat() < sw.lat() || pos.lat() > ne.lat() || pos.lng() < sw.lng() || pos.lng() > ne.lng()) {
+									g_map.panTo(pos);
+								}
+            } 
+            else {
+                alert("Not found: " + status); 
+            } 
+        }
+    );
+};
 
 
 
@@ -53,5 +85,15 @@ function show_latlng() {
 		<div id="map_canvas" style="width:80%; height:100%"></div>
 		<p id="p_zoom"/>
 		<p id="p_latlng"/>
+		<form name="form1">
+			<input type="text" size="60" name="search_address" id="search_address" />
+			<input id="search_button" type="button" value="Search" onclick="search(); return false;"/> 
+			
+			<!-- If I don't put this here, then pressing enter while in the above (important) text field makes the page reload.  
+				I don't know why. --> 
+			&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<input type="text" size="5" value="dummy" /> 
+
+		</form>
+
   </body>
 </html>
