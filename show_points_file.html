@@ -45,15 +45,13 @@ function get_latlngs_from_file() {
 	g_latlngs.clear();
 	var contents_str = get_sync(get_value('filename_field'), {cache: false});
 	if(contents_str != null) {
-		var contents_latlng_list = null;
+		var contents_latlng_list = [];
 		try {
 			contents_latlng_list = $.parseJSON(contents_str);
 		} catch(e) {
 			// So it wasn't JSON.    Maybe it's XML: 
 			try {
 				var dom = $.parseXML(contents_str);
-				contents_latlng_list = [];
-
 				$(dom).find('*').each(function() {
 					var lat = $(this).attr('lat'), lng = $(this).attr('lon');
 					if(lat != undefined && lng != undefined) {
@@ -62,42 +60,22 @@ function get_latlngs_from_file() {
 				});
 			} catch(err) {
 				var lines = contents_str.split('\n');
-				var latindex = -1; var lngindex = -1;
-				var first_line_fields = flatfile_get_fields_from_line(lines[0]);
-				for(var fieldidx in first_line_fields) {
-					var first_line_field = first_line_fields[fieldidx];
-					var floatval = parseFloat(first_line_field);
-					if(floatval == NaN) {
-						continue;
-					}
-					if(floatval > -80 && floatval < -78) {
-						lngindex = fieldidx;
-					} else if(floatval > 43 && floatval < 45) {
-						latindex = fieldidx;
-					}
-					if(latindex != -1 && lngindex != -1) {
-						break;
-					}
-				}
-
-				if(latindex != -1 && lngindex != -1) {
-					contents_latlng_list = [];
-					for(var i=1; i<lines.length; i++) {
-						var line = lines[i];
-						var fields = flatfile_get_fields_from_line(line);
-						if(fields.length >= Math.max(latindex, lngindex)+1) {
-							contents_latlng_list.push([fields[latindex], fields[lngindex]]);
-						}
+				for(var linei in lines) {
+					var line = lines[linei];
+					var regex = /([-]?\d+\.\d+)[ ,]*([-]?\d+\.\d+)/g;
+					var match = regex.exec(line);
+					if(match != null) {
+					  var lat = parseFloat(match[1], 10);
+						var lng = parseFloat(match[2], 10);
+						contents_latlng_list.push([lat, lng]);
 					}
 				}
 			}
 		}
-		if(contents_latlng_list != null) {
-			for(var i in contents_latlng_list) {
-				var raw_latlng = contents_latlng_list[i];
-				var glatlng = new google.maps.LatLng(raw_latlng[0], raw_latlng[1]);
-				g_latlngs.add(glatlng);
-			}
+		for(var i in contents_latlng_list) {
+			var raw_latlng = contents_latlng_list[i];
+			var glatlng = new google.maps.LatLng(raw_latlng[0], raw_latlng[1]);
+			g_latlngs.add(glatlng);
 		}
 	}
 }
@@ -166,7 +144,8 @@ function draw_all_points() {
 function make_line(latlng_, i_) {
 	var polyline = new google.maps.Polyline({map: g_map, strokeWeight: get_dot_size(), strokeOpacity: g_dot_opacity, 
 			path: [latlng_, latlng_]});
-	var infowin = new google.maps.InfoWindow({position: polyline.getPath().getAt(0), content: ''+i_, disableAutoPan: true});
+	var infowin = new google.maps.InfoWindow({position: polyline.getPath().getAt(0), disableAutoPan: true, 
+			content: sprintf('#%d - %.8f, %.8f', i_, latlng_.lat(), latlng_.lng())});
 	google.maps.event.addListener(polyline, 'mouseover', function() {
 		infowin.open(g_map);
 	});
