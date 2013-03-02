@@ -30,7 +30,7 @@ function initialize() {
 		draggable: true
 		});
 
-	google.maps.event.addListener(g_marker, 'drag', show_latlng_text);
+	google.maps.event.addListener(g_marker, 'drag', on_drag);
 
 	google.maps.event.addListener(g_map, 'zoom_changed', on_zoom_changed);
 
@@ -52,6 +52,11 @@ function on_zoom_changed() {
 	set_contents('p_zoom', "Zoom: "+(g_map.getZoom())); 
 }
 
+function on_drag() {
+	set_contents('p_used_geocoder', '...');
+	show_latlng_text();
+}
+
 function show_latlng_text() {
 	set_contents('p_latlng', sprintf("Marker's position:   %.7f, %.7f", g_marker.getPosition().lat(), g_marker.getPosition().lng()));
 }
@@ -64,6 +69,7 @@ function search() {
 			var lat = parseFloat(match[1], 10);
 			var lng = parseFloat(match[2], 10);
 			g_marker.setPosition(new google.maps.LatLng(lat, lng));
+			set_contents('p_used_geocoder', '...');
 			on_marker_moved_via_text_textfield();
 		} else {
 			g_geocoder.geocode(
@@ -73,6 +79,7 @@ function search() {
 									var pos = results[0].geometry.location;
 									g_marker.setPosition(pos);
 									on_marker_moved_via_text_textfield();
+									set_contents('p_used_geocoder', '<b>USED GEOCODER</b>');
 							} 
 							else {
 									alert("Not found: " + status); 
@@ -103,6 +110,7 @@ function pan_to_marker_maybe() {
 		<div id="map_canvas" style="width:80%; height:100%"></div>
 		<p id="p_zoom"/>
 		<p id="p_latlng"/>
+		<p id="p_used_geocoder">...</p>
 		<form name="form1">
 			<input type="text" size="60" name="search_textfield" id="search_textfield" />
 			<input id="search_button" type="button" value="Search" onclick="search(); return false;"/> 
