@@ -37,14 +37,14 @@ function initialize() {
 	on_zoom_changed();
 	show_latlng_text();
 
-	$('#search_address').keydown(function (e){
+	$('#search_textfield').keydown(function (e){
 		if(e.keyCode == 13) {
 			$('#search_button').trigger('click');
 		}
 	});
 
-	document.getElementById('search_address').focus();
-	document.getElementById('search_address').select();
+	document.getElementById('search_textfield').focus();
+	document.getElementById('search_textfield').select();
 
 }
 
@@ -57,25 +57,43 @@ function show_latlng_text() {
 }
 
 function search() {
-    g_geocoder.geocode(
-        {'address': document.getElementById('search_address').value}, 
-        function(results, status) { 
-            if (status == google.maps.GeocoderStatus.OK) { 
-                var pos = results[0].geometry.location;
-                g_marker.setPosition(pos);
-								show_latlng_text();
-
-								var sw = g_map.getBounds().getSouthWest(), ne = g_map.getBounds().getNorthEast();
-								if(pos.lat() < sw.lat() || pos.lat() > ne.lat() || pos.lng() < sw.lng() || pos.lng() > ne.lng()) {
-									g_map.panTo(pos);
-								}
-            } 
-            else {
-                alert("Not found: " + status); 
-            } 
-        }
-    );
+		var string_to_search = document.getElementById('search_textfield').value;
+		var regex = /([-]?\d+\.\d+)[ ,]*([-]?\d+\.\d+)/g;
+		var match = regex.exec(string_to_search);
+		if(match != null) {
+			var lat = parseFloat(match[1], 10);
+			var lng = parseFloat(match[2], 10);
+			g_marker.setPosition(new google.maps.LatLng(lat, lng));
+			on_marker_moved_via_text_textfield();
+		} else {
+			g_geocoder.geocode(
+					{'address': string_to_search}, 
+					function(results, status) { 
+							if (status == google.maps.GeocoderStatus.OK) { 
+									var pos = results[0].geometry.location;
+									g_marker.setPosition(pos);
+									on_marker_moved_via_text_textfield();
+							} 
+							else {
+									alert("Not found: " + status); 
+							} 
+					}
+			);
+		}
 };
+
+function on_marker_moved_via_text_textfield() {
+	show_latlng_text();
+	pan_to_marker_maybe();
+}
+
+function pan_to_marker_maybe() {
+	var sw = g_map.getBounds().getSouthWest(), ne = g_map.getBounds().getNorthEast();
+	var pos = g_marker.getPosition();
+	if(pos.lat() < sw.lat() || pos.lat() > ne.lat() || pos.lng() < sw.lng() || pos.lng() > ne.lng()) {
+		g_map.panTo(pos);
+	}
+}
 
 
 
@@ -86,7 +104,7 @@ function search() {
 		<p id="p_zoom"/>
 		<p id="p_latlng"/>
 		<form name="form1">
-			<input type="text" size="60" name="search_address" id="search_address" />
+			<input type="text" size="60" name="search_textfield" id="search_textfield" />
 			<input id="search_button" type="button" value="Search" onclick="search(); return false;"/> 
 			
 			<!-- If I don't put this here, then pressing enter while in the above (important) text field makes the page reload.  
