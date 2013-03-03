@@ -28,6 +28,12 @@ def get_polygon_from_file(filename_):
 def get_city_bounding_polygon():
 	return get_polygon_from_file('paths_db_city_bounding_polygon.json')
 
+def get_city_sw():
+	return geom.LatLng(min(pt.lat for pt in get_city_bounding_polygon()), min(pt.lng for pt in get_city_bounding_polygon()))
+
+def get_city_ne():
+	return geom.LatLng(max(pt.lat for pt in get_city_bounding_polygon()), max(pt.lng for pt in get_city_bounding_polygon()))
+
 @mc.decorate
 def get_hires_bounding_polygon():
 	return get_polygon_from_file('paths_db_hires_bounding_polygon.json')

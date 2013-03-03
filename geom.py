@@ -101,7 +101,7 @@ class LatLng:
 		return int(self.lat*1000 + self.lng*1000)
 
 	def __str__(self):
-		return '(%.6f,%.6f)' % (self.lat, self.lng) # Avoiding spaces in case one of these ends up in a memcache key.
+		return '(%.7f,%.7f)' % (self.lat, self.lng) # Avoiding spaces in case one of these ends up in a memcache key.
 			 # memcache doesn't handle spaces in keys.  We prevent memcache from seeing spaces in keys by replacing spaces with
 			 # a big ugly string.  So really we avoiding spaces here in order to minimize use of that big ugly string.
 
