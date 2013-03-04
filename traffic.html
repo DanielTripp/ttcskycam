@@ -26,6 +26,7 @@ var SHOW_FRAMERATE = false;
 var SHOW_TIME_SELECTOR = true;
 var SHOW_PATHS_TEXT = true;
 var SHOW_LOADING_URLS = true;
+var DISABLE_GEOLOCATION = true;
 
 function new_fudgeroute_data() {
 	return {
@@ -907,14 +908,16 @@ function initialize() {
 }
 
 function init_geolocation() {
-	if(navigator.geolocation) {
-		var on_success = function(position) {
-			var latlng = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
-			g_trip_orig_marker.setPosition(latlng);
-			g_map.panTo(latlng);
-			on_trip_marker_moved();
-		};
-		navigator.geolocation.getCurrentPosition(on_success, null, {timeout: 10000});
+	if(!DISABLE_GEOLOCATION) {
+		if(navigator.geolocation) {
+			var on_success = function(position) {
+				var latlng = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
+				g_trip_orig_marker.setPosition(latlng);
+				g_map.panTo(latlng);
+				on_trip_marker_moved();
+			};
+			navigator.geolocation.getCurrentPosition(on_success, null, {timeout: 10000});
+		}
 	}
 }
 
@@ -948,7 +951,7 @@ function refresh_streetlabels_singleroute(froute_) {
 				for(var labeli in labels) {
 					var label = labels[labeli];
 					var marker = new google.maps.Marker({position: google_LatLng(label.latlng), 
-						map: g_map, draggable: false, flat: true, zIndex: 4,
+						map: g_map, draggable: false, flat: true, clickable: false, zIndex: 4,
 						icon: new google.maps.MarkerImage(get_streetlabel_cgi_url(label.text, label.rotation, zoom), 
 								null, null, new google.maps.Point(150, 150)),
 						});
