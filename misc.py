@@ -1,6 +1,6 @@
 #!/usr/bin/python2.6
 
-import sys, os, time, math, datetime, calendar, bisect
+import sys, os, os.path, time, math, datetime, calendar, bisect, tempfile, subprocess
 from collections import MutableSequence, defaultdict
 
 def em_to_str(t_):
@@ -519,8 +519,26 @@ def remove_consecutive_duplicates(list_, key=None):
 			curkey = prevkey
 		i += 1
 
-if __name__ == '__main__':
+def svg_to_png(svgstr_):
+	tmpdir = ('/tmp/dt' if os.path.isdir('/tmp/dt') else '/tmp')
+	svg_fileno, svg_filename = tempfile.mkstemp('.svg', 'ttc-temp-svg-to-png-', tmpdir)
+	svg_file = os.fdopen(svg_fileno, 'w')
+	svg_file.write(svgstr_)
+	svg_file.close()
+	subprocess.check_call(['java', '-jar', 'batik-1.7/batik-rasterizer.jar', svg_filename], \
+			stdout=open('/dev/null', 'w'), stderr=open('/dev/null', 'w'))
 
+	assert svg_filename[-4:] == '.svg'
+	png_filename = svg_filename[:-4] + '.png' # batik just created this .png file, with a name based on the svg filename. 
+
+	with open(png_filename, 'rb') as png_fin:
+		png_contents = png_fin.read()
+	os.remove(svg_filename)
+	os.remove(png_filename)
+	return png_contents
+
+
+if __name__ == '__main__':
 
 	print invert_dict({1: 'a', 2: 'b'})
 
