@@ -9,7 +9,7 @@
     </style>
 		<link type="text/css" href="css/ui-lightness/jquery-ui-1.8.17.custom.css" rel="stylesheet" />
     <script type="text/javascript"
-      src="http://maps.googleapis.com/maps/api/js?sensor=false">
+      src="http://maps.googleapis.com/maps/api/js?sensor=true">
     </script>
 		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
 		<script type="text/javascript" src="js/infobox_packed.js"></script>
@@ -885,6 +885,7 @@ function initialize() {
 
 	init_num_extra_routes_controls();
 	init_trip_markers();
+	init_geolocation();
 
 	// TODO: update this comment. 
 	// The first 'get' of data from the server will happen due to a bounds_changed event on the map that happens to it on 
@@ -903,6 +904,25 @@ function initialize() {
 
 	on_trip_marker_moved();
 
+}
+
+function init_geolocation() {
+	if(navigator.geolocation) {
+		var on_success = function(position) {
+			var latlng = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
+			g_trip_orig_marker.setPosition(latlng);
+			g_map.panTo(latlng);
+			on_trip_marker_moved();
+		};
+		navigator.geolocation.getCurrentPosition(on_success, null, {timeout: 10000});
+	}
+}
+
+function map_fit_bounds_to_trip_markers() {
+	var p1 = g_trip_orig_marker.getPosition(), p2 = g_trip_dest_marker.getPosition();
+	var sw = new google.maps.LatLng(Math.min(p1.lat(), p2.lat()), Math.min(p1.lng(), p2.lng()));
+	var ne = new google.maps.LatLng(Math.max(p1.lat(), p2.lat()), Math.max(p1.lng(), p2.lng()));
+	g_map.fitBounds(new google.maps.LatLngBounds(sw, ne));
 }
 
 function refresh_streetlabels_allroutes() {
@@ -1158,6 +1178,8 @@ function init_trip_markers() {
 
 	google.maps.event.addListener(g_trip_orig_marker, 'dragend', on_trip_marker_moved);
 	google.maps.event.addListener(g_trip_dest_marker, 'dragend', on_trip_marker_moved);
+
+	map_fit_bounds_to_trip_markers();
 }
 
 function on_trip_marker_moved() {
