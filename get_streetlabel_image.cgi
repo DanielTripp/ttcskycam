@@ -20,12 +20,17 @@ def get_arg_objvals(vardict_):
 	return [strvals[0], int(strvals[1]), int(strvals[2])]
 
 def get_streetlabel_svg(text_, rotation_, zoom_):
-	fontsize = {13:7, 14:8, 15:8, 16:9, 17:10, 18:10, 19:10, 20:10, 21:10}[zoom_]/2
-	textshift = fontsize/2
+	fontsize = {13:3.5, 14:4, 15:4, 16:4.5, 17:5, 18:5, 19:5, 20:5, 21:5}[zoom_]
+	# In SVG the y location of text seems to be the baseline i.e. bottom of upper-case letters.  So if we set that baseline 
+	# to be the vertical middle of the graphic, and also use that vertical middle to coincide with the middle of the 
+	# google maps polyline (which we do) then to get the text to sit in the middle of the polyline, we'll have to shift the 
+	# text down.  I don't know why shifting it down by 1/3 of the font size does what we want, but it does. 
+	textshift = fontsize/3.0 
+	# SVG transforms are evaluated right to left.  So below we're translating, then rotating. 
 	svgstr = '''<svg xmlns="http://www.w3.org/2000/svg" width="300" height="300" viewBox="0 0 100 100" version="1.1">
-<g transform="translate(0 %(textshift)d) rotate(%(rotation)d 50 50)" >
-<text x="49.7" y="49.7" fill="rgb(255,255,255)" font-family="sans-serif" font-size="%(fontsize)s">%(text)s</text>
-<text x="50" y="50" fill="rgb(80,50,20)" font-family="sans-serif" font-size="%(fontsize)s">%(text)s</text>
+<g transform="rotate(%(rotation)d 50 50) translate(0 %(textshift)f)" >
+<text x="49.7" y="49.7" fill="rgb(255,255,255)" font-family="sans-serif" font-size="%(fontsize)f">%(text)s</text>
+<text x="50" y="50" fill="rgb(80,50,20)" font-family="sans-serif" font-size="%(fontsize)f">%(text)s</text>
 </g>
 </svg>''' % {'text': text_, 'rotation': rotation_, 'fontsize': fontsize, 'textshift': textshift}
 	return svgstr
