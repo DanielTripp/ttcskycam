@@ -108,6 +108,9 @@ class LatLng:
 	def __repr__(self):
 		return self.__str__()
 
+	def copy(self):
+		return LatLng(self.lat, self.lng)
+
 def angle(arm1_, origin_, arm2_):
 	assert isinstance(arm1_, LatLng) and isinstance(origin_, LatLng) and isinstance(arm2_, LatLng)
 	abs_ang1 = origin_.abs_angle(arm1_)
