@@ -372,7 +372,8 @@ function on_play_checkbox_clicked(play_) {
 			</form>
 			<br/>
 			<br/>
-			Play: <input type="checkbox" name="play_checkbox" onclick="on_play_checkbox_clicked(this.checked)"/>
+			<label for="play_checkbox">Play:</label>
+			<input type="checkbox" id="play_checkbox" name="play_checkbox" onclick="on_play_checkbox_clicked(this.checked)"/>
 			&nbsp;&nbsp;&nbsp;<input type="button" onclick="on_single_frame_back_clicked()" value="<" />
 			<input type="button" onclick="on_single_frame_forward_clicked()" value=">" />
             <img id="loading_img" src="loading.gif" style="visibility:hidden"/>

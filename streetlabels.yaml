@@ -19,11 +19,15 @@ dufferin:
     0: Wilson Ave
     701: Dufferin St
 
+# Fudging broadview to make the labels on broadview stay away from the corner of dundas, b/c the google map label happens 
+# to be right there on broadview south of dundas, where our froute does not go, so around zoom 14 / 15 this was looking 
+# like "Broadview Ave Ave" (with the "Broadview Ave" by us and the second "Ave" by google.) 
 dundas: 
     0: ''
     168: Dundas St W
     6502: Dundas St E
-    9017: Broadview Ave
+    9017: '' 
+    9100: Broadview Ave 
 
 dupont: 
     0: Jane St

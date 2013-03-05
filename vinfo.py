@@ -1,5 +1,6 @@
 #!/usr/bin/python2.6
 
+import copy
 import geom, routes
 from misc import *
 
@@ -133,6 +134,11 @@ class VehicleInfo:
 
 	def is_a_streetcar(self):
 		return self.vehicle_id.startswith('4')
+
+	def copy(self):
+		r = copy.copy(self)
+		r.latlng = r.latlng.copy()
+		return r
 
 if __name__ == '__main__':
 	pass
