@@ -24,9 +24,12 @@ var TEST_INVISIBLE = false;
 var DISABLE_OVERTIME = false;
 var SHOW_FRAMERATE = false;
 var SHOW_TIME_SELECTOR = true;
-var SHOW_PATHS_TEXT = true;
-var SHOW_LOADING_URLS = true;
+var SHOW_PATHS_TEXT = false;
+var SHOW_LOADING_URLS = false;
 var DISABLE_GEOLOCATION = true;
+var HARDCODE_DISPLAY_SET = false;
+var HARDCODED_DISPLAY_SET = [['dundas', 0]];
+var SHOW_HISTORICAL_ON_LOAD = false;
 
 function new_fudgeroute_data() {
 	return {
@@ -851,7 +854,7 @@ function initialize() {
 
 	init_map();
 	google.maps.event.addListener(g_map, 'zoom_changed', function() {
-		set_contents('p_zoom', ""+(g_map.getZoom())); // TDR 
+		//set_contents('p_zoom', ""+(g_map.getZoom())); // TDR 
 		remake_traffic_lines_allroutes();
 		redraw_vehicle_markers();
 	});
@@ -888,11 +891,8 @@ function initialize() {
 	init_trip_markers();
 	init_geolocation();
 
-	// TODO: update this comment. 
-	// The first 'get' of data from the server will happen due to a bounds_changed event on the map that happens to it on 
-	// initialization.  That will cause a 'get_fudgeroutes_for_map_bounds' which will cause a 'get' of traffic and vehicle 
-	// data for each route individually, right away.
-	schedule_refresh_data_from_server(); // This will cause a periodic refresh of all routes.  The first refresh 
+	// The first 'get' of data from the server will happen due to the on_trip_marker_moved() call below.  
+	schedule_refresh_data_from_server(); // But this call here will cause a periodic refresh of all routes.  The first refresh 
 			// caused by this will happen not right away, but in a few seconds. 
 
 	add_invisible_route_lines();
@@ -903,8 +903,33 @@ function initialize() {
 
 	add_delayed_event_listener(g_map, 'bounds_changed', refresh_streetlabels_allroutes, 100);
 
-	on_trip_marker_moved();
+	if(!HARDCODE_DISPLAY_SET) {
+		on_trip_marker_moved();
+	} else {
+		show_hardcoded_display_set();
+	}
 
+	if(SHOW_HISTORICAL_ON_LOAD) {
+		set_selected('historical_button', true);
+		on_traffictype_changed();
+	}
+
+}
+
+function show_hardcoded_display_set() {
+	function go() {
+		for(var i in HARDCODED_DISPLAY_SET) {
+			var froutendir = HARDCODED_DISPLAY_SET[i];
+			var froute = froutendir[0];
+			var dir = froutendir[1];
+			g_force_show_froutes.add(froute);
+			(dir == 0 ? g_force_dir0_froutes : g_force_dir1_froutes).add(froute);
+		}
+		recalc_display_set();
+	};
+	// procrastinating in order to give map a chance to load. otherwise we'll probably get an error 
+	// when refresh_data_from_server_singleroute() (within recalc...) tries to call g_map.getBounds(), or something like that. 
+	setTimeout(go, 1000); 
 }
 
 function init_geolocation() {
@@ -944,7 +969,9 @@ function refresh_streetlabels_singleroute(froute_) {
 	} else {
 		callpy('streetlabels.get_labels', froute_, zoom, g_map.getBounds().getSouthWest(), g_map.getBounds().getNorthEast(), 
 			function(labels) {
-				if(!g_fudgeroute_data.containsKey(froute_)) {
+				// This is a callback so since we started the call, this route could have been hidden or the zoom could have been changed.
+				// The map bounds could have changed too but I don't care as much about them for some reason. 
+				if(!g_fudgeroute_data.containsKey(froute_) || (g_map.getZoom() != zoom)) {
 					return;
 				}
 				forget_streetlabels_singleroute(froute_);
@@ -1242,7 +1269,6 @@ function round(x_, step_) {
 }
 
 function get_data_for_selected_routes() {
-	get_fudgeroutes_for_map_bounds();
 	recalc_display_set();
 }
 
@@ -1703,7 +1729,7 @@ $(document).ready(initialize);
   <body>
 		<div id="map_canvas" style="width:100%; height:100%"></div>
 		<div>
-			<p id="p_zoom"/> <!-- TDR --> 
+			<!-- <p id="p_zoom"/> -->
 			<p id="p_paths_text"/>
 			<p id="p_loading_urls"/>
 			<div id="div_framerate">
