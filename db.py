@@ -504,9 +504,9 @@ def interp_by_time(vilist_, be_clever_, use_db_for_heading_inference_, current_c
 				if current_conditions_:
 					if (interptime - lo_vi.time > 3*60*1000) or dirs_disagree(dir_, lo_vi.dir_tag_int):
 						continue
-					heading = (lolo_vi.latlng.heading(lo_vi.latlng) if lolo_vi is not None else lo_vi.heading)
-					i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, heading, vid, lo_vi.lat, lo_vi.lng,
-											 lo_vi.predictable, lo_vi.route_tag, 0, interptime, interptime, lo_vi.mofr, lo_vi.widemofr)
+					latlng, heading = get_latlonnheadingnmofr_from_lo_sample(lolo_vi, lo_vi, be_clever_)[:2]
+					i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, heading, vid, latlng.lat, latlng.lng,
+							lo_vi.predictable, lo_vi.route_tag, 0, interptime, interptime, lo_vi.mofr, lo_vi.widemofr)
 
 			if i_vi:
 				interped_timeslice.append(i_vi)
@@ -518,6 +518,21 @@ def interp_by_time(vilist_, be_clever_, use_db_for_heading_inference_, current_c
 def dirs_disagree(dir1_, dir2_):
 	return (dir1_ == 0 and dir2_ == 1) or (dir1_ == 1 and dir2_ == 0)
 
+# To do it this way may seem odd but we get the latest of these things by interpolating between the second-last (lolo) and 
+# the last (lo) with a ratio of 1.0, because that extrapolation code (interp_latlonnheadingnmofr()) has some nice code that does 
+# snap-by-mofr or snap-to-tracks, which I don't feel like copying and pasting and stripping down for the ratio = 1.0 case. 
+
+# lolo_vi_ may seem unnecessary here because of the ratio of 1.0, but it is used to find the heading 
+# if tracks are being used - will be a choice between X and X + 180.  If we have only one sample (lo_vi_) then common sense 
+# says that there's no way that we can figure out that heading.  In that case we'll interpolate between lo_vi_ and itself, 
+# and in the tracks case, get something random for the heading - but latlng will still be correctly snapped to the track. 
+def get_latlonnheadingnmofr_from_lo_sample(lolo_vi_, lo_vi_, be_clever_):
+	assert lo_vi_ is not None
+	if lolo_vi_ is not None:
+		return interp_latlonnheadingnmofr(lolo_vi_, lo_vi_, 1.0, be_clever_)
+	else:
+		return interp_latlonnheadingnmofr(lo_vi_, lo_vi_, 1.0, be_clever_)
+		
 # be_clever_ - means use routes if mofrs are valid, else use 'tracks' if a streetcar.
 def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, be_clever_):
 	assert isinstance(vi1_, vinfo.VehicleInfo) and isinstance(vi2_, vinfo.VehicleInfo) and (vi1_.vehicle_id == vi2_.vehicle_id)
