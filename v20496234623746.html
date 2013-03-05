@@ -365,9 +365,9 @@ function on_play_checkbox_clicked(play_) {
 			<form name="form1">
 				<input type="text" size="130" name="sqlstr_field" id="sqlstr_field" />
 				Max rows: <input type="text" size="5" name="maxrows_field" value="1000" /> &nbsp;
-				Interp:<input type="checkbox" name="interpbytime_checkbox" />
-				Collapse:<input type="checkbox" id="collapseanimation_checkbox" />
-				InfoWindows:<input type="checkbox" id="infowindows_checkbox" />
+				<label for="interpbytime_checkbox">Interp:</label><input type="checkbox" id="interpbytime_checkbox" name="interpbytime_checkbox" />
+				<label for="collapseanimation_checkbox">Collapse:</label><input type="checkbox" id="collapseanimation_checkbox" />
+				<label for="infowindows_checkbox">InfoWindows:</label><input type="checkbox" id="infowindows_checkbox" />
 				<input type="button" onclick="run_query1(this.form.sqlstr_field.value, this.form.maxrows_field.value, this.form.interpbytime_checkbox.checked)" value="Submit" id="submit0_button" />
 			</form>
 			<br/>
