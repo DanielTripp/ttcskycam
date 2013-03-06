@@ -224,6 +224,7 @@ def uniq(seq_):
 	return r
 
 def mofrs_to_dir(start_mofr_, dest_mofr_):
+	assert isinstance(start_mofr_, int) and isinstance(dest_mofr_, int)
 	if start_mofr_ == -1 or dest_mofr_ == -1:
 		return None
 	elif dest_mofr_ > start_mofr_:
