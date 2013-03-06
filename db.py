@@ -125,7 +125,9 @@ def vi_select_generator(configroute_, end_time_em_, start_time_em_, dir_=None, i
 		yield vi
 	curs.close()
 
-# arg for_traffic_ True means intended for colour-coded traffic display.  False means for vehicle animations. 
+MIN_DESIRABLE_DIR_STRETCH_LEN = 6
+
+# arg for_traffic_ True means intended for colour-coded traffic display.  False means for vehicle animations.
 # return dict.  key: vid.  value: list of list of VehicleInfo.
 
 # Note [1]: Here we attempt to remove what we consider trivial and unimportant (or even misleading) stretches of vis.
@@ -157,7 +159,6 @@ def vi_select_generator(configroute_, end_time_em_, start_time_em_, dir_=None, i
 # interpolations in that area.
 def get_vid_to_vis(fudge_route_, dir_, num_minutes_, end_time_em_, for_traffic_, current_conditions_, log_=False):
 	assert dir_ in (0, 1)
-	MIN_DESIRABLE_DIR_STRETCH_LEN = 6
 	start_time = end_time_em_ - num_minutes_*60*1000
 	vi_list = []
 	for configroute in routes.fudgeroute_to_configroutes(fudge_route_):
@@ -183,14 +184,28 @@ def get_vid_to_vis(fudge_route_, dir_, num_minutes_, end_time_em_, for_traffic_,
 		if len(vis) == 0: del vid_to_vis[vid]
 	for vid, vis in vid_to_vis.items():
 		vis_grouped_by_dir = get_maximal_sublists3(vis, lambda vi: vi.dir_tag_int) # See note [1] above
-		def is_desirable(vis__):
-			return (vis__[0].dir_tag_int == dir_) and (len(vis__) >= MIN_DESIRABLE_DIR_STRETCH_LEN or abs(vis__[0].widemofr - vis__[-1].widemofr) > 300)
-		vis_desirables_only = filter(is_desirable, vis_grouped_by_dir)
+		vis_desirables_only = filter(lambda e: is_vis_stretch_desirable(e, dir_, log_), vis_grouped_by_dir)
 		vis[:] = sum(vis_desirables_only, [])
 	for vid in vid_to_vis.keys():
 		if len(vid_to_vis[vid]) == 0:
 			del vid_to_vis[vid]
 	return vid_to_vis
+
+def is_vis_stretch_desirable(vis_, dir_, log_):
+	assert dir_ in (0, 1)
+	dir_good = (vis_[0].dir_tag_int == dir_)
+	stretch_len_good = (len(vis_) >= MIN_DESIRABLE_DIR_STRETCH_LEN)
+	widemofr_span_good = abs(vis_[0].widemofr - vis_[-1].widemofr) > 300
+	r = dir_good and (stretch_len_good, widemofr_span_good)
+	if not r and log_:
+		printerr('vi stretch undesirable.  dir good: %s, stretch len good: %s, widemofr span good: %s' % (dir_good, stretch_len_good, widemofr_span_good))
+		printerr('undesirable vis follow:')
+		if len(vis_) == 0:
+			printerr('\tstretch has zero length.')
+		else:
+			for vi in vis_:
+				printerr('\t%s' % vi)
+	return r
 
 def remove_time_duplicates(vis_):
 	for i in range(len(vis_)-2, -1, -1): # Removing duplicates by time.  Not sure if this ever happens.
@@ -444,7 +459,7 @@ def get_maximal_sublists(list_, predicate_):
 			cur_sublist = None
 	return r
 
-# Fetch one row before startime (or after endtime), to give us something to interpolate with.
+# Fetch some rows before startime (or after endtime), to give us something to interpolate with.
 def get_outside_overshots(vilist_, time_window_boundary_, forward_in_time_, n_=1, log_=False):
 	forward_str = ('forward' if forward_in_time_ else 'backward')
 	if not vilist_:
@@ -458,18 +473,53 @@ def get_outside_overshots(vilist_, time_window_boundary_, forward_in_time_, n_=1
 		routes = [vi.route_tag for vi in vilist_]
 		sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations ' \
 			+ ' where vehicle_id = %s ' + ' and route_tag in ('+(','.join(['%s']*len(routes)))+')' + ' and time < %s and time > %s '\
-			+ ' order by time '+('' if forward_in_time_ else 'desc')+' limit '+str(n_)
+			+ ' order by time '+('' if forward_in_time_ else 'desc')+' limit %s'
 		curs = conn().cursor()
-		curs.execute(sqlstr, [vid] + routes \
-			+ ([time_window_boundary_+20*60*1000, vid_extreme_time] if forward_in_time_ else [vid_extreme_time, time_window_boundary_-20*60*1000]))
-	 	# TODO: 20 minutes (above) may be a bit much, especially now that I'm using this function for traffic (not just vehicle locations).
-		# TODO: Think about this.
+		query_times = [time_window_boundary_+20*60*1000, vid_extreme_time] if forward_in_time_ else [vid_extreme_time, time_window_boundary_-20*60*1000]
+		args = [vid] + routes + query_times + [n_]
+		curs.execute(sqlstr, args)
 		for row in curs:
 			vi = vinfo.VehicleInfo(*row)
 			if log_: printerr('Got %s outside overshot: %s' % (forward_str, str(vi)))
 			r.append(vi)
 		curs.close()
+		vis_for_vid = [vi for vi in r if vi.vehicle_id == vid]
+		r += get_outside_overshots_more(vis_for_vid, time_window_boundary_, forward_in_time_, log_=log_)
+
 	return r
+
+# This function is for when we want to look back far enough to see a change in mofr, so that we can determine the
+# direction of a long-stalled vehicle.  eg. lots on bathurst northbound at 2013-03-03 15:15.
+def get_outside_overshots_more(vis_so_far_, time_window_boundary_, forward_in_time_, log_=False):
+	assert len(set(vi.vehicle_id for vi in vis_so_far_)) <= 1
+	r = []
+	more_vis = []
+	if not forward_in_time_ and len(vis_so_far_) > 0:
+		vid = vis_so_far_[0].vehicle_id
+		r_mofr_min = min(vi.mofr for vi in vis_so_far_); r_mofr_max = max(vi.mofr for vi in vis_so_far_)
+		if (r_mofr_max != -1) and (r_mofr_max - r_mofr_min < 50): # 50 metres = small, typical GPS errors.
+			curs = conn().cursor()
+			routes = [vi.route_tag for vi in vis_so_far_]
+			sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations '\
+					 + ' where vehicle_id = %s ' + ' and route_tag in ('+(','.join(['%s']*len(routes)))+')' + ' and time < %s and time > %s '\
+					 + ' order by time '+('' if forward_in_time_ else 'desc')+' limit %s'
+			curs.execute(sqlstr, [vid] + routes + [vis_so_far_[-1].time, time_window_boundary_-6*60*60*1000] + [999999])
+			for row in curs:
+				vi = vinfo.VehicleInfo(*row)
+				more_vis.append(vi)
+				if (vis_so_far_ + more_vis)[-1].time - (vis_so_far_ + more_vis)[-2].time > 10*60*1000:
+					del r[:] # Large time gap in these samples?  Not worth it.  This code is intended for typical stalled vehicles
+					break # and every one I've looked at reports in several times per minute, save as every other vehicle.
+				mofr_change_including_more_r = max(r_mofr_max, vi.mofr) - min(r_mofr_min, vi.mofr)
+				if mofr_change_including_more_r > 50:
+					if log_:
+						printerr('Looked back more for vid %s.  Got %d more vis:' % (vid, len(more_vis)))
+						for vi in more_vis:
+							printerr('\t%s' % vi)
+					break
+			curs.close()
+	return more_vis
+
 
 def group_by_time(vilist_):
 	times = sorted(list(set([vi.time for vi in vilist_])))
