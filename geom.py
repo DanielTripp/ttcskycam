@@ -227,7 +227,7 @@ def remove_bad_gps_readings_single_vid(vis_, log_=False):
 	vis = vis_[:]
 	remove_consecutive_duplicates(vis, key=lambda vi: vi.time)
 	vigroups = [[vis[0]]]
-	if log_: printerr('Bad GPS - creating group 0: %s' % vis[0])
+	if log_: printerr('Bad GPS filtering - creating group 0:\n\t%s' % vis[0])
 	for cur_vi in vis[1:]:
 		def get_dist_from_vigroup(vigroup_):
 			groups_last_vi = vigroup_[-1]
@@ -245,10 +245,10 @@ def remove_bad_gps_readings_single_vid(vis_, log_=False):
 
 		closest_vigroup = min(vigroups, key=get_dist_from_vigroup)
 		if is_plausible_vigroup(closest_vigroup):
-			if log_: printerr('Bad GPS - adding to group %d: %s' % (vigroups.index(closest_vigroup), cur_vi))
+			if log_: printerr('Bad GPS filtering - adding to group %d:\n\t%s' % (vigroups.index(closest_vigroup), cur_vi))
 			closest_vigroup.append(cur_vi)
 		else:
-			if log_: printerr('Bad GPS - creating group %d: %s' % (len(vigroups), cur_vi))
+			if log_: printerr('Bad GPS filtering - creating group %d:\n\t%s' % (len(vigroups), cur_vi))
 			vigroups.append([cur_vi])
 	r_vis = max(vigroups, key=len)
 	if log_:
@@ -256,7 +256,7 @@ def remove_bad_gps_readings_single_vid(vis_, log_=False):
 			for i, vigroup in enumerate(vigroups):
 				if vigroup is not r_vis:
 					for vi in vigroup:
-						printerr('Bad GPS - discarded (from group %d): %s' % (i, vi))
+						printerr('Bad GPS filtering - discarded (from group %d):\n\t%s' % (i, vi))
 	vis_[:] = r_vis
 
 
