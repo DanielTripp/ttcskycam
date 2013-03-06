@@ -9,12 +9,10 @@ with open('MOFR_STEP') as f:
 
 TIME_WINDOW_MINUTES = 30
 
+@mc.decorate
 def get_recent_vehicle_locations(fudgeroute_, dir_, current_, time_, log_=False):
 	assert (fudgeroute_ in routes.NON_SUBWAY_FUDGEROUTES)
 	time_ = massage_time_arg(time_, 15*1000)
-	return mc.get(get_recent_vehicle_locations_impl, [fudgeroute_, dir_, current_, time_, log_])
-
-def get_recent_vehicle_locations_impl(fudgeroute_, dir_, current_, time_, log_=False):
 	return db.get_recent_vehicle_locations(fudgeroute_, TIME_WINDOW_MINUTES, dir_, current_, time_window_end_=time_, log_=log_)
 
 # returns: key: vid.  value: list of list of VehicleInfo
