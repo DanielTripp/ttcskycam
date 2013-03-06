@@ -926,6 +926,8 @@ function show_hardcoded_display_set() {
 			(dir == 0 ? g_force_dir0_froutes : g_force_dir1_froutes).add(froute);
 		}
 		recalc_display_set();
+		g_trip_orig_marker.setVisible(false);
+		g_trip_dest_marker.setVisible(false);
 	};
 	// procrastinating in order to give map a chance to load. otherwise we'll probably get an error 
 	// when refresh_data_from_server_singleroute() (within recalc...) tries to call g_map.getBounds(), or something like that. 
@@ -1738,23 +1740,22 @@ $(document).ready(initialize);
 			</div>
 			<br/>
 
+			Show:
 			<input type="checkbox" id="show_static_vehicles_checkbox" checked="checked" onclick="on_show_static_vehicles_checkbox_clicked()"/>
 			<label for="show_static_vehicles_checkbox" onclick=""> 
-			Show current vehicle locations (stationary markers) - 
 			<img src="static-vehicle-for-legend.png"/> 
+			Current vehicle locations (stationary markers)
 			</label> 
-			<br/>
-
+/
 			<input type="checkbox" id="show_moving_vehicles_checkbox" checked="checked" onclick="on_show_moving_vehicles_checkbox_clicked()"/>
 			<label for="show_moving_vehicles_checkbox" onclick=""> 
-			Show past 30 minutes of vehicle locations (animated markers) - 
 			<img src="moving-vehicle-for-legend.png"/> 
+			Past 30 minutes of vehicle locations (animated markers)
 			</label> 
-			<br/>
-
+/
 			<input type="checkbox" id="show_traffic_lines_checkbox" checked="checked" onclick="on_show_traffic_lines_checkbox_clicked()"/>
 			<label for="show_traffic_lines_checkbox" onclick=""> 
-			Show recent traffic speed (coloured lines) - 
+			Recent traffic speed (coloured lines) 
 			<img src="traffic-color-legend.gif" style="float: bottom;"/><br/>
 			</label> 
 			<br/>
