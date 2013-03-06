@@ -129,7 +129,7 @@ def vi_select_generator(configroute_, end_time_em_, start_time_em_, dir_=None, i
 # return dict.  key: vid.  value: list of list of VehicleInfo.
 
 # Note [1]: Here we attempt to remove what we consider trivial and unimportant (or even misleading) stretches of vis.
-# Currently using a heuristic of greater than 5 vis, or 300 meters.  Doing this because often due to inaccurate GPS readings
+# Currently using a rule that less than 6 vis or 300 meters is undesirable.  Doing this because of inaccurate GPS readings
 # or other things, especially after our 'dirtag fixing' (where we ignore the direction of the dirtag reported by NextBus and
 # set it to one determined by mofr changes).  This can result in a vehicle appearing to reverse direction for a short time
 # before continuing in it's original direction, but the reality is not so.
@@ -144,8 +144,8 @@ def vi_select_generator(configroute_, end_time_em_, start_time_em_, dir_=None, i
 # So we want those vis going up Ossington, but only if the vehicle is going to continue east after.  We can't tell if it is or not
 # if in the time window in question, it hasn't done that yet.  So in that case the vehicle will disappear from the vehicle locations.
 # That is undesirable but not the end of the world.  For a user watching current conditions, that situation for that vehicle will
-# usually last only a couple of minutes, until the vehicle gets onto part of the detour that is closer to parallel to the origanal route
-# (i.e. Colleg).  Then the widemofrs will increase again, and the vehicle-location-interpolating code will having something to
+# usually last only a couple of minutes, until the vehicle gets onto part of the detour that is closer to parallel to the original route
+# (i.e. College).  Then the widemofrs will increase again, and the vehicle-location-interpolating code will having something to
 # interpolate between (presumably something on Dundas right before it turned up Ossington, and something on College right after it
 # turned onto College.)  These interpolated locations will not be as accurate as if we hadn't removed them in the first place,
 # but I don't see this as a major problem right now.    Again this will only happen in a small number of cases where detours are happening
@@ -263,7 +263,7 @@ def massage_whereclause_time_args(whereclause_):
 
 		def repl2(mo_):
 			t = int(mo_.group(1))
-			range = 15*60*1000
+			range = 30*60*1000
 			return 'time > %d and time < %d' % (t - range, t + range)
 		r = re.sub(r'time +around +(\d+)', repl2, r)
 
@@ -360,8 +360,11 @@ def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, current_
 	vid_to_vis = get_vid_to_vis(fudgeroute_, direction, num_minutes_, time_window_end_, False, current_conditions_, log_=log_)
 	r = []
 	for vid, vis in vid_to_vis.iteritems():
-		if log_: printerr('For locations, pre-interp: vid %s: %d vis, from %s to %s (widemofrs %d to %d)' \
+		if log_:
+			printerr('For locations, pre-interp: vid %s: %d vis, from %s to %s (widemofrs %d to %d)' \
 				% (vid, len(vis), em_to_str_hms(vis[-1].time), em_to_str_hms(vis[0].time), vis[-1].widemofr, vis[0].widemofr))
+			for vi in vis:
+				printerr('\t%s' % vi)
 		r += [vi for vi in vis if vi.widemofr != -1]
 	starttime = time_window_end_ - num_minutes_*60*1000
 	r = interp_by_time(r, True, True, current_conditions_, direction, starttime, time_window_end_, log_=log_)
@@ -478,6 +481,15 @@ def group_by_time(vilist_):
 
 # Takes a flat list of VehicleInfo objects.  Returns a list of lists of Vehicleinfo objects, interpolated.
 # Also, with a date/time string as element 0 in each list.
+#
+# note [1]: This is for the scenario of eg. this function is meant to get dir=1, and we're looking at a vehicle for which raw vis exist
+# at mofr=0 @ 12:00, mofr=1000 @ 12:15, and mofr=1100 @ 12:16.  The vehicle was probably going in dir=0 between
+# 12:00 and 12:15, but that doesn't matter.  What matters is that if we're not careful, we will interpolate inappropriately
+# between 12:00 and 12:15 - though probably just 3 minutes after 12:00 and 3 minutes before 12:15, as 3 minutes is our current
+# hi/lo time gap max for interpolation - you can also see this below.   But does it make sense for us to return something like mofr=67 for 12:01,
+# mofr=134 for 12:02, etc. (making these interpolated returned vis effectively dir=0)?  No it does not.  It's not what the user asked
+# for (they asked for dir=1 vehicles) and it looks awful too - looking at vehicles going both directions on a route is visual chaos and
+# makes it a lot harder to make sense of the dir=1 vehicles that they do want to see.
 def interp_by_time(vilist_, be_clever_, use_db_for_heading_inference_, current_conditions_, dir_=None, start_time_=None, end_time_=None, log_=False):
 	assert isinstance(vilist_, Sequence)
 	if len(vilist_) == 0:
@@ -495,6 +507,8 @@ def interp_by_time(vilist_, be_clever_, use_db_for_heading_inference_, current_c
 				if (min(interptime - lo_vi.time, hi_vi.time - interptime) > 3*60*1000) or dirs_disagree(dir_, hi_vi.dir_tag_int)\
 						or (lo_vi.route_tag != hi_vi.route_tag):
 					continue
+				if lo_vi.mofr!=-1 and hi_vi.mofr!=-1 and dirs_disagree(dir_, mofrs_to_dir(lo_vi.mofr, hi_vi.mofr)):
+					continue   # see note [1], above.
 				ratio = (interptime - lo_vi.time)/float(hi_vi.time - lo_vi.time)
 				i_latlon, i_heading, i_mofr = interp_latlonnheadingnmofr(lo_vi, hi_vi, ratio, be_clever_)
 				i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, i_heading, vid, i_latlon.lat, i_latlon.lng,
@@ -510,6 +524,12 @@ def interp_by_time(vilist_, be_clever_, use_db_for_heading_inference_, current_c
 
 			if i_vi:
 				interped_timeslice.append(i_vi)
+				if log_:
+					printerr('    %s' % lo_vi)
+					if hi_vi:
+						printerr('  + %s' % hi_vi)
+					printerr('==> %s' % i_vi)
+					printerr()
 
 		time_to_vis[interptime] = interped_timeslice
 	return massage_to_list(time_to_vis, starttime, endtime)
