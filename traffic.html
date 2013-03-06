@@ -1694,6 +1694,9 @@ function on_show_traffic_lines_checkbox_clicked() {
 		data.traffic_lines.forEach(function(line) {
 			line.setVisible(g_show_traffic_lines);
 		});
+		data.streetlabel_markers.forEach(function(line) {
+			line.setVisible(g_show_traffic_lines);
+		});
 	});
 }
 
