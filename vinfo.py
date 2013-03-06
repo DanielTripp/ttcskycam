@@ -70,9 +70,10 @@ class VehicleInfo:
 		return long(self.time + ratio*(forevi_.time - self.time))
 
 	def __str__(self):
-		return 'route: %s, vehicle: %s, dir: %-12s, (  %f, %f  )  , mofr: %5d, heading: %3d, time: %s %s' \
-			% (self.route_tag, self.vehicle_id, self.dir_tag, self.latlng.lat, self.latlng.lng, self.mofr, self.heading,\
-			   self.timestr, ('' if self.predictable else 'UNPREDICTABLE'))
+		return '%s  r=%s, vid=%s, dir: %s%-12s, (%.8f,%.8f), h=%3d, mofr=%5d%s%5d%s' \
+			% (self.timestr, self.route_tag, self.vehicle_id, ('*' if self.is_dir_tag_corrected else ' '), self.dir_tag,
+			   self.latlng.lat, self.latlng.lng, self.heading, self.mofr, ('!' if self.mofr!=self.widemofr else ' '), self.widemofr,
+			   ('' if self.predictable else ' UNPREDICTABLE'))
 
 	def __repr__(self):
 		return self.__str__()
