@@ -130,6 +130,18 @@ MIN_DESIRABLE_DIR_STRETCH_LEN = 6
 # arg for_traffic_ True means intended for colour-coded traffic display.  False means for vehicle animations.
 # return dict.  key: vid.  value: list of list of VehicleInfo.
 
+# The approach taken with regards to dirtags is to get all dirtags from the database (0, 1, and blank), then fix those dirtags
+# ourselves to represent what the vehicle is really doing.  We need to do this, rather than straightforwardly getting
+# only dir=0 or dir=1 dirtags from the database, for three reasons:
+# 1) Vehicles on an unscheduled detour have blank dirtags, and we want those.
+# See http://groups.google.com/group/nextbus-api-discuss/browse_thread/thread/61fc64649ab928b5 "Detours and dirTag (Toronto / TTC)"
+# eg. dundas eastbound 2012-06-09 12:00.
+# 2) Stuck vehicles (i.e. those that are on the route but haven't moved for say 5 or 30 minutes) tend to have blank dirtags too.
+# We want those too.  (eg.: vid 4104, 2012-09-24 13:00.)
+# 3) Vehicles that are moving normally sometimes have dirtags that indicate the opposite direction that they are going.
+# My current theory on this is that this is due to bus driver error.
+# I commented on this at https://groups.google.com/forum/#!topic/nextbus-api-discuss/mJHTmi4aLBw/discussion
+
 # Note [1]: Here we attempt to remove what we consider trivial and unimportant (or even misleading) stretches of vis.
 # Currently using a rule that less than 6 vis or 300 meters is undesirable.  Doing this because of inaccurate GPS readings
 # or other things, especially after our 'dirtag fixing' (where we ignore the direction of the dirtag reported by NextBus and
@@ -215,11 +227,17 @@ def remove_time_duplicates(vis_):
 def fix_dirtags(r_vis_):
 	assert len(set(vi.vehicle_id for vi in r_vis_)) <= 1
 	for prevvi, vi in hopscotch(r_vis_[::-1]):
+		assert prevvi.time < vi.time
 		if prevvi.widemofr < vi.widemofr:
 			fix_dirtag(vi, 0)
 		elif prevvi.widemofr > vi.widemofr:
 			fix_dirtag(vi, 1)
 		elif (prevvi.widemofr == vi.widemofr) and (prevvi.dir_tag_int in (0, 1)):
+			# This case takes advantage of our code elsewhere in here (get_outside_overshots_more()) where, if a vehicle looks
+			# stuck (i.e. widemofr is staying the same, sample after sample), we keep looking back in the database far enough
+			# until we see a significant change in widemofr.  Then those two vis will trigger either 'if' or 'elif' above, then
+			# this 'elif' will copy that that older direction into the more recent vis which have no widemofr change of their
+			# own to indicate a direction.
 			fix_dirtag(vi, prevvi.dir_tag_int)
 
 def fix_dirtag(vi_, dir_):
@@ -409,43 +427,6 @@ def add_inside_overshots_for_locations(r_vis_, vid_, time_window_end_, log_=Fals
 	r_vis_ += new_vis
 	r_vis_.sort(key=lambda vi: vi.time, reverse=True)
 
-# Temporary detours typically have a blank dirTag eg. dundas eastbound 2012-06-09 12:00. 
-# See http://groups.google.com/group/nextbus-api-discuss/browse_thread/thread/61fc64649ab928b5 
-# "Detours and dirTag (Toronto / TTC)"
-# Vehicles that are stuck badly also, at least sometimes, have a blank dir_tag for that time.  eg. vid 4104, 2012-09-24 13:00.
-# So here we make a point of not removing those.
-def remove_unwanted_detours(r_vis_, fudgeroute_, direction_, log_=False):
-	routes_general_heading = routes.routeinfo(fudgeroute_).general_heading(direction_)
-	for detour in get_blank_dirtag_stretches(r_vis_):
-		unwanted = False
-		# Keep detours with a length of 1. This might not be right but they probably won't do much harm either.  
-		# Also making an attempt here to not throw out vehicles stopped dead.  
-		if (len(detour) >= 2) and (detour[-1].latlng.dist_m(detour[0].latlng) > 15):
-			assert all(e1.time > e2.time for e1, e2 in hopscotch(detour))
-			detours_heading = detour[-1].latlng.heading(detour[0].latlng)
-			heading_diff = geom.diff_headings(routes_general_heading, detours_heading)
-			if heading_diff > 80:
-				unwanted = True
-		if unwanted:
-			remove_all_by_identity(r_vis_, detour)
-		if log_:
-			logstr = 'vehicle %s from %s to %s.' % (detour[0].vehicle_id, em_to_str(detour[-1].time), em_to_str(detour[0].time))
-			printerr('%sing apparent detour: %s' % (('Discard' if unwanted else 'Keep'), logstr))
-
-def remove_all_by_identity(r_list_, to_remove_list_):
-	for to_remove_elem in to_remove_list_:
-		for r_list_i, r_list_elem in enumerate(r_list_):
-			if r_list_elem is to_remove_elem:
-				del r_list_[r_list_i]
-				break
-
-def get_blank_dirtag_stretches(vis_):
-	r = []
-	for vid in set(vi.vehicle_id for vi in vis_):
-		vid_vis = [vi for vi in vis_ if vi.vehicle_id == vid]
-		r += get_maximal_sublists(vid_vis, lambda vi: vi.dir_tag == '')
-	return r
-
 def get_maximal_sublists(list_, predicate_):
 	cur_sublist = None
 	r = []
@@ -575,9 +556,9 @@ def interp_by_time(vilist_, be_clever_, use_db_for_heading_inference_, current_c
 			if i_vi:
 				interped_timeslice.append(i_vi)
 				if log_:
-					printerr('    %s' % lo_vi)
+					printerr('lo: %s' % lo_vi)
 					if hi_vi:
-						printerr('  + %s' % hi_vi)
+						printerr('hi: %s' % hi_vi)
 					printerr('==> %s' % i_vi)
 					printerr()
 
