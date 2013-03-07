@@ -189,6 +189,7 @@ def get_vid_to_vis(fudge_route_, dir_, num_minutes_, end_time_em_, for_traffic_,
 	for vis in vid_to_vis.values():
 		vis.sort(key=lambda x: x.time, reverse=True)
 	for vid, vis in vid_to_vis.items():
+		vis[:] = [vi for vi in vis if vi.widemofr != -1]
 		yards.remove_vehicles_in_yards(vis)
 		remove_time_duplicates(vis)
 		geom.remove_bad_gps_readings_single_vid(vis, log_=log_)
@@ -398,7 +399,7 @@ def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, current_
 				% (vid, len(vis), em_to_str_hms(vis[-1].time), em_to_str_hms(vis[0].time), vis[-1].widemofr, vis[0].widemofr))
 			for vi in vis:
 				printerr('\t%s' % vi)
-		r += [vi for vi in vis if vi.widemofr != -1]
+		r += vis
 	starttime = time_window_end_ - num_minutes_*60*1000
 	r = interp_by_time(r, True, True, current_conditions_, direction, starttime, time_window_end_, log_=log_)
 	return r
@@ -582,7 +583,13 @@ def get_latlonnheadingnmofr_from_lo_sample(lolo_vi_, lo_vi_, be_clever_):
 	if lolo_vi_ is not None:
 		return interp_latlonnheadingnmofr(lolo_vi_, lo_vi_, 1.0, be_clever_)
 	else:
-		return interp_latlonnheadingnmofr(lo_vi_, lo_vi_, 1.0, be_clever_)
+		# We would do something like this:
+		#return interp_latlonnheadingnmofr(lo_vi_, lo_vi_, 1.0, be_clever_)
+		# ... but I don't think we'll ever encounter this scenario, because we only want to return vehicle locations
+		# if we have about 5 or 6 raw samples for that vid, right?
+		# If we hit this case, that means that we have one sample.
+		raise Exception()
+
 		
 # be_clever_ - means use routes if mofrs are valid, else use 'tracks' if a streetcar.
 def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, be_clever_):
