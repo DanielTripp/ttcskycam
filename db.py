@@ -121,7 +121,7 @@ def vi_select_generator(configroute_, end_time_em_, start_time_em_, dir_=None, i
 		row = curs.fetchone()
 		if not row:
 			break
-		vi = vinfo.VehicleInfo(*row)
+		vi = vinfo.VehicleInfo.from_db(*row)
 		yield vi
 	curs.close()
 
@@ -371,7 +371,7 @@ def query1(whereclause_, maxrows_, interp_by_time_):
 	curs = conn().cursor()
 	curs.execute(sqlstr)
 	for row in curs:
-		r.append(vinfo.VehicleInfo(*row))
+		r.append(vinfo.VehicleInfo.from_db(*row))
 	curs.close()
 	if interp_by_time_:
 		r = interp_by_time(r, False, False, False)
@@ -418,7 +418,7 @@ def add_inside_overshots_for_locations(r_vis_, vid_, time_window_end_, log_=Fals
 	row = curs.fetchone()
 	vi = None
 	if row:
-		vi = vinfo.VehicleInfo(*row)
+		vi = vinfo.VehicleInfo.from_db(*row)
 		if log_: printerr('Got inside overshot: %s' % (str(vi)))
 		new_vis.append(vi)
 	else:
@@ -460,7 +460,7 @@ def get_outside_overshots(vilist_, time_window_boundary_, forward_in_time_, n_=1
 		args = [vid] + routes + query_times + [n_]
 		curs.execute(sqlstr, args)
 		for row in curs:
-			vi = vinfo.VehicleInfo(*row)
+			vi = vinfo.VehicleInfo.from_db(*row)
 			if log_: printerr('Got %s outside overshot: %s' % (forward_str, str(vi)))
 			r.append(vi)
 		curs.close()
@@ -486,7 +486,7 @@ def get_outside_overshots_more(vis_so_far_, time_window_boundary_, forward_in_ti
 					 + ' order by time '+('' if forward_in_time_ else 'desc')+' limit %s'
 			curs.execute(sqlstr, [vid] + routes + [vis_so_far_[-1].time, time_window_boundary_-6*60*60*1000] + [999999])
 			for row in curs:
-				vi = vinfo.VehicleInfo(*row)
+				vi = vinfo.VehicleInfo.from_db(*row)
 				more_vis.append(vi)
 				if (vis_so_far_ + more_vis)[-1].time - (vis_so_far_ + more_vis)[-2].time > 10*60*1000:
 					del r[:] # Large time gap in these samples?  Not worth it.  This code is intended for typical stalled vehicles
@@ -814,7 +814,7 @@ def _get_observed_arrival_time_arrival_time(startvi1_, startstoptag_, deststopta
 	lastvi = startvi1_
 	r = None
 	for row in curs:
-		curvi = vinfo.VehicleInfo(*row)
+		curvi = vinfo.VehicleInfo.from_db(*row)
 		if curvi.mofr != -1 and (curvi.mofr >= destmofr if direction==0 else curvi.mofr <= destmofr):
 			if (lastvi.mofr != -1) and abs(curvi.mofr - lastvi.mofr) < 1000:
 				r = lastvi.get_pass_time_interp(curvi, destmofr)
@@ -843,7 +843,7 @@ def _get_observed_arrival_time_caught_vehicle_passing_vis(froute_, startstoptag_
 					 [time_ - 1000*60*5, time_ + 1000*60*60])
 		candidate_vid_to_lastvi = {}
 		for row in curs:
-			curvi = vinfo.VehicleInfo(*row)
+			curvi = vinfo.VehicleInfo.from_db(*row)
 			if curvi.vehicle_id in candidate_vid_to_lastvi:
 				lastvi = candidate_vid_to_lastvi[curvi.vehicle_id]
 				if lastvi.mofr != -1 and curvi.mofr != -1 \
