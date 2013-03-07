@@ -21,6 +21,13 @@ class VehicleInfo:
 			0L, 0L, None, None)
 		return r
 
+	@classmethod
+	def from_db(cls_, dir_tag_, heading_, vehicle_id_, lat_, lon_, predictable_, route_tag_, secs_since_report_, time_retrieved_, time_,\
+			mofr_, widemofr_):
+		r = cls_(dir_tag_, heading_, vehicle_id_, lat_, lon_, predictable_, route_tag_, secs_since_report_, time_retrieved_, time_,
+				 (None if DONT_USE_WRITTEN_MOFRS else mofr_), (None if DONT_USE_WRITTEN_MOFRS else widemofr_))
+		return r
+
 	def __init__(self, dir_tag_, heading_, vehicle_id_, lat_, lon_, predictable_, route_tag_, secs_since_report_, time_retrieved_, time_, \
 				mofr_, widemofr_):
 		assert type(dir_tag_) == str and type(heading_) == int and type(vehicle_id_) == str \
@@ -36,8 +43,8 @@ class VehicleInfo:
 		self.secs_since_report = secs_since_report_
 		self.time_retrieved = time_retrieved_
 		self.time = time_
-		self._mofr = (None if DONT_USE_WRITTEN_MOFRS else mofr_)
-		self._widemofr = (None if DONT_USE_WRITTEN_MOFRS else widemofr_)
+		self._mofr = mofr_
+		self._widemofr = widemofr_
 		self.is_dir_tag_corrected = False
 
 	def calc_time(self):
@@ -140,6 +147,9 @@ class VehicleInfo:
 		r = copy.copy(self)
 		r.latlng = r.latlng.copy()
 		return r
+
+#def vi(**kwargs):
+
 
 if __name__ == '__main__':
 	pass
