@@ -196,10 +196,10 @@ def is_vis_stretch_desirable(vis_, dir_, log_):
 	dir_good = (vis_[0].dir_tag_int == dir_)
 	stretch_len_good = (len(vis_) >= MIN_DESIRABLE_DIR_STRETCH_LEN)
 	widemofr_span_good = abs(vis_[0].widemofr - vis_[-1].widemofr) > 300
-	r = dir_good and (stretch_len_good, widemofr_span_good)
-	if not r and log_:
-		printerr('vi stretch undesirable.  dir good: %s, stretch len good: %s, widemofr span good: %s' % (dir_good, stretch_len_good, widemofr_span_good))
-		printerr('undesirable vis follow:')
+	r = dir_good and (stretch_len_good or widemofr_span_good)
+	if log_:
+		printerr('vi stretch %sdesirable.  (dir good: %s, stretch len good: %s, widemofr span good: %s):' \
+			% (('' if r else 'un'), dir_good, stretch_len_good, widemofr_span_good))
 		if len(vis_) == 0:
 			printerr('\tstretch has zero length.')
 		else:
@@ -489,7 +489,7 @@ def get_outside_overshots(vilist_, time_window_boundary_, forward_in_time_, n_=1
 	return r
 
 # This function is for when we want to look back far enough to see a change in mofr, so that we can determine the
-# direction of a long-stalled vehicle.  eg. lots on bathurst northbound at 2013-03-03 15:15.
+# direction of a long-stalled vehicle.
 def get_outside_overshots_more(vis_so_far_, time_window_boundary_, forward_in_time_, log_=False):
 	assert len(set(vi.vehicle_id for vi in vis_so_far_)) <= 1
 	r = []
