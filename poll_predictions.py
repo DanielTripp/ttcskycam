@@ -15,7 +15,7 @@ def get_data_from_web_as_str(froute_, stoptag_):
 	url_stops_part = ''.join('&stops=%s|%s' % (croute, stoptag_) for croute in routes.FUDGEROUTE_TO_CONFIGROUTES[froute_] \
 			if (croute, stoptag_) not in CROUTENSTOPTAGS_TO_OMIT)
 	url = 'http://webservices.nextbus.com/service/publicXMLFeed?command=predictionsForMultiStops&a=ttc'+url_stops_part+'&useShortTitles=true'
-	wget_args = ['wget', '-O', '-', url]
+	wget_args = ['wget', '--tries=5', '--timeout=3', '-O', '-', url]
 	return subprocess.Popen(wget_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()[0]
 
 def get_data_from_web_as_xml(froute_, stoptag_):
