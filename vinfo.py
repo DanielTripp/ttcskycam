@@ -148,10 +148,17 @@ class VehicleInfo:
 		r.latlng = r.latlng.copy()
 		return r
 
-#def vi(**kwargs):
-
+def make_vi(**kwargs):
+	r = VehicleInfo('', -4, '9999', 43.0, -79.0, True, '', 0, 0L, 0L,
+		-1, -1)
+	for key, val in kwargs.iteritems():
+		setattr(r, key, val)
+	return r
 
 if __name__ == '__main__':
-	pass
+
+	vi = make_vi(mofr=1000)
+	print vi
+
 
 

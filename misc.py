@@ -180,7 +180,8 @@ def file_under_key(list_, key_, assume_no_duplicate_keys_=False):
 			r[key_(e)].append(e)
 		return dict(r)
 
-# Return only elements for which predicate is true.  Group them as they appeared in input list as runs of trues.
+# Return only elements for which predicate is true.  (It's a two-argument predicate.  It takes two elements.)
+# Group them as they appeared in input list as runs of trues.
 def get_maximal_sublists2(list_, predicate_):
 	cur_sublist = None
 	r = []
