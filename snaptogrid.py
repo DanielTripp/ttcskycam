@@ -94,6 +94,7 @@ class SnapToGridCache(object):
 				linesegendgridsquare = GridSquare(polyline[startptidx+1])
 				linesegaddr = LineSegAddr(polylineidx, startptidx)
 				# TODO: be more specific in the grid squares considered touched by a line.  We are covering a whole bounding box.
+				# we could narrow down that set of squares a lot.
 				for gridlat in intervalii(linesegstartgridsquare.gridlat, linesegendgridsquare.gridlat):
 					for gridlng in intervalii(linesegstartgridsquare.gridlng, linesegendgridsquare.gridlng):
 						gridsquare = GridSquare((gridlat, gridlng))
@@ -142,12 +143,19 @@ class SnapToGridCache(object):
 					reference_point_addr = LineSegAddr(best_yet_linesegaddr.polylineidx, best_yet_linesegaddr.startptidx+1)
 				return (self.get_point(reference_point_addr).clone(), reference_point_addr, False)
 
-	def heading(self, linesegaddr_, referencing_point_aot_lineseg_):
+	def heading(self, linesegaddr_, referencing_lineseg_aot_point_):
 		assert isinstance(linesegaddr_, LineSegAddr)
-		# TODO: do something fancier on corners i.e. when referencing_point_aot_lineseg_ is True.
+		# TODO: do something fancier on corners i.e. when referencing_lineseg_aot_point_ is True.
 		assert (0 <= linesegaddr_.polylineidx < len(self.polylines))
-		assert 0 <= linesegaddr_.startptidx < len(self.polylines[linesegaddr_.polylineidx])+1
-		linesegaddr = LineSegAddr(linesegaddr_.polylineidx, min(linesegaddr_.startptidx, len(self.polylines[linesegaddr_.polylineidx])-1))
+		if referencing_lineseg_aot_point_:
+			assert 0 <= linesegaddr_.startptidx < len(self.polylines[linesegaddr_.polylineidx])-1
+		else:
+			assert 0 <= linesegaddr_.startptidx < len(self.polylines[linesegaddr_.polylineidx])
+		startptidx = linesegaddr_.startptidx
+		if linesegaddr_.startptidx == len(self.polylines[linesegaddr_.polylineidx])-1:
+			assert not referencing_lineseg_aot_point_
+			startptidx -= 1
+		linesegaddr = LineSegAddr(linesegaddr_.polylineidx, startptidx)
 		lineseg = self.get_lineseg(linesegaddr)
 		return lineseg.start.heading(lineseg.end)
 

@@ -41,8 +41,8 @@ def snap(latlng_, searchradius_=50):
 	assert isinstance(latlng_, geom.LatLng)
 	return snaptogridcache().snap(latlng_, searchradius_)
 
-def heading(linesegaddr_, referencing_point_aot_lineseg_):
-	return snaptogridcache().heading(linesegaddr_, referencing_point_aot_lineseg_)
+def heading(linesegaddr_, referencing_lineseg_aot_point_):
+	return snaptogridcache().heading(linesegaddr_, referencing_lineseg_aot_point_)
 
 def get_all_tracks_polylines():
 	return snaptogridcache().polylines
