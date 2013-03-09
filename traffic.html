@@ -1407,11 +1407,13 @@ function recalc_display_set() {
 }
 
 function make_subway_lines(froute_) {
+	assert(is_subway(froute_), ""+froute_+" is not a subway");
+
 	var data = g_fudgeroute_data.get(froute_);
 	var latlngs = g_subway_froute_to_route_latlngs[froute_];
 	var width = get_vehicle_size()/3;
 	var line = new google.maps.Polyline({map: g_map, path: google_LatLngs(latlngs), strokeWeight: width, strokeOpacity: 0.5, 
-			strokeColor: 'rgb(0,0,255)', zIndex: -30}); 
+			strokeColor: 'rgb(0,0,255)', zIndex: -30, visible: g_show_traffic_lines}); 
 	data.traffic_lines.add(line);
 }
 
