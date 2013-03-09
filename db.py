@@ -227,19 +227,37 @@ def remove_time_duplicates(vis_):
 
 def fix_dirtags(r_vis_):
 	assert len(set(vi.vehicle_id for vi in r_vis_)) <= 1
-	for prevvi, vi in hopscotch(r_vis_[::-1]):
-		assert prevvi.time < vi.time
-		if prevvi.widemofr < vi.widemofr:
-			fix_dirtag(vi, 0)
-		elif prevvi.widemofr > vi.widemofr:
-			fix_dirtag(vi, 1)
-		elif (prevvi.widemofr == vi.widemofr) and (prevvi.dir_tag_int in (0, 1)):
-			# This case takes advantage of our code elsewhere in here (get_outside_overshots_more()) where, if a vehicle looks
-			# stuck (i.e. widemofr is staying the same, sample after sample), we keep looking back in the database far enough
-			# until we see a significant change in widemofr.  Then those two vis will trigger either 'if' or 'elif' above, then
-			# this 'elif' will copy that that older direction into the more recent vis which have no widemofr change of their
-			# own to indicate a direction.
-			fix_dirtag(vi, prevvi.dir_tag_int)
+	D = 50
+	vis = r_vis_[::-1] # we get these in reverse chronological order, but I don't want to think of them that way in this function.
+	dirs = [None]*len(vis)
+	assert all(vi1.time < vi2.time for vi1, vi2 in hopscotch(vis))
+	for i in range(len(vis)):
+		if (i > 0) and (abs(vis[i-1].widemofr - vis[i].widemofr) >= D):
+			direction = mofrs_to_dir(vis[i-1].widemofr, vis[i].widemofr)
+			assert direction is not None
+			fix_dirtag(vis[i], direction)
+		else:
+			for lookin in range(1, len(vis)):
+				def look(j__):
+					if (0 <= j__ < len(vis)) and (abs(vis[j__].widemofr - vis[i].widemofr) > 10):
+						if j__ < i:
+							direction = mofrs_to_dir(vis[j__].widemofr, vis[i].widemofr)
+						else:
+							direction = mofrs_to_dir(vis[i].widemofr, vis[j__].widemofr)
+						assert direction is not None
+						return direction
+					else:
+						return None
+				lo_look_dir = look(i-lookin)
+				hi_look_dir = look(i+lookin)
+				m = {(None,0): 0, (None,1): 1, (0,None):0, (0,0): 0, (1,None): 1, (1,1): 1}
+				if (lo_look_dir,hi_look_dir) in m:
+					direction = m[(lo_look_dir,hi_look_dir)]
+					break
+			else:
+				direction = 0
+			fix_dirtag(vis[i], direction)
+
 
 def fix_dirtag(vi_, dir_):
 	assert isinstance(vi_, vinfo.VehicleInfo) and dir_ in (0, 1)
@@ -428,12 +446,14 @@ def add_inside_overshots_for_locations(r_vis_, vid_, time_window_end_, log_=Fals
 	r_vis_ += new_vis
 	r_vis_.sort(key=lambda vi: vi.time, reverse=True)
 
+# Return only elements for which predicate is true.  (It's a one-argument predicate.  It takes one element.)
+# Group them as they appeared in input list as runs of trues.
 def get_maximal_sublists(list_, predicate_):
 	cur_sublist = None
 	r = []
 	for e in list_:
 		if predicate_(e):
-			if cur_sublist == None:
+			if cur_sublist is None:
 				cur_sublist = []
 				r.append(cur_sublist)
 			cur_sublist.append(e)
