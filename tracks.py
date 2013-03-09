@@ -4,6 +4,7 @@ import os, json
 import geom, snaptogrid, mc
 from misc import *
 from collections import Sequence
+from lru_cache import lru_cache
 
 def snaptogridcache():
 	return mc.get(snaptogridcache_impl)
@@ -37,6 +38,7 @@ def is_on_a_track(latlng_):
 
 # Default search radius here is the same as tolerance "0" in routes.RouteInfo.latlon_to_mofr().  This may be important.
 # Maybe we should maintain a central constant for it somewhere.
+@lru_cache(1000)
 def snap(latlng_, searchradius_=50):
 	assert isinstance(latlng_, geom.LatLng)
 	return snaptogridcache().snap(latlng_, searchradius_)
