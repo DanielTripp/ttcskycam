@@ -43,12 +43,13 @@ def between(bound1_, value_, bound2_):
 # time_ - 0 for now
 # 
 # returns elem 0: visuals list - [[timestamp, vi dict, vi dict, ...], ...] 
-#         elem 1: speed map - {mofr1: {'kmph': kmph, 'weight': weight}, ...} 
+#         elem 1: speed map - {mofr1: {'kmph': kmph, 'weight': weight}, ...}
 def get_traffics(fudgeroute_name_, dir_, current_, time_, window_minutes_=TIME_WINDOW_MINUTES, log_=False):
 	assert (fudgeroute_name_ in routes.NON_SUBWAY_FUDGEROUTES)
 	time_ = massage_time_arg(time_, 60*1000)
-	return mc.get(get_traffics_impl, [fudgeroute_name_, dir_, current_, time_, window_minutes_, log_])
+	return get_traffics_impl(fudgeroute_name_, dir_, current_, time_, window_minutes_, log_)
 
+@mc.decorate
 def get_traffics_impl(fudgeroute_name_, dir_, current_, time_, window_minutes_, log_=False):
 	assert dir_ in (0, 1) or (len(dir_) == 2 and all(isinstance(e, geom.LatLng) for e in dir_))
 	if dir_ in (0, 1):
