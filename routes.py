@@ -375,9 +375,6 @@ class RouteInfo:
 	@lru_cache(5000)
 	def latlon_to_mofr(self, post_, tolerance_=0):
 		assert isinstance(post_, geom.LatLng) and (tolerance_ in (0, 1, 1.5, 2))
-		#mrucache_key = (self.name, post_, tolerance_)
-		#if mrucache_key in g_latlon_to_mofr_mrucache:
-		#	return g_latlon_to_mofr_mrucache[mrucache_key]
 		snap_result = self.snaptogridcache.snap(post_, {0:50, 1:300, 1.5:600, 2:2000}[tolerance_])
 		if snap_result is None:
 			return -1

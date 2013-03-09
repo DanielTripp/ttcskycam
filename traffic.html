@@ -27,9 +27,9 @@ var SHOW_TIME_SELECTOR = true;
 var SHOW_PATHS_TEXT = false;
 var SHOW_LOADING_URLS = false;
 var DISABLE_GEOLOCATION = true;
-var HARDCODE_DISPLAY_SET = false;
-var HARDCODED_DISPLAY_SET = [['dundas', 0]];
-var SHOW_HISTORICAL_ON_LOAD = false;
+var HARDCODE_DISPLAY_SET = true;
+var HARDCODED_DISPLAY_SET = [['bathurst', 1]];
+var SHOW_HISTORICAL_ON_LOAD = true;
 
 function new_fudgeroute_data() {
 	return {
@@ -854,7 +854,7 @@ function initialize() {
 
 	init_map();
 	google.maps.event.addListener(g_map, 'zoom_changed', function() {
-		//set_contents('p_zoom', ""+(g_map.getZoom())); // TDR 
+		//set_contents('p_zoom', ""+(g_map.getZoom()));
 		remake_traffic_lines_allroutes();
 		redraw_vehicle_markers();
 	});
