@@ -130,9 +130,9 @@ function kmph_to_color_ints(kmph_) {
 
 function interp_color(c1_, c2_, percent_) {
 	var r = [0, 0, 0];
-	for(var i in r) {
+	r.forEach(function(e, i) {
 		r[i] = get_range_val(0, c1_[i], 1.0, c2_[i], percent_);
-	}
+	});
 	return r;
 }
 
@@ -281,16 +281,14 @@ function get_moving_vehicle_marker_for_cur_minute(vid_) {
 function appropriate_vehicle_locations(fudgeroute_, raw_) {
 	var data = g_fudgeroute_data.get(fudgeroute_);
 	data.time_to_vid_to_vi.clear();
-	for(var minute in raw_) {
-		var timeslice = raw_[minute];
+	raw_.forEach(function(timeslice) {
 		var timestr = timeslice.shift();
 		var vid_to_vi = new buckets.Dictionary();
 		data.time_to_vid_to_vi.set(timestr, vid_to_vi);
-		for(var timeslicei in timeslice) {
-			var vi = timeslice[timeslicei];
+		timeslice.forEach(function(vi) {
 			vid_to_vi.set(vi.vehicle_id, vi);
-		}
-	}
+		});
+	});
 
 	update_g_times();
 }
@@ -337,9 +335,9 @@ function update_g_times() {
 
 function array_to_set(a_) {
 	var r = new buckets.Set();
-	for(var i in a_) {
-		r.add(a_[i]);
-	}
+	a_.forEach(function(e) {
+		r.add(e);
+	});
 	return r;
 }
 
@@ -792,10 +790,9 @@ function forget_static_vehicles(fudgeroute_) {
 }
 
 function hide_vehicles(list_) {
-	for(var i in list_) {
-		var m = list_[i];
+	list_.forEach(function(m) {
 		m.setMap(null);
-	}
+	});
 }
 
 function redraw_vehicle_markers() {
@@ -850,6 +847,9 @@ function initialize() {
 }
 
 function init_everything_that_doesnt_depend_on_map() {
+
+	init_javascript_array_functions_old_browser_fallbacks();
+
 	init_datetimepicker();
 	if(!SHOW_TIME_SELECTOR) {
 		$('#div_time_selector').remove();
@@ -870,6 +870,107 @@ function init_everything_that_doesnt_depend_on_map() {
 	init_num_extra_routes_controls();
 
 	init_route_options_dialog();
+
+}
+
+// For IE8 etc.  
+function init_javascript_array_functions_old_browser_fallbacks() {
+
+	// From https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Global_Objects/Array/IndexOf
+	if (!Array.prototype.indexOf) {
+			Array.prototype.indexOf = function (searchElement /*, fromIndex */ ) {
+					"use strict";
+					if (this == null) {
+							throw new TypeError();
+					}
+					var t = Object(this);
+					var len = t.length >>> 0;
+					if (len === 0) {
+							return -1;
+					}
+					var n = 0;
+					if (arguments.length > 1) {
+							n = Number(arguments[1]);
+							if (n != n) { // shortcut for verifying if it's NaN
+									n = 0;
+							} else if (n != 0 && n != Infinity && n != -Infinity) {
+									n = (n > 0 || -1) * Math.floor(Math.abs(n));
+							}
+					}
+					if (n >= len) {
+							return -1;
+					}
+					var k = n >= 0 ? n : Math.max(len - Math.abs(n), 0);
+					for (; k < len; k++) {
+							if (k in t && t[k] === searchElement) {
+									return k;
+							}
+					}
+					return -1;
+			}
+	}
+
+	// From https://developer.mozilla.org/en-US/docs/JavaScript/Reference/Global_Objects/Array/forEach
+	// Production steps of ECMA-262, Edition 5, 15.4.4.18
+	// Reference: http://es5.github.com/#x15.4.4.18
+	if ( !Array.prototype.forEach ) {
+	 
+		Array.prototype.forEach = function forEach( callback, thisArg ) {
+	 
+			var T, k;
+	 
+			if ( this == null ) {
+				throw new TypeError( "this is null or not defined" );
+			}
+	 
+			// 1. Let O be the result of calling ToObject passing the |this| value as the argument.
+			var O = Object(this);
+	 
+			// 2. Let lenValue be the result of calling the Get internal method of O with the argument "length".
+			// 3. Let len be ToUint32(lenValue).
+			var len = O.length >>> 0; // Hack to convert O.length to a UInt32
+	 
+			// 4. If IsCallable(callback) is false, throw a TypeError exception.
+			// See: http://es5.github.com/#x9.11
+			if ( {}.toString.call(callback) !== "[object Function]" ) {
+				throw new TypeError( callback + " is not a function" );
+			}
+	 
+			// 5. If thisArg was supplied, let T be thisArg; else let T be undefined.
+			if ( thisArg ) {
+				T = thisArg;
+			}
+	 
+			// 6. Let k be 0
+			k = 0;
+	 
+			// 7. Repeat, while k < len
+			while( k < len ) {
+	 
+				var kValue;
+	 
+				// a. Let Pk be ToString(k).
+				//   This is implicit for LHS operands of the in operator
+				// b. Let kPresent be the result of calling the HasProperty internal method of O with argument Pk.
+				//   This step can be combined with c
+				// c. If kPresent is true, then
+				if ( Object.prototype.hasOwnProperty.call(O, k) ) {
+	 
+					// i. Let kValue be the result of calling the Get internal method of O with argument Pk.
+					kValue = O[ k ];
+	 
+					// ii. Call the Call internal method of callback with T as the this value and
+					// argument list containing kValue, k, and O.
+					callback.call( T, kValue, k, O );
+				}
+				// d. Increase k by 1.
+				k++;
+			}
+			// 8. return undefined
+		};
+	}
+
+
 
 }
 
@@ -909,13 +1010,12 @@ function init_everything_that_depends_on_map() {
 }
 
 function show_hardcoded_display_set() {
-	for(var i in HARDCODED_DISPLAY_SET) {
-		var froutendir = HARDCODED_DISPLAY_SET[i];
+	HARDCODED_DISPLAY_SET.forEach(function(froutendir) {
 		var froute = froutendir[0];
 		var dir = froutendir[1];
 		g_force_show_froutes.add(froute);
 		(dir == 0 ? g_force_dir0_froutes : g_force_dir1_froutes).add(froute);
-	}
+	});
 	recalc_display_set();
 	g_trip_orig_marker.setVisible(false);
 	g_trip_dest_marker.setVisible(false);
@@ -965,15 +1065,14 @@ function refresh_streetlabels_singleroute(froute_) {
 					return;
 				}
 				forget_streetlabels_singleroute(froute_);
-				for(var labeli in labels) {
-					var label = labels[labeli];
+				labels.forEach(function(label) {
 					var marker = new google.maps.Marker({position: google_LatLng(label.latlng), 
 						map: g_map, draggable: false, flat: true, clickable: false, zIndex: 4,
 						icon: new google.maps.MarkerImage(get_streetlabel_cgi_url(label.text, label.rotation, zoom), 
 								null, null, new google.maps.Point(150, 150)),
 						});
 					g_fudgeroute_data.get(froute_).streetlabel_markers.add(marker);
-				}
+				});
 			});
 	}
 }
@@ -1045,12 +1144,11 @@ function update_force_sets_from_dialog_gui() {
 		g_force_show_froutes.clear();
 		g_force_show_froutes.add(g_route_options_dialog_froute);
 		g_force_hide_froutes.clear();
-		for(var i in g_all_froutes) {
-			var froute = g_all_froutes[i];
+		g_all_froutes.forEach(function(froute) {
 			if(froute != g_route_options_dialog_froute) {
 				g_force_hide_froutes.add(froute);
 			}
-		}
+		});
 	} else {
 		g_force_show_froutes.remove(g_route_options_dialog_froute);
 		g_force_hide_froutes.remove(g_route_options_dialog_froute);
@@ -1281,8 +1379,8 @@ function get_display_set() {
 	assert_force_sets_consistent();
 	var r = [];
 
-	for(var i in g_main_path) {
-		var froute = g_main_path[i][0], dir = g_main_path[i][1];
+	g_main_path.forEach(function(froutendir) {
+		var froute = froutendir[0], dir = froutendir[1];
 		if(!g_force_hide_froutes.contains(froute)) {
 			if(g_force_dir0_froutes.contains(froute)) {
 				dir = 0;
@@ -1291,21 +1389,20 @@ function get_display_set() {
 			}
 			r.push([froute, dir]);
 		}
-	}
+	});
 
 	function in_r(froute__) {
-		for(var i in r) {
-			var froutendir = r[i];
+		r.forEach(function(froutendir) {
 			if(froutendir[0] == froute__) {
 				return true;
 			}
-		}
+		});
 		return false;
 	}
 
 	var extras_added = 0;
-	for(var i in g_extra_path_froutendirs) {
-		var froute = g_extra_path_froutendirs[i][0], dir = g_extra_path_froutendirs[i][1];
+	g_extra_path_froutendirs.forEach(function(froutendir) {
+		var froute = froutendir[0], dir = froutendir[1];
 		if(extras_added >= g_num_extra_routes_to_show) {
 			break;
 		}
@@ -1318,7 +1415,7 @@ function get_display_set() {
 			r.push([froute, dir]);
 			extras_added += 1;
 		}
-	}
+	});
 
 	g_force_show_froutes.forEach(function(froute) {
 		if(!in_r(froute)) {
@@ -1363,10 +1460,9 @@ function recalc_display_set() {
 	var new_froutendirs = get_display_set();
 
 	var new_routes = new buckets.LinkedList();
-	for(var i in new_froutendirs) {
-		var froutendir = new_froutendirs[i];
+	new_froutendirs.forEach(function(froutendir) {
 		new_routes.add(froutendir[0]);
-	}
+	});
 
 	g_fudgeroute_data.forEach(function(froute, data) {
 		if(!new_routes.contains(froute)) {
@@ -1374,8 +1470,7 @@ function recalc_display_set() {
 		}
 	});
 
-	for(var i in new_froutendirs) {
-		var froutendir = new_froutendirs[i];
+	new_froutendirs.forEach(function(froutendir) {
 		var froute = froutendir[0], dir = froutendir[1];
 		if(g_fudgeroute_data.get(froute) == undefined || g_fudgeroute_data.get(froute).dir != dir) {
 			forget_data_singleroute(froute);
@@ -1389,7 +1484,7 @@ function recalc_display_set() {
 				refresh_streetlabels_singleroute(froute);
 			}
 		}
-	}
+	});
 
 	refresh_vid_checkboxes_html();
 }
