@@ -24,11 +24,11 @@ var TEST_INVISIBLE = false;
 var DISABLE_OVERTIME = false;
 var SHOW_FRAMERATE = false;
 var SHOW_TIME_SELECTOR = true;
-var SHOW_PATHS_TEXT = false;
+var SHOW_PATHS_TEXT = true;
 var SHOW_LOADING_URLS = false;
 var DISABLE_GEOLOCATION = true;
-var HARDCODE_DISPLAY_SET = true;
-var HARDCODED_DISPLAY_SET = [['bathurst', 1]];
+var HARDCODE_DISPLAY_SET = false;
+var HARDCODED_DISPLAY_SET = [['dundas', 0]];
 var SHOW_HISTORICAL_ON_LOAD = true;
 
 init_javascript_array_functions_old_browser_fallbacks();
@@ -87,7 +87,7 @@ var g_force_dir0_froutes = new buckets.Set(), g_force_dir1_froutes = new buckets
 var g_main_path = [], g_extra_path_froutendirs = [];
 
 var HEADING_ROUNDING_DEGREES = 5;
-var REFRESH_INTERVAL_MS = 15*1000;
+var REFRESH_INTERVAL_MS = 1500*1000;
 var MOVING_VEHICLES_OVERTIME_FLASH_INTERVAL_MS = 500;
 var MOVING_VEHICLES_ANIM_INTERVAL_MS = 100;
 var MOFR_STEP = parseInt(get_sync('MOFR_STEP'), 10);
@@ -1392,19 +1392,21 @@ function get_display_set() {
 	});
 
 	function in_r(froute__) {
-		r.forEach(function(froutendir) {
+		for(var i=0; i<r.length; i++) {
+			var froutendir = r[i];
 			if(froutendir[0] == froute__) {
 				return true;
 			}
-		});
+		}
 		return false;
 	}
 
 	var extras_added = 0;
-	g_extra_path_froutendirs.forEach(function(froutendir) {
+	for(var i=0; i<g_extra_path_froutendirs.length; i++) {
+		var froutendir = g_extra_path_froutendirs[i];
 		var froute = froutendir[0], dir = froutendir[1];
 		if(extras_added >= g_num_extra_routes_to_show) {
-			return;
+			break;
 		}
 		if(!in_r(froute) && !g_force_hide_froutes.contains(froute)) {
 			if(g_force_dir0_froutes.contains(froute)) {
@@ -1415,7 +1417,7 @@ function get_display_set() {
 			r.push([froute, dir]);
 			extras_added += 1;
 		}
-	});
+	}
 
 	g_force_show_froutes.forEach(function(froute) {
 		if(!in_r(froute)) {
