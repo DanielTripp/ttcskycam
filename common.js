@@ -223,9 +223,9 @@ function from_google_LatLng(glatlng_) {
 // arg: array of float pairs representing latlngs. 
 function google_LatLngs(latlngs_) {
 	var r = [];
-	for(var i in latlngs_) {
-		r.push(google_LatLng(latlngs_[i]));
-	}
+	latlngs_.forEach(function(latlng) {
+		r.push(google_LatLng(latlng));
+	});
 	return r;
 }
 
@@ -348,19 +348,17 @@ function add_all(dest_list_, src_list_) {
 
 function to_buckets_list(array_) {
 	var r = new buckets.LinkedList();
-	for(var i in array_) {
-		var e = array_[i];
+	array_.forEach(function(e) {
 		r.add(e);
-	}
+	});
 	return r;
 }
 
 function to_buckets_set(array_) {
 	var r = new buckets.Set();
-	for(var i in array_) {
-		var e = array_[i];
+	array_.forEach(function(e) {
 		r.add(e);
-	}
+	});
 	return r;
 }
 
@@ -410,10 +408,9 @@ function sort_buckets_list(l_) {
 	});
 	l_.clear();
 	temp.sort();
-	for(var i in temp) {
-		var e = temp[i];
+	temp.forEach(function(e) {
 		l_.add(e);
-	}
+	});
 }
 
 function add_delayed_event_listener(listenee_, eventname_, real_listener_func_, delay_millis_) {
@@ -478,7 +475,7 @@ function array_remove(array_, from_, to_) {
 };
 
 function array_indexof_identity(array_, object_) {
-	for(var i in array_) {
+	for(var i=0; i<array_.length; i++) {
 		if(array_[i] === object_) {
 			return i;
 		}
@@ -499,10 +496,9 @@ function sorted_keys(dict_) {
 function draw_polygon(filename_) {
 	var glatlngs = [];
 	var raw_latlngs = $.parseJSON(get_sync(filename_));
-	for(var i in raw_latlngs) {
-		var raw_latlng = raw_latlngs[i];
+	raw_latlngs.forEach(function(raw_latlng) {
 		glatlngs.push(google_LatLng(raw_latlng));
-	}
+	});
 	glatlngs.push(google_LatLng(raw_latlngs[0]));
 	new google.maps.Polyline({map: g_map, path: glatlngs, strokeColor: 'rgb(255,0,0)'});
 }
