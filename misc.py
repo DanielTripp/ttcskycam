@@ -539,6 +539,9 @@ def svg_to_png(svgstr_):
 	os.remove(png_filename)
 	return png_contents
 
+def values_sorted_by_key(dict_):
+	for key in sorted(dict_.keys()):
+		yield dict_[key]
 
 if __name__ == '__main__':
 
