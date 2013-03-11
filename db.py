@@ -647,7 +647,7 @@ def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, be_clever_, raw_vilist_for_hi
 						tracks_based_heading = tracks.heading(interped_loc_snap_result[1], interped_loc_snap_result[2])
 						ref_heading = vi1_.latlng.heading(vi2_.latlng)
 						if vi1_.latlng.dist_m(vi2_.latlng) < 50 and (raw_vilist_for_hint_ is not None): # that 50 could probably be a lot less.
-							for vi in [vi for vi in raw_vilist_for_hint_[::-1] if vi.vehicle_id == vi1_.vehicle_id]:
+							for vi in [vi for vi in raw_vilist_for_hint_ if vi.vehicle_id == vi2_.vehicle_id and vi.time < vi2_.time]:
 								if vi.latlng.dist_m(vi2_.latlng) > 50:
 									ref_heading = vi.latlng.heading(vi2_.latlng)
 									break
