@@ -562,8 +562,7 @@ def interp_by_time(vilist_, be_clever_, use_db_for_heading_inference_, current_c
 				if lo_vi.mofr!=-1 and hi_vi.mofr!=-1 and dirs_disagree(dir_, mofrs_to_dir(lo_vi.mofr, hi_vi.mofr)):
 					continue   # see note [1], above.
 				ratio = (interptime - lo_vi.time)/float(hi_vi.time - lo_vi.time)
-				hint_last_interped_vi = get_most_recent_vi(time_to_vis, vid)
-				i_latlon, i_heading, i_mofr = interp_latlonnheadingnmofr(lo_vi, hi_vi, ratio, be_clever_, hint_last_interped_vi)
+				i_latlon, i_heading, i_mofr = interp_latlonnheadingnmofr(lo_vi, hi_vi, ratio, be_clever_, vilist_)
 				i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, i_heading, vid, i_latlon.lat, i_latlon.lng,
 										 lo_vi.predictable and hi_vi.predictable,
 										 lo_vi.route_tag, 0, interptime, interptime, i_mofr, None)
@@ -586,12 +585,6 @@ def interp_by_time(vilist_, be_clever_, use_db_for_heading_inference_, current_c
 
 		time_to_vis[interptime] = interped_timeslice
 	return massage_to_list(time_to_vis, starttime, endtime)
-
-def get_most_recent_vi(time_to_vis_, vid_):
-	all_vis = sum((timeslice_vis for timeslice_vis in values_sorted_by_key(time_to_vis_)), [])
-	vis_with_vid = [vi for vi in all_vis if vi.vehicle_id == vid_]
-	return (vis_with_vid[-1] if len(vis_with_vid) > 0 else None)
-
 
 # Either arg could be None (i.e. blank dir_tag).  For this we consider None to 'agree' with 0 or 1.
 def dirs_disagree(dir1_, dir2_):
@@ -630,7 +623,7 @@ def get_latlonnheadingnmofr_from_lo_sample(lolo_vi_, lo_vi_, be_clever_):
 # note [1]: For a location anywhere on a track, we have two possible headings for vehicles on that track -
 # X and X + 180 degrees.  With this code we choose which one we want by choosing the one that is closest to the tracks-ignorant
 # heading indicated by the latlng diff of the two raw samples we're interpolating between.
-def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, be_clever_, hint_last_interped_vi_=None):
+def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, be_clever_, raw_vilist_for_hint_=None):
 	assert isinstance(vi1_, vinfo.VehicleInfo) and isinstance(vi2_, vinfo.VehicleInfo) and (vi1_.vehicle_id == vi2_.vehicle_id)
 	assert vi1_.time < vi2_.time
 	r = None
@@ -652,10 +645,12 @@ def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, be_clever_, hint_last_interpe
 					interped_loc_snap_result = tracks.snap(simple_interped_loc, 5000)
 					if interped_loc_snap_result is not None:
 						tracks_based_heading = tracks.heading(interped_loc_snap_result[1], interped_loc_snap_result[2])
-						if (vi1_.latlng.dist_m(vi2_.latlng) < 50) and (hint_last_interped_vi_ is not None): # that 50 could probably be a lot less.
-							ref_heading = hint_last_interped_vi_.heading
-						else:
-							ref_heading = vi1_.latlng.heading(vi2_.latlng)
+						ref_heading = vi1_.latlng.heading(vi2_.latlng)
+						if vi1_.latlng.dist_m(vi2_.latlng) < 50 and (raw_vilist_for_hint_ is not None): # that 50 could probably be a lot less.
+							for vi in [vi for vi in raw_vilist_for_hint_[::-1] if vi.vehicle_id == vi1_.vehicle_id]:
+								if vi.latlng.dist_m(vi2_.latlng) > 50:
+									ref_heading = vi.latlng.heading(vi2_.latlng)
+									break
 						if geom.diff_headings(tracks_based_heading, ref_heading) > 90: # see note [1] above
 							tracks_based_heading = geom.normalize_heading(tracks_based_heading+180)
 						r = (interped_loc_snap_result[0], tracks_based_heading, None)
