@@ -562,7 +562,7 @@ def interp_by_time(vilist_, be_clever_, use_db_for_heading_inference_, current_c
 				if lo_vi.mofr!=-1 and hi_vi.mofr!=-1 and dirs_disagree(dir_, mofrs_to_dir(lo_vi.mofr, hi_vi.mofr)):
 					continue   # see note [1], above.
 				ratio = (interptime - lo_vi.time)/float(hi_vi.time - lo_vi.time)
-				hint_last_interped_vi = (interped_timeslice[-1] if len(interped_timeslice) > 0 else None)
+				hint_last_interped_vi = get_most_recent_vi(time_to_vis, vid)
 				i_latlon, i_heading, i_mofr = interp_latlonnheadingnmofr(lo_vi, hi_vi, ratio, be_clever_, hint_last_interped_vi)
 				i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, i_heading, vid, i_latlon.lat, i_latlon.lng,
 										 lo_vi.predictable and hi_vi.predictable,
@@ -586,6 +586,12 @@ def interp_by_time(vilist_, be_clever_, use_db_for_heading_inference_, current_c
 
 		time_to_vis[interptime] = interped_timeslice
 	return massage_to_list(time_to_vis, starttime, endtime)
+
+def get_most_recent_vi(time_to_vis_, vid_):
+	all_vis = sum((timeslice_vis for timeslice_vis in values_sorted_by_key(time_to_vis_)), [])
+	vis_with_vid = [vi for vi in all_vis if vi.vehicle_id == vid_]
+	return (vis_with_vid[-1] if len(vis_with_vid) > 0 else None)
+
 
 # Either arg could be None (i.e. blank dir_tag).  For this we consider None to 'agree' with 0 or 1.
 def dirs_disagree(dir1_, dir2_):
