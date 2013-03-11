@@ -996,15 +996,15 @@ function init_everything_that_depends_on_map() {
 
 	add_delayed_event_listener(g_map, 'bounds_changed', refresh_streetlabels_allroutes, 100);
 
+	if(SHOW_HISTORICAL_ON_LOAD) {
+		set_selected('historical_button', true);
+		on_traffictype_changed();
+	}
+
 	if(!HARDCODE_DISPLAY_SET) {
 		on_trip_marker_moved();
 	} else {
 		show_hardcoded_display_set();
-	}
-
-	if(SHOW_HISTORICAL_ON_LOAD) {
-		set_selected('historical_button', true);
-		on_traffictype_changed();
 	}
 
 }
