@@ -570,7 +570,7 @@ def interp_by_time(vilist_, be_clever_, use_db_for_heading_inference_, current_c
 				if current_conditions_:
 					if (interptime - lo_vi.time > 3*60*1000) or dirs_disagree(dir_, lo_vi.dir_tag_int):
 						continue
-					latlng, heading = get_latlonnheadingnmofr_from_lo_sample(lolo_vi, lo_vi, be_clever_)[:2]
+					latlng, heading = get_latlonnheadingnmofr_from_lo_sample(lolo_vi, lo_vi, be_clever_, vilist_)[:2]
 					i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, heading, vid, latlng.lat, latlng.lng,
 							lo_vi.predictable, lo_vi.route_tag, 0, interptime, interptime, lo_vi.mofr, lo_vi.widemofr)
 
@@ -598,10 +598,10 @@ def dirs_disagree(dir1_, dir2_):
 # if tracks are being used - will be a choice between X and X + 180.  If we have only one sample (lo_vi_) then common sense 
 # says that there's no way that we can figure out that heading.  In that case we'll interpolate between lo_vi_ and itself, 
 # and in the tracks case, get something random for the heading - but latlng will still be correctly snapped to the track. 
-def get_latlonnheadingnmofr_from_lo_sample(lolo_vi_, lo_vi_, be_clever_):
+def get_latlonnheadingnmofr_from_lo_sample(lolo_vi_, lo_vi_, be_clever_, raw_vilist_for_hint_):
 	assert lo_vi_ is not None
 	if lolo_vi_ is not None:
-		return interp_latlonnheadingnmofr(lolo_vi_, lo_vi_, 1.0, be_clever_)
+		return interp_latlonnheadingnmofr(lolo_vi_, lo_vi_, 1.0, be_clever_, raw_vilist_for_hint_)
 	else:
 		# We would do something like this:
 		#return interp_latlonnheadingnmofr(lo_vi_, lo_vi_, 1.0, be_clever_)
