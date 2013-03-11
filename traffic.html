@@ -31,6 +31,8 @@ var HARDCODE_DISPLAY_SET = true;
 var HARDCODED_DISPLAY_SET = [['bathurst', 1]];
 var SHOW_HISTORICAL_ON_LOAD = true;
 
+init_javascript_array_functions_old_browser_fallbacks();
+
 function new_fudgeroute_data() {
 	return {
 		traffic_mofr2speed: new buckets.Dictionary(), 
@@ -848,8 +850,6 @@ function initialize() {
 
 function init_everything_that_doesnt_depend_on_map() {
 
-	init_javascript_array_functions_old_browser_fallbacks();
-
 	init_datetimepicker();
 	if(!SHOW_TIME_SELECTOR) {
 		$('#div_time_selector').remove();
@@ -1404,7 +1404,7 @@ function get_display_set() {
 	g_extra_path_froutendirs.forEach(function(froutendir) {
 		var froute = froutendir[0], dir = froutendir[1];
 		if(extras_added >= g_num_extra_routes_to_show) {
-			break;
+			return;
 		}
 		if(!in_r(froute) && !g_force_hide_froutes.contains(froute)) {
 			if(g_force_dir0_froutes.contains(froute)) {
