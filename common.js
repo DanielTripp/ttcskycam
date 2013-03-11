@@ -57,6 +57,8 @@ function remove_from_loading_urls(url_) {
 	update_p_loading_urls();
 }
 
+$(window).unload(function() { g_page_is_unloading = true; });
+
 // funcs_arg_ can be a single callable (success function) or an object with 'success' and/or 'error' members. 
 function get(url_, funcs_arg_) {
 	add_to_loading_urls(url_);
@@ -66,11 +68,14 @@ function get(url_, funcs_arg_) {
 	}
 	$.ajax({url:url_, async:true, 
 		error: function(jqXHR_, textStatus_, errorThrown_) {
+			if(g_page_is_unloading) {
+				return;
+			}
 			remove_from_loading_urls(url_);
 			if(error_func != undefined) {
 				error_func();
 			}
-			alert(sprintf("Error %s %s %s", jqXHR_, textStatus_, errorThrown_));
+			alert(sprintf("Error - %s %s _%s_", jqXHR_, textStatus_, errorThrown_));
 		}, 
 		success: function(data_, textStatus_, jqXHR_) {
 			remove_from_loading_urls(url_);
@@ -94,6 +99,9 @@ function get_sync(url_, additional_options_) {
 	var error = false;
 	var options = {url:url_, async:false, 
 			error: function(jqXHR_, textStatus_, errorThrown_) {
+				if(g_page_is_unloading) {
+					return;
+				}
 				alert("get_sync('"+url_+"') error - "+errorThrown_);
 				error = true;
 			}
