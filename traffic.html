@@ -841,6 +841,15 @@ function forget_traffic_lines(fudgeroute_) {
 
 function initialize() {
 
+	init_map();
+
+	init_everything_that_doesnt_depend_on_map();
+
+	// Some things that we do depend on g_map.getBounds(), which will be undefined until the map has had time to load a bit. 
+	google.maps.event.addListenerOnce(g_map, 'bounds_changed', init_everything_that_depends_on_map);
+}
+
+function init_everything_that_doesnt_depend_on_map() {
 	init_datetimepicker();
 	if(!SHOW_TIME_SELECTOR) {
 		$('#div_time_selector').remove();
@@ -852,42 +861,27 @@ function initialize() {
 		$('#p_loading_urls').remove();
 	}
 
-	init_map();
-	google.maps.event.addListener(g_map, 'zoom_changed', function() {
-		//set_contents('p_zoom', ""+(g_map.getZoom()));
-		remake_traffic_lines_allroutes();
-		redraw_vehicle_markers();
-	});
-	var origlat, origlon, destlat, destlon;
-	if(false) { // true for dundas 
-		var westlat = 43.65078;
-		var westlon = -79.4138099;
-		var eastlat = 43.6523999;
-		var eastlon = -79.40589;
-		if(false) { // true for eastbound 
-			origlat=westlat; origlon=westlon; destlat=eastlat; destlon=eastlon;
-		} else {
-			destlat=westlat; destlon=westlon; origlat=eastlat; origlon=eastlon;
-		}
-	} else { 
-		if(true) { // true for north on bathurst 
-			origlat=43.64457; origlon=-79.4165499; destlat=43.65454560588453; destlon=-79.40695567330022;
-		} else if(true) { // true for eastbound 
-			origlat=43.64457; origlon=-79.4165499; destlat=43.6471199; destlon=-79.4042;
-		} else {
-			destlat=43.64457; destlon=-79.4165499; origlat=43.6471199; origlon=-79.4042;
-		}
-	}
-
 	set_play_buttons_appropriately();
-
-	g_play_timer = setTimeout('moving_vehicles_timer_func()', 0);
 
 	if(!SHOW_FRAMERATE) {
 		$('#div_framerate').remove();
 	}
 
 	init_num_extra_routes_controls();
+
+	init_route_options_dialog();
+
+}
+
+function init_everything_that_depends_on_map() {
+	google.maps.event.addListener(g_map, 'zoom_changed', function() {
+		//set_contents('p_zoom', ""+(g_map.getZoom()));
+		remake_traffic_lines_allroutes();
+		redraw_vehicle_markers();
+	});
+
+	g_play_timer = setTimeout('moving_vehicles_timer_func()', 0);
+
 	init_trip_markers();
 	init_geolocation();
 
@@ -898,8 +892,6 @@ function initialize() {
 	add_invisible_route_lines();
 
 	//draw_pathgridsquares();
-
-	init_route_options_dialog();
 
 	add_delayed_event_listener(g_map, 'bounds_changed', refresh_streetlabels_allroutes, 100);
 
@@ -917,21 +909,16 @@ function initialize() {
 }
 
 function show_hardcoded_display_set() {
-	function go() {
-		for(var i in HARDCODED_DISPLAY_SET) {
-			var froutendir = HARDCODED_DISPLAY_SET[i];
-			var froute = froutendir[0];
-			var dir = froutendir[1];
-			g_force_show_froutes.add(froute);
-			(dir == 0 ? g_force_dir0_froutes : g_force_dir1_froutes).add(froute);
-		}
-		recalc_display_set();
-		g_trip_orig_marker.setVisible(false);
-		g_trip_dest_marker.setVisible(false);
-	};
-	// procrastinating in order to give map a chance to load. otherwise we'll probably get an error 
-	// when refresh_data_from_server_singleroute() (within recalc...) tries to call g_map.getBounds(), or something like that. 
-	setTimeout(go, 1000); 
+	for(var i in HARDCODED_DISPLAY_SET) {
+		var froutendir = HARDCODED_DISPLAY_SET[i];
+		var froute = froutendir[0];
+		var dir = froutendir[1];
+		g_force_show_froutes.add(froute);
+		(dir == 0 ? g_force_dir0_froutes : g_force_dir1_froutes).add(froute);
+	}
+	recalc_display_set();
+	g_trip_orig_marker.setVisible(false);
+	g_trip_dest_marker.setVisible(false);
 }
 
 function init_geolocation() {
@@ -966,14 +953,15 @@ function refresh_streetlabels_singleroute(froute_) {
 		return;
 	}
 	var zoom = g_map.getZoom();
-	if(!do_streetlabels_for_zoom(zoom)) {
+	if(!do_streetlabels_for_zoom(zoom) || !g_show_traffic_lines) {
 		forget_streetlabels_singleroute(froute_);
 	} else {
 		callpy('streetlabels.get_labels', froute_, zoom, g_map.getBounds().getSouthWest(), g_map.getBounds().getNorthEast(), 
 			function(labels) {
-				// This is a callback so since we started the call, this route could have been hidden or the zoom could have been changed.
-				// The map bounds could have changed too but I don't care as much about them for some reason. 
-				if(!g_fudgeroute_data.containsKey(froute_) || (g_map.getZoom() != zoom)) {
+				// This is a callback so since we started the call, this route could have been hidden or the zoom could have been changed, 
+				// or all traffic lines hidden.  
+				// The map bounds could have changed too but I don't care as much about them right now for some reason. 
+				if(!g_fudgeroute_data.containsKey(froute_) || (g_map.getZoom() != zoom) || !g_show_traffic_lines) {
 					return;
 				}
 				forget_streetlabels_singleroute(froute_);
