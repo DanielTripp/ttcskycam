@@ -1585,7 +1585,7 @@ function is_traffictype_historical() {
 }
 
 function init_datetimepicker() {
-	set_value('datetimepicker_textfield', get_sync('datetime.txt'));
+	set_value('datetimepicker_textfield', $.trim(get_sync('datetime.txt')));
 	$('#datetimepicker_textfield').datetimepicker({
 		dateFormat: 'yy-mm-dd', 
 		onSelect: function(dateText, inst) { 
@@ -1616,15 +1616,6 @@ function update_datetimepicker_enabledness() {
 
 function substr_int(str_, startidx_, len_) {
 	return parseInt(str_.substr(startidx_, len_), 10);
-}
-
-function get_date_from_gui() {
-	var d = get_datetime_from_gui();
-	if(d == 0) {
-		return new Date();
-	} else {
-		return new Date(substr_int(d, 0, 4), substr_int(d, 5, 2)-1, substr_int(d, 8, 2), substr_int(d, 11, 2), substr_int(d, 14, 2), 0, 0);
-	}
 }
 
 // Returns either 0 (an integer) or a string (in yyyy-MM-dd HH:MM format).   Our server functions can handle both. 
