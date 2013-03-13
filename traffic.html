@@ -24,7 +24,7 @@ var TEST_INVISIBLE = false;
 var DISABLE_OVERTIME = false;
 var SHOW_FRAMERATE = false;
 var SHOW_TIME_SELECTOR = true;
-var SHOW_PATHS_TEXT = true;
+var SHOW_PATHS_TEXT = false;
 var SHOW_LOADING_URLS = false;
 var DISABLE_GEOLOCATION = true;
 var HARDCODE_DISPLAY_SET = false;
@@ -87,7 +87,7 @@ var g_force_dir0_froutes = new buckets.Set(), g_force_dir1_froutes = new buckets
 var g_main_path = [], g_extra_path_froutendirs = [];
 
 var HEADING_ROUNDING_DEGREES = 5;
-var REFRESH_INTERVAL_MS = 1500*1000;
+var REFRESH_INTERVAL_MS = 5*1000;
 var MOVING_VEHICLES_OVERTIME_FLASH_INTERVAL_MS = 500;
 var MOVING_VEHICLES_ANIM_INTERVAL_MS = 100;
 var MOFR_STEP = parseInt(get_sync('MOFR_STEP'), 10);
