@@ -14,7 +14,7 @@ from collections import defaultdict, Sequence
 import vinfo, geom, traffic, routes, yards, tracks, predictions, mc
 from misc import *
 
-HOSTMONIKER_TO_IP = {'theorem': '72.2.4.176', 'black': '24.52.231.206'}
+HOSTMONIKER_TO_IP = {'theorem': '72.2.4.176', 'black': '24.52.231.206', 'u': 'localhost'}
 
 VI_COLS = ' dir_tag, heading, vehicle_id, lat, lon, predictable, route_tag, secs_since_report, time_retrieved, time, mofr, widemofr '
 
@@ -53,7 +53,9 @@ def get_host():
 		with open('HOST') as fin:
 			hostmoniker = fin.read().strip()
 	if hostmoniker == 'local':
-		if socket.gethostname().endswith('theorem.ca'):
+		if socket.gethostname() == 'unofficialttctrafficreport.ca':
+			hostmoniker = 'u'
+		elif socket.gethostname().endswith('theorem.ca'):
 			hostmoniker = 'theorem'
 		else:
 			hostmoniker = 'black'
@@ -904,11 +906,7 @@ def _get_observed_arrival_time_caught_vehicle_passing_vis(froute_, startstoptag_
 
 if __name__ == '__main__':
 
-	# lansdowne: 5294     east of humber (kingsway): 3374     west of humber (mimico creek): 6830
-	for deststoptag in ('3374', '6830'):
-		r = get_observed_arrival_time('queen', '5294', deststoptag, '2012-01-07 12:00')
-		print 'vid = %s    %s -> %s ' % (r['vid'], em_to_str(r['time_caught']), em_to_str(r['time_arrived']))
-		#break
 
+	conn()
 
 
