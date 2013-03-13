@@ -2,7 +2,7 @@
 
 # Tables involved: 
 # 
-# create table ttc_vehicle_locations (vehicle_id varchar(100), route_tag varchar(100), dir_tag varchar(100), lat double precision, lon double precision, secs_since_report integer, time_retrieved bigint, time_str varchar(100), predictable boolean, heading integer, rowid serial unique, mofr integer, widemofr integer);
+# create table ttc_vehicle_locations (vehicle_id varchar(100), route_tag varchar(100), dir_tag varchar(100), lat double precision, lon double precision, secs_since_report integer, time_retrieved bigint, predictable boolean, heading integer, time bigint, time_str varchar(100), rowid serial unique, mofr integer, widemofr integer);
 # create index ttc_vehicle_locations_idx on ttc_vehicle_locations (route_tag, time_retrieved desc);
 # create index ttc_vehicle_locations_idx2 on ttc_vehicle_locations (vehicle_id, time_retrieved desc);
 # 
