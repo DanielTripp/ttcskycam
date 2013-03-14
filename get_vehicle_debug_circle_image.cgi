@@ -39,7 +39,8 @@ def get_png(vid_):
 
 def get_png_impl(vid_):
 	svgstr = get_svg(vid_)
-	svg_fileno, svg_filename = tempfile.mkstemp('.svg', 'temp-debug-vehicle-svg', '/tmp/dt')
+	tmpdir = ('/tmp/dt' if os.path.isdir('/tmp/dt') else '/tmp')
+	svg_fileno, svg_filename = tempfile.mkstemp('.svg', 'temp-debug-vehicle-svg', tmpdir)
 	svg_file = os.fdopen(svg_fileno, 'w')
 	svg_file.write(svgstr)
 	svg_file.close()

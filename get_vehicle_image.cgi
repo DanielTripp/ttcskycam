@@ -30,7 +30,8 @@ def get_vehicle_png(size_, heading_, color_, opacity_):
 
 def get_vehicle_png_impl(size_, heading_, color_, opacity_):
 	svgstr = get_vehicle_svg(size_, heading_, color_, opacity_)
-	svg_fileno, svg_filename = tempfile.mkstemp('.svg', 'temp-vehicle-svg', '/tmp/dt')
+	tmpdir = ('/tmp/dt' if os.path.isdir('/tmp/dt') else '/tmp')
+	svg_fileno, svg_filename = tempfile.mkstemp('.svg', 'temp-vehicle-svg', tmpdir)
 	svg_file = os.fdopen(svg_fileno, 'w')
 	svg_file.write(svgstr)
 	svg_file.close()
