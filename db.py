@@ -718,28 +718,31 @@ def get_recent_passing_vehicles(route_, post_, max_, end_time_em_=now_em(), dir_
 		vid_to_lastvi[vid] = curvi
 	return r
 
-def purge():
-	if not socket.gethostname().endswith('theorem.ca'):
-		raise Exception('Not running on theorem.ca?')
+def purge(num_days_):
+	assert isinstance(num_days_, int)
+	assert num_days_ >= 0
+	if not socket.gethostname() == 'unofficialttctrafficreport.ca':
+		raise Exception('Not running on prod machine?')
 
-	force_host('theorem')
+	force_host('u')
 
-	purge_delete()
+	purge_delete(num_days_)
 	purge_vacuum()
 
 @trans
-def purge_delete():
+def purge_delete(num_days_):
 	curs = conn().cursor()
 	# Delete all rows older than 12 hours:
-	curs.execute('delete from ttc_vehicle_locations where time < round(extract(epoch from clock_timestamp())*1000) - 1000*60*60*12;')
-	curs.execute('delete from predictions where time_retrieved < round(extract(epoch from clock_timestamp())*1000) - 1000*60*60*12;')
+	num_millis = 1000*60*60*24*num_days_
+	curs.execute('delete from ttc_vehicle_locations where time < round(extract(epoch from clock_timestamp())*1000) - %d;' % num_millis)
+	curs.execute('delete from predictions where time_retrieved < round(extract(epoch from clock_timestamp())*1000) - %d;' % num_millis)
 	curs.close()
 
 def purge_vacuum():
 	old_isolation_level = conn().isolation_level
 	conn().set_isolation_level(0)
 	curs = conn().cursor()
-	curs.execute('vacuum full;')
+	curs.execute('vacuum analyze;')
 	curs.close()
 	conn().set_isolation_level(old_isolation_level)
 
