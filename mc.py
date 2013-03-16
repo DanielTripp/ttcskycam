@@ -1,6 +1,7 @@
 #!/usr/bin/python2.6
 
-import sys, os, subprocess, signal, re
+import sys, os, os.path, subprocess, signal, re
+os.chdir(os.path.dirname(sys.argv[0]))
 import memcache
 import c
 
