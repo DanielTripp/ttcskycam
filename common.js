@@ -57,6 +57,7 @@ function remove_from_loading_urls(url_) {
 	update_p_loading_urls();
 }
 
+g_page_is_unloading = false;
 $(window).unload(function() { g_page_is_unloading = true; });
 
 // funcs_arg_ can be a single callable (success function) or an object with 'success' and/or 'error' members. 
