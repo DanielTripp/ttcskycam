@@ -71,23 +71,26 @@ def we_are_on_linux():
 	return ('linux' in sys.platform.lower())
 
 def is_server_running(instance_):
+	return (get_server_pid(instance_) is not None)
+
+def get_server_pid(instance_):
 	if we_are_on_linux():
-		pid = get_server_pid_linux(instance_)
+		return get_server_pid_linux(instance_)
 	else:
-		pid = get_server_pid_windows(instance_)
-	return (pid is not None)
+		return get_server_pid_windows(instance_)
 
 def start_memcache(instance_):
 	if is_server_running(instance_):
 		print 'Server was already started.  (Or another process is using that port.)'
 	else:
-		subprocess.Popen(['memcached', '-l', '127.0.0.1', '-m', '2', '-p', str(server_get_port(instance_))])
+		subprocess.Popen(['memcached', '-u', 'dt', '-l', '127.0.0.1', '-m', '2', '-p', str(server_get_port(instance_))])
 
+# Using netstat's "-p" option as we do here requires netstat to run as root so I've setuid'ed it on my machine to make this work. 
 def get_server_pid_linux(instance_):
-	lsof_stdout_contents = subprocess.Popen(['lsof'], stdout=subprocess.PIPE).communicate()[0]
-	for line in lsof_stdout_contents.split('\n'):
+	netstat_stdout_contents = subprocess.Popen(['netstat', '--tcp', '-p', '-a'], stdout=subprocess.PIPE).communicate()[0]
+	for line in netstat_stdout_contents.split('\n'):
 		if re.search(r':%d\b' % server_get_port(instance_), line) and 'LISTEN' in line:
-			pid = int(re.sub(r'^.*?(\d+).*$', r'\1', line))
+			pid = int(re.sub(r'^.*?(\d+)[^\d]*$', r'\1', line))
 			return pid
 	return None
 
@@ -120,9 +123,15 @@ def stop_memcache(instance_):
 		stop_memcache_windows(instance_)
 
 def list_running_instances():
-	print 'dev instance is running: %s' % is_server_running('dev')
-	print 'prod instance is running: %s' % is_server_running('prod')
-	
+	def p(instance__):
+		pid = get_server_pid(instance__)
+		if pid is None:
+			print '%s instance is not running.' % instance__
+		else:
+			print '%s instance is running as pid %d' % (instance__, pid)
+	p('dev')
+	p('prod')
+
 
 
 if __name__ == '__main__':
