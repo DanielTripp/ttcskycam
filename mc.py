@@ -69,23 +69,48 @@ def server_get_port(instance_):
 def we_are_on_linux():
 	return ('linux' in sys.platform.lower())
 
-def start_memcache(instance_):
-	subprocess.Popen(['memcached', '-l', '127.0.0.1', '-m', '2', '-p', str(server_get_port(instance_))])
+def is_server_running(instance_):
+	if we_are_on_linux():
+		pid = get_server_pid_linux(instance_)
+	else:
+		pid = get_server_pid_windows(instance_)
+	return (pid is not None)
 
-def stop_memcache_linux(instance_):
+def start_memcache(instance_):
+	if is_server_running(instance_):
+		print 'Server was already started.  (Or another process is using that port.)'
+	else:
+		subprocess.Popen(['memcached', '-l', '127.0.0.1', '-m', '2', '-p', str(server_get_port(instance_))])
+
+def get_server_pid_linux(instance_):
 	lsof_stdout_contents = subprocess.Popen(['lsof'], stdout=subprocess.PIPE).communicate()[0]
 	for line in lsof_stdout_contents.split('\n'):
 		if re.search(r':%d\b' % server_get_port(instance_), line) and 'LISTEN' in line:
 			pid = int(re.sub(r'^.*?(\d+).*$', r'\1', line))
-			os.kill(pid, signal.SIGKILL)
+			return pid
+	return None
 
-def stop_memcache_windows(instance_):
+def stop_memcache_linux(instance_):
+	pid = get_server_pid_linux(instance_)
+	if pid is None:
+		print 'Was not started.'
+	else:
+		os.kill(pid, signal.SIGKILL)
+
+def get_server_pid_windows(instance_):
 	netstat_stdout_contents = subprocess.Popen(['netstat', '-a', '-b', '-n', '-p', 'tcp'], stdout=subprocess.PIPE).communicate()[0]
 	for line in netstat_stdout_contents.split('\n'):
 		if re.search(r':%d\b' % server_get_port(instance_), line) and 'LISTENING' in line:
-			pid = re.sub(r'^.*?(\d+)\s*$', r'\1', line) 
-			subprocess.check_call(['taskkill', '/f', '/pid', pid])
-			break
+			pid = int(re.sub(r'^.*?(\d+)\s*$', r'\1', line))
+			return pid
+	return None
+
+def stop_memcache_windows(instance_):
+	pid = get_server_pid_windows(instance_)
+	if pid is None:
+		print 'Was not started.'
+	else:
+		subprocess.check_call(['taskkill', '/f', '/pid', str(pid)])
 
 def stop_memcache(instance_):
 	if we_are_on_linux():
@@ -93,17 +118,24 @@ def stop_memcache(instance_):
 	else:
 		stop_memcache_windows(instance_)
 
+def list_running_instances():
+	print 'dev instance is running: %s' % is_server_running('dev')
+	print 'prod instance is running: %s' % is_server_running('prod')
+	
 
 
 if __name__ == '__main__':
 
-	instance, command = sys.argv[1:3]
-	if instance not in INSTANCE_TO_PORT or command not in ('start', 'stop', 'restart'):
-		sys.exit('Invalid arguments.')
-	if command in ('stop', 'restart'):
-		stop_memcache(instance)
-	if command in ('restart', 'start'):
-		start_memcache(instance)
+	if len(sys.argv) == 2 and sys.argv[1] == 'list':
+		list_running_instances()
+	else:
+		command, instance = sys.argv[1:3]
+		if instance not in INSTANCE_TO_PORT or command not in ('start', 'stop', 'restart'):
+			sys.exit('Invalid arguments.')
+		if command in ('stop', 'restart'):
+			stop_memcache(instance)
+		if command in ('restart', 'start'):
+			start_memcache(instance)
 
 
 
