@@ -23,13 +23,17 @@
 var TEST_INVISIBLE = false;
 var DISABLE_OVERTIME = false;
 var SHOW_FRAMERATE = false;
+
 var SHOW_TIME_SELECTOR = true;
-var SHOW_PATHS_TEXT = false;
+var SHOW_HISTORICAL_ON_LOAD = false;
+var HISTORICAL_TIME_DEFAULT = '2013-02-17 12:35';
+
+var SHOW_PATHS_TEXT = true;
 var SHOW_LOADING_URLS = false;
 var DISABLE_GEOLOCATION = true;
-var HARDCODE_DISPLAY_SET = false;
+
+var HARDCODE_DISPLAY_SET = true;
 var HARDCODED_DISPLAY_SET = [['dundas', 0]];
-var SHOW_HISTORICAL_ON_LOAD = true;
 
 init_javascript_array_functions_old_browser_fallbacks();
 
@@ -90,8 +94,8 @@ var HEADING_ROUNDING_DEGREES = 5;
 var REFRESH_INTERVAL_MS = 5*1000;
 var MOVING_VEHICLES_OVERTIME_FLASH_INTERVAL_MS = 500;
 var MOVING_VEHICLES_ANIM_INTERVAL_MS = 100;
-var MOFR_STEP = parseInt(get_sync('MOFR_STEP'), 10);
-var FROUTE_TO_INTDIR_TO_ENGLISHDESC = callpy_sync('routes.get_fudgeroute_to_intdir_to_englishdesc');
+var MOFR_STEP = <?php readfile('MOFR_STEP'); ?>
+var FROUTE_TO_INTDIR_TO_ENGLISHDESC = <?php passthru('python -c "import routes; print routes.get_fudgeroute_to_intdir_to_englishdesc()"'); ?>;
 
 var g_zoom_to_vehicle_size = [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 10, 13, 15, 25, 40, 50, 60, 70, 80, 100, 130, 130, ];
 var g_zoom_to_traffic_line_width = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 7, 8, 8, 10, 13, 16, 22, 42, 42];
@@ -850,8 +854,9 @@ function initialize() {
 
 function init_everything_that_doesnt_depend_on_map() {
 
-	init_datetimepicker();
-	if(!SHOW_TIME_SELECTOR) {
+	if(SHOW_TIME_SELECTOR) {
+		init_datetimepicker();
+	} else {
 		$('#div_time_selector').remove();
 	}
 	if(!SHOW_PATHS_TEXT) {
@@ -1174,7 +1179,7 @@ function is_subway(froute_) {
 }
 
 function add_invisible_route_lines() {
-	var froute_to_latlngs = callpy_sync('routes.get_all_froute_latlngs');
+	var froute_to_latlngs = <?php passthru('python -c "import routes; print routes.get_all_froute_latlngs_json_str()"'); ?>;
 	for(var froute in froute_to_latlngs) {
 		var latlngs = froute_to_latlngs[froute];
 		add_invisible_route_line(froute, latlngs);
@@ -1585,7 +1590,7 @@ function is_traffictype_historical() {
 }
 
 function init_datetimepicker() {
-	set_value('datetimepicker_textfield', $.trim(get_sync('datetime.txt')));
+	set_value('datetimepicker_textfield', HISTORICAL_TIME_DEFAULT);
 	$('#datetimepicker_textfield').datetimepicker({
 		dateFormat: 'yy-mm-dd', 
 		onSelect: function(dateText, inst) { 
@@ -1611,7 +1616,9 @@ function schedule_refresh_data_from_server() {
 }
 
 function update_datetimepicker_enabledness() {
-	$('#datetimepicker_textfield').prop('disabled', is_traffictype_current());
+	if(SHOW_TIME_SELECTOR) {
+		$('#datetimepicker_textfield').prop('disabled', is_traffictype_current());
+	}
 }
 
 function substr_int(str_, startidx_, len_) {

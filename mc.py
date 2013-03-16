@@ -1,7 +1,7 @@
 #!/usr/bin/python2.6
 
 import sys, os, os.path, subprocess, signal, re
-if sys.argv[0]: # b/c sys.argv[0] will be '' if this is imported from an interactive interpreter, 
+if len(sys.argv[0]) > 0 and (sys.argv[0] != '-c'): # b/c sys.argv[0] will be '' if this is imported from an interactive interpreter, 
 	os.chdir(os.path.dirname(sys.argv[0])) # and we don't want to chdir in that case anyway. 
 import memcache
 import c

@@ -104,6 +104,10 @@ class OurJSONEncoder(json.JSONEncoder):
 			return json.JSONEncoder.default(self, o)
 
 
+def to_json_str(object_):
+	return json.dumps(object_, cls=OurJSONEncoder)
+
+
 # Find the mid-point of a loop.  
 # Pass in a completed loop i.e. last point is equal to first point. 
 def split_route_loop(filename_):
