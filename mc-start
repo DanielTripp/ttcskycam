@@ -1,2 +1,0 @@
-nohup memcached -l 127.0.0.1 -m 2 -p 2029 </dev/null &
-echo $! > ~/mc.pid
