@@ -1,7 +1,7 @@
 #!/usr/bin/python2.6
 
 import sys, json, os.path, bisect, xml.dom, xml.dom.minidom
-import vinfo, geom, mc, c, snaptogrid
+import vinfo, geom, mc, c, snaptogrid, util
 from misc import *
 #from mrucache import *
 from lru_cache import lru_cache
@@ -642,6 +642,10 @@ def get_fudgeroutes_for_map_bounds(southwest_, northeast_, compassdir_or_heading
 # For all routes that I've looked at, our dir 0 (which corresponds to NextBus's _0_ in a dirtag) is east for a
 # route that goes east-west, and south for one that goes north-south.  (1 for the other direction, of course.)
 # But I know of no guarantee for this.
+@mc.decorate
+def get_fudgeroute_to_intdir_to_englishdesc_json_str():
+	return util.to_json_str(get_fudgeroute_to_intdir_to_englishdesc())
+
 def get_fudgeroute_to_intdir_to_englishdesc():
 	r = {}
 	for fudgeroute in NON_SUBWAY_FUDGEROUTES:
@@ -803,6 +807,9 @@ def routepts(froute_, dir_):
 	return routeinfo(froute_).routepts(dir_)
 
 @mc.decorate
+def get_all_froute_latlngs_json_str():
+	return util.to_json_str(get_all_froute_latlngs())
+
 def get_all_froute_latlngs():
 	r = {}
 	for froute in FUDGEROUTES:
