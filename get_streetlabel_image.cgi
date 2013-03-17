@@ -42,6 +42,7 @@ def get_streetlabel_png(text_, rotation_, zoom_):
 vars = urlparse.parse_qs(os.getenv('QUERY_STRING'))
 args = get_arg_objvals(vars)
 
+print 'Cache-control: max-age=86400'
 print 'Content-type: image/png\n'
 print get_streetlabel_png(*args)
 
