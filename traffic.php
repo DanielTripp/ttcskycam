@@ -50,7 +50,9 @@ function new_fudgeroute_data() {
 		dir: null, // will be 0 or 1 or a pair a latlngs (orig and dest). 
 		traffic_request_pending: false, 
 		vehicles_request_pending: false,
-		streetlabel_markers: new buckets.LinkedList()
+		streetlabel_markers: new buckets.LinkedList(),
+		traffic_last_returned_timestr: null, 
+		locations_last_returned_timestr: null
 	};
 }
 
@@ -168,16 +170,22 @@ function refresh_traffic_from_server(fudgeroute_) {
 	var dir_to_request = data.dir;
 	if(!data.traffic_request_pending) {
 		data.traffic_request_pending = true;
-		callpy('traffic.get_traffics', fudgeroute_, dir_to_request, true, get_datetime_from_gui(), 
+		callpy('traffic.get_traffics', fudgeroute_, dir_to_request, true, get_datetime_from_gui(), data.traffic_last_returned_timestr, 
 			{success: function(r_) {
 				var data = g_fudgeroute_data.get(fudgeroute_);
 				if(data == undefined || data.dir != dir_to_request) {
 					return;
 				}
 				data.traffic_request_pending = false;
-				data.traffic_linedefs = to_buckets_list(r_[0]);
-				data.traffic_mofr2speed = to_buckets_dict(r_[1]);
-				update_last_updated_time();
+				var returned_timestr = r_[0];
+				if(data.traffic_last_returned_timestr == returned_timestr) {
+					return;
+				}
+				data.traffic_last_returned_timestr = returned_timestr;
+				assert(r_[1] != null, "traffic data is null even though timestamp has been updated.");
+				data.traffic_linedefs = to_buckets_list(r_[1][0]);
+				data.traffic_mofr2speed = to_buckets_dict(r_[1][1]);
+				update_last_updated_time(returned_timestr);
 				remake_traffic_lines_singleroute(fudgeroute_);
 			}, 
 			error: function() {
@@ -196,16 +204,24 @@ function refresh_vehicles_from_server(fudgeroute_) {
 	var dir_to_request = data.dir;
 	if(!data.vehicles_request_pending) {
 		data.vehicles_request_pending = true;
-		callpy('traffic.get_recent_vehicle_locations', fudgeroute_, dir_to_request, true, get_datetime_from_gui(), 
+		callpy('traffic.get_recent_vehicle_locations', fudgeroute_, dir_to_request, true, get_datetime_from_gui(), data.locations_last_returned_timestr, 
 			{success: function(r_) {
 				var data = g_fudgeroute_data.get(fudgeroute_);
 				if(data == undefined || data.dir != dir_to_request) {
 					return;
 				}
 				data.vehicles_request_pending = false;
+
+				var returned_timestr = r_[0];
+				if(data.locations_last_returned_timestr == returned_timestr) {
+					return;
+				}
+				data.locations_last_returned_timestr = returned_timestr;
+				assert(r_[1] != null, "location data is null even though timestamp has been updated.");
+
 				forget_vehicles(fudgeroute_);
-				update_last_updated_time();
-				appropriate_vehicle_locations(fudgeroute_, r_);
+				update_last_updated_time(returned_timestr);
+				appropriate_vehicle_locations(fudgeroute_, r_[1]);
 				$('#playpause_button').prop('disabled', false);
 				remake_static_vehicles_singleroute(fudgeroute_);
 				remake_moving_vehicles_singleroute(fudgeroute_);
@@ -398,9 +414,8 @@ function round_heading(heading_) {
 	return round(heading_, HEADING_ROUNDING_DEGREES);
 }
 
-function update_last_updated_time() {
-	var d = new Date();
-	set_contents('p_last_updated', sprintf('(Last updated at %02d:%02d:%02d)', d.getHours(), d.getMinutes(), d.getSeconds()));
+function update_last_updated_time(timestr_ymdhms_) {
+	set_contents('p_last_updated', sprintf('(Last updated at %s)', timestr_ymdhms_.substr(11)));
 }
 
 function refresh_data_from_server_timer_func() {
