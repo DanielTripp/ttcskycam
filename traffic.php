@@ -24,16 +24,18 @@ var TEST_INVISIBLE = false;
 var DISABLE_OVERTIME = false;
 var SHOW_FRAMERATE = false;
 
-var SHOW_TIME_SELECTOR = true;
+var SHOW_TIME_SELECTOR = false;
 var SHOW_HISTORICAL_ON_LOAD = false;
 var HISTORICAL_TIME_DEFAULT = '2013-02-17 12:35';
 
-var SHOW_PATHS_TEXT = true;
+var SHOW_PATHS_TEXT = false;
 var SHOW_LOADING_URLS = false;
-var DISABLE_GEOLOCATION = true;
+var DISABLE_GEOLOCATION = false;
 
-var HARDCODE_DISPLAY_SET = true;
+var HARDCODE_DISPLAY_SET = false;
 var HARDCODED_DISPLAY_SET = [['dundas', 0]];
+
+init_dev_option_values();
 
 init_javascript_array_functions_old_browser_fallbacks();
 
@@ -99,6 +101,25 @@ var FROUTE_TO_INTDIR_TO_ENGLISHDESC = <?php passthru('python -c "import routes; 
 
 var g_zoom_to_vehicle_size = [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 10, 13, 15, 25, 40, 50, 60, 70, 80, 100, 130, 130, ];
 var g_zoom_to_traffic_line_width = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 7, 8, 8, 10, 13, 16, 22, 42, 42];
+
+function init_dev_option_values() {
+	<?php
+	if(file_exists('dev-options-for-traffic-php.txt')) {
+		foreach(explode("\n", file_get_contents('dev-options-for-traffic-php.txt')) as $line) {
+			if($line != "") {
+				$line_splits = preg_split("/[\s]+/", $line, 2);
+				$varname = $line_splits[0];
+				echo $varname, ";\n"; // This is to make sure that the variable name in the .txt file has already been declared in 
+					// this html files.  A line of javascript of the form "VARNAME;" will do nothing, but it will cause an show-stoping 
+					// error in the javascript interpreter (a ReferenceError I believe) if that variable hasn't been defined already.  
+					// We want only variables that have already been defined in this .html file to be defined in the .txt, so this 
+					// is how we do it. 
+				echo $line, "\n"; // <-- This is the more important part - setting the overridden value. 
+			}
+		}
+	}
+	?>
+}
 
 function get_vehicle_size_by_zoom(zoom_) {
 	if(0 <= zoom_ && zoom_ < g_zoom_to_vehicle_size.length) {
