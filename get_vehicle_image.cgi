@@ -48,6 +48,7 @@ def get_vehicle_png_impl(size_, heading_, color_, opacity_):
 vars = urlparse.parse_qs(os.getenv('QUERY_STRING'))
 args = get_arg_objvals(vars)
 
+print 'Cache-control: max-age=86400'
 print 'Content-type: image/png\n'
 print get_vehicle_png(*args)
 

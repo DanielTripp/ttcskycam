@@ -57,6 +57,7 @@ def get_png_impl(vid_):
 vars = urlparse.parse_qs(os.getenv('QUERY_STRING'))
 args = get_arg_objvals(vars)
 
+print 'Cache-control: max-age=86400'
 print 'Content-type: image/png\n'
 print get_png(*args)
 
