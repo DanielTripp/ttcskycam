@@ -6,6 +6,8 @@ if len(sys.argv[0]) > 0 and (sys.argv[0] != '-c'): # b/c sys.argv[0] will be '' 
 import memcache
 import c
 
+NUM_MEGS = 100
+
 INSTANCE_TO_PORT = {'dev': 2029, 'prod': 2030}
 
 g_memcache_client = None
@@ -84,7 +86,7 @@ def start_memcache(instance_):
 	if is_server_running(instance_):
 		print 'Server was already started.  (Or another process is using that port.)'
 	else:
-		subprocess.Popen(['memcached', '-u', 'dt', '-l', '127.0.0.1', '-m', '2', '-p', str(server_get_port(instance_))])
+		subprocess.Popen(['memcached', '-u', 'dt', '-l', '127.0.0.1', '-m', str(NUM_MEGS), '-p', str(server_get_port(instance_))])
 
 # Using netstat's "-p" option as we do here requires netstat to run as root so I've setuid'ed it on my machine to make this work. 
 def get_server_pid_linux(instance_):
