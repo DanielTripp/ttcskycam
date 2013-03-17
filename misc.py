@@ -9,6 +9,9 @@ def em_to_str(t_):
 	else:
 		return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t_/1000))
 
+def em_to_str_ymdhms(t_):
+	return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t_/1000))
+
 def em_to_str_millis(t_):
 	format = '%Y-%m-%d %H:%M:%S'
 	secs_formatted = time.strftime(format, time.localtime(t_/1000))

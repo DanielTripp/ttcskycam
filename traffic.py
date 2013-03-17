@@ -9,14 +9,19 @@ with open('MOFR_STEP') as f:
 
 TIME_WINDOW_MINUTES = 30
 
-def get_recent_vehicle_locations(fudgeroute_, dir_, current_, time_, log_=False):
+def get_recent_vehicle_locations(fudgeroute_, dir_, current_, time_, last_returned_timestr_, log_=False):
 	assert (fudgeroute_ in routes.NON_SUBWAY_FUDGEROUTES)
 	time_ = massage_time_arg(time_, 15*1000)
-	return get_recent_vehicle_locations_impl(fudgeroute_, dir_, current_, time_, log_)
+	r_timestr = em_to_str_ymdhms(time_)
+	if r_timestr != last_returned_timestr_:
+		r_data = get_recent_vehicle_locations_impl(fudgeroute_, dir_, current_, time_, log_)
+	else:
+		r_data = None
+	return (r_timestr, r_data)
 
 # Import to mc.decorate after the massage of time arg because that will usually be 0 (meaning now) 
 # when it comes from the client. 
-#@mc.decorate     # TDR put back
+@mc.decorate
 def get_recent_vehicle_locations_impl(fudgeroute_, dir_, current_, time_, log_=False):
 	return db.get_recent_vehicle_locations(fudgeroute_, TIME_WINDOW_MINUTES, dir_, current_, time_window_end_=time_, log_=log_)
 
@@ -45,14 +50,19 @@ def get_vid_to_vis_from_db_for_traffic(fudgeroute_name_, dir_, time_, window_min
 def between(bound1_, value_, bound2_):
 	return (bound1_ < value_ < bound2_) or (bound1_ > value_ > bound2_) 
 
-# time_ - 0 for now
+# arg time_ - 0 means "now" i.e. current conditions. 
 # 
 # returns elem 0: visuals list - [[timestamp, vi dict, vi dict, ...], ...] 
 #         elem 1: speed map - {mofr1: {'kmph': kmph, 'weight': weight}, ...}
-def get_traffics(fudgeroute_name_, dir_, current_, time_, window_minutes_=TIME_WINDOW_MINUTES, log_=False):
+def get_traffics(fudgeroute_name_, dir_, current_, time_, last_returned_timestr_, window_minutes_=TIME_WINDOW_MINUTES, log_=False):
 	assert (fudgeroute_name_ in routes.NON_SUBWAY_FUDGEROUTES)
 	time_ = massage_time_arg(time_, 60*1000)
-	return get_traffics_impl(fudgeroute_name_, dir_, current_, time_, window_minutes_, log_)
+	r_timestr = em_to_str_ymdhms(time_)
+	if r_timestr != last_returned_timestr_:
+		r_data = get_traffics_impl(fudgeroute_name_, dir_, current_, time_, window_minutes_, log_)
+	else:
+		r_data = None
+	return (r_timestr, r_data)
 
 @mc.decorate
 def get_traffics_impl(fudgeroute_name_, dir_, current_, time_, window_minutes_, log_=False):
