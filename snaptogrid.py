@@ -49,6 +49,14 @@ class GridSquare(object):
 	def latlng(self):
 		return geom.LatLng(gridlat_to_lat(self.gridlat), gridlng_to_lng(self.gridlng))
 
+	def corner_latlngs(self):
+		r = []
+		r.append(geom.LatLng(gridlat_to_lat(self.gridlat+1), gridlng_to_lng(self.gridlng+1)))
+		r.append(geom.LatLng(gridlat_to_lat(self.gridlat+1), gridlng_to_lng(self.gridlng)))
+		r.append(geom.LatLng(gridlat_to_lat(self.gridlat), gridlng_to_lng(self.gridlng)))
+		r.append(geom.LatLng(gridlat_to_lat(self.gridlat), gridlng_to_lng(self.gridlng+1)))
+		return r
+
 class LineSegAddr(object):
 
 	def __init__(self, polylineidx_, startptidx_):
@@ -124,8 +132,14 @@ class SnapToGridCache(object):
 		assert isinstance(target_, geom.LatLng) and isinstance(searchradius_, int)
 		# Guarding against changes in LATSTEP/LNGSTEP while a SnapToGridCache object was sitting in memcached:
 		assert self.latstep == LATSTEP and self.lngstep == LNGSTEP
+		target_gridsquare = GridSquare(target_)
+		a_nearby_linesegaddr = self.get_a_nearby_linesegaddr(target_gridsquare, searchradius_)
+		if a_nearby_linesegaddr is None:
+			return None
+		a_nearby_lineseg = self.get_lineseg(a_nearby_linesegaddr)
+		endgame_search_radius = self._snap_get_endgame_search_radius(a_nearby_lineseg, target_gridsquare)
 		best_yet_snapresult = None; best_yet_linesegaddr = None
-		for linesegaddr in self.get_nearby_linesegaddrs(target_, searchradius_):
+		for linesegaddr in self._snap_get_endgame_linesegaddrs(target_gridsquare, endgame_search_radius):
 			lineseg = self.get_lineseg(linesegaddr)
 			cur_snapresult = snap_to_line(target_, lineseg)
 			if best_yet_snapresult==None or cur_snapresult[2]<best_yet_snapresult[2]:
@@ -143,9 +157,21 @@ class SnapToGridCache(object):
 					reference_point_addr = LineSegAddr(best_yet_linesegaddr.polylineidx, best_yet_linesegaddr.startptidx+1)
 				return (self.get_point(reference_point_addr).clone(), reference_point_addr, False)
 
+	def _snap_get_endgame_linesegaddrs(self, target_gridsquare_, search_radius_):
+		assert isinstance(target_gridsquare_, GridSquare)
+		r = set()
+		for linesegaddr in self.nearby_linesegaddrs_gen(target_gridsquare_, search_radius_):
+			r.add(linesegaddr)
+		return r
+
+	def _snap_get_endgame_search_radius(self, a_nearby_lineseg_, target_gridsquare_):
+		assert isinstance(a_nearby_lineseg_, LineSeg) and isinstance(target_gridsquare_, GridSquare)
+		r = max(snap_result[2] for snap_result in [snap_to_line(latlng, a_nearby_lineseg_) for latlng in target_gridsquare_.corner_latlngs()])
+		return int(r)
+
 	def heading(self, linesegaddr_, referencing_lineseg_aot_point_):
 		assert isinstance(linesegaddr_, LineSegAddr)
-		# TODO: do something fancier on corners i.e. when referencing_lineseg_aot_point_ is True.
+		# TODO: do something fancier on corners i.e. when referencing_lineseg_aot_point_ is False.
 		assert (0 <= linesegaddr_.polylineidx < len(self.polylines))
 		if referencing_lineseg_aot_point_:
 			assert 0 <= linesegaddr_.startptidx < len(self.polylines[linesegaddr_.polylineidx])-1
@@ -159,34 +185,24 @@ class SnapToGridCache(object):
 		lineseg = self.get_lineseg(linesegaddr)
 		return lineseg.start.heading(lineseg.end)
 
-	def get_nearby_linesegaddrs(self, target_, searchradius_):
-		assert isinstance(target_, geom.LatLng)
-		target_gridsquare = GridSquare(target_)
-		r = set()
-		reach = get_reach(target_, searchradius_)
-		for gridlat in intervalii(target_gridsquare.gridlat-reach[0], target_gridsquare.gridlat+reach[0]):
-			for gridlng in intervalii(target_gridsquare.gridlng-reach[1], target_gridsquare.gridlng+reach[1]):
-				searching_gridsquare = GridSquare((gridlat, gridlng))
-				if searching_gridsquare in self.gridsquare_to_linesegaddrs:
-					r |= self.gridsquare_to_linesegaddrs[searching_gridsquare]
-		if 0: # debugging
-			printerr(len(r), target_)
-			l = []
-			for linesegaddr in r:
-				print linesegaddr
-				lineseg = self.get_lineseg(linesegaddr)
-				l.append([lineseg.start.lat, lineseg.start.lng])
-				l.append([lineseg.end.lat, lineseg.end.lng])
-			import json
-			printerr(json.dumps(l, indent=0))
-		return r
+	# Return a linesegaddr, any linesegaddr.  It will probably be one nearby, but definitely not guaranteed to be the closest. 
+	def get_a_nearby_linesegaddr(self, gridsquare_, searchradius_):
+		for linesegaddr in self.nearby_linesegaddrs_gen(gridsquare_, searchradius_):
+			return linesegaddr
+		return None
 
-def get_reach(target_, searchradius_):
-	assert isinstance(target_, geom.LatLng) and isinstance(searchradius_, int)
-	target_gridsquare = GridSquare(target_)
-	lat_reach = get_reach_single(target_gridsquare, searchradius_, True)
-	lon_reach_top = get_reach_single(GridSquare((target_gridsquare.gridlat+lat_reach+1, target_gridsquare.gridlng)), searchradius_, False)
-	lon_reach_bottom = get_reach_single(GridSquare((target_gridsquare.gridlat-lat_reach, target_gridsquare.gridlng)), searchradius_, False)
+	def nearby_linesegaddrs_gen(self, gridsquare_, searchradius_):
+		assert isinstance(gridsquare_, GridSquare)
+		for gridsquare in gridsquare_spiral_gen_by_geom_vals(gridsquare_, searchradius_):
+			if gridsquare in self.gridsquare_to_linesegaddrs:
+				for linesegaddr in self.gridsquare_to_linesegaddrs[gridsquare]:
+					yield linesegaddr
+
+def get_reach(target_gridsquare_, searchradius_):
+	assert isinstance(target_gridsquare_, GridSquare) and isinstance(searchradius_, int)
+	lat_reach = get_reach_single(target_gridsquare_, searchradius_, True)
+	lon_reach_top = get_reach_single(GridSquare((target_gridsquare_.gridlat+lat_reach+1, target_gridsquare_.gridlng)), searchradius_, False)
+	lon_reach_bottom = get_reach_single(GridSquare((target_gridsquare_.gridlat-lat_reach, target_gridsquare_.gridlng)), searchradius_, False)
 	return (lat_reach, max(lon_reach_top, lon_reach_bottom))
 
 def get_reach_single(reference_gridsquare_, searchradius_, lat_aot_lng_):
@@ -213,7 +229,7 @@ def steps_satisfy_searchradius(target_, searchradius_):
 	return True
 
 # returns a tuple - (snapped point, 0|1|None, dist)
-# 0 if the first point of the line is the snapped-to point, 1 if the second, None if neither.
+# elem 1 - 0 if the first point of the line is the snapped-to point, 1 if the second, None if neither.
 def snap_to_line(target_, lineseg_):
 	assert isinstance(target_, geom.LatLng) and isinstance(lineseg_, LineSeg)
 	ang1 = geom.angle(lineseg_.end, lineseg_.start, target_)
@@ -241,14 +257,61 @@ def get_display_grid(southwest_latlng_, northeast_latlng_):
 			r.append([GridSquare((gridlat, gridlng)).latlng(), GridSquare((gridlat+1, gridlng)).latlng()])
 	return r
 
+# yields a 2-tuple of integer offsets - that is, lat/lng offsets eg. (0,0), (1,0), (1,1), (-1, 1), etc.
+def gridsquare_offset_spiral_gen(latreach_, lngreach_):
+	assert isinstance(latreach_, int) and isinstance(lngreach_, int)
+
+	def offsets_for_square_spiral_gen(square_reach_):
+		r = [0, 0]
+		yield r
+		for spiralidx in range(square_reach_+2):
+			for i in range(spiralidx*2 + 1): # north 
+				r[0] += 1
+				yield r
+			for i in range(spiralidx*2 + 1): # east 
+				r[1] += 1
+				yield r
+			for i in range(spiralidx*2 + 2): # south
+				r[0] -= 1
+				yield r
+			for i in range(spiralidx*2 + 2): # west
+				r[1] -= 1
+				yield r
+
+	for offsetlat, offsetlng in offsets_for_square_spiral_gen(max(latreach_, lngreach_)):
+		if abs(offsetlat) <= latreach_ and abs(offsetlng) <= lngreach_:
+			yield (offsetlat, offsetlng)
+
+
+def gridsquare_spiral_gen_by_grid_vals(center_gridsquare_, latreach_, lngreach_):
+	assert isinstance(center_gridsquare_, GridSquare)
+	for offsetlat, offsetlng in gridsquare_offset_spiral_gen(latreach_, lngreach_):
+		yield GridSquare((center_gridsquare_.gridlat + offsetlat, center_gridsquare_.gridlng + offsetlng))
+
+def gridsquare_spiral_gen_by_geom_vals(center_gridsquare_, searchradius_):
+	latreach, lngreach = get_reach(center_gridsquare_, searchradius_)
+	for gridsquare in gridsquare_spiral_gen_by_grid_vals(center_gridsquare_, latreach, lngreach):
+		yield gridsquare
+
 if __name__ == '__main__':
 
-	start = geom.LatLng(43.659854903367034, -79.43536563118596)
-	end = start.clone()
-	while start.dist_m(end) < 1000:
-		end.lat += 0.0000001
-	print end.lat - start.lat
 
+	if 0:
+		import routes
+		gc = routes.routeinfo('dundas').snaptogridcache
+		latlng = geom.LatLng(43.6507574, -79.4138221)
+		for linesegaddr in gc.get_nearby_linesegaddrs_old(geom.LatLng(43.6507574, -79.4138221), 2000):
+			print linesegaddr 
+
+		print 
+
+
+		for linesegaddr in gc.nearby_linesegaddrs_gen(latlng, 2000):
+			print linesegaddr 
+
+
+	for offsetlat, offsetlng in gridsquare_offset_spiral_gen(3, 2):
+		print offsetlat, offsetlng 
 
 
 
