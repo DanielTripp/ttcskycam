@@ -57,6 +57,16 @@ class GridSquare(object):
 		r.append(geom.LatLng(gridlat_to_lat(self.gridlat), gridlng_to_lng(self.gridlng+1)))
 		return r
 
+	def center_latlng(self):
+		sw = geom.LatLng(gridlat_to_lat(self.gridlat), gridlng_to_lng(self.gridlng))
+		ne = geom.LatLng(gridlat_to_lat(self.gridlat+1), gridlng_to_lng(self.gridlng+1))
+		return sw.avg(ne)
+
+	def diagonal_dist_m(self):
+		sw = geom.LatLng(gridlat_to_lat(self.gridlat), gridlng_to_lng(self.gridlng))
+		ne = geom.LatLng(gridlat_to_lat(self.gridlat+1), gridlng_to_lng(self.gridlng+1))
+		return sw.dist_m(ne)
+
 class LineSegAddr(object):
 
 	def __init__(self, polylineidx_, startptidx_):
