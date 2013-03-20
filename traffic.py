@@ -55,7 +55,7 @@ def between(bound1_, value_, bound2_):
 # returns elem 0: visuals list - [[timestamp, vi dict, vi dict, ...], ...] 
 #         elem 1: speed map - {mofr1: {'kmph': kmph, 'weight': weight}, ...}
 def get_traffics(fudgeroute_name_, dir_, current_, time_, last_returned_timestr_, window_minutes_=TIME_WINDOW_MINUTES, log_=False):
-	assert (fudgeroute_name_ in routes.NON_SUBWAY_FUDGEROUTES)
+	assert (fudgeroute_name_ in routes.NON_SUBWAY_FUDGEROUTES) and isinstance(window_minutes_, int) and (1 <= window_minutes_ < 120)
 	time_ = massage_time_arg(time_, 60*1000)
 	r_timestr = em_to_str_ymdhms(time_)
 	if r_timestr != last_returned_timestr_:
