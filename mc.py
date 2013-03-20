@@ -1,6 +1,6 @@
 #!/usr/bin/python2.6
 
-import sys, os, os.path, subprocess, signal, re
+import sys, os, os.path, subprocess, signal, re, time
 if len(sys.argv[0]) > 0 and (sys.argv[0] != '-c'): # b/c sys.argv[0] will be '' if this is imported from an interactive interpreter, 
 	os.chdir(os.path.dirname(sys.argv[0])) # and we don't want to chdir in that case anyway. 
 import memcache
@@ -30,30 +30,31 @@ def get_memcache_client():
 # Important that the return value of this is a str because that's what the memcache client insists on.  
 # Unicode will cause an error right away. 
 # Also - memcached can't handle spaces in keys, so we avoid that. 
-def _make_key(func_, args_):
+def _make_key(func_, args_, kwargs_):
 	name = '%s.%s' % (func_.__module__, func_.__name__)
-	r = '%s-%s(%s)' % (c.VERSION, name, ','.join([str(arg) for arg in args_]))
+	str_arg_list = [str(arg) for arg in args_] + ['%s=%s' % (kwargname, kwargs_[kwargname]) for kwargname in sorted(kwargs_.keys())]
+	r = '%s-%s(%s)' % (c.VERSION, name, ','.join(str_arg_list))
 	SPACE_REPLACER = '________'
 	assert SPACE_REPLACER not in r
 	r = r.replace(' ', SPACE_REPLACER)
 	return r
 
-def get(func_, args_=[]):
+def get(func_, args_=[], kwargs_={}):
 	args_ = args_[:]
-	key = _make_key(func_, args_)
+	key = _make_key(func_, args_, kwargs_)
 	if key in g_in_process_cache_key_to_value:
 		r = g_in_process_cache_key_to_value[key]
 	else:
 		r = get_memcache_client().get(key)
 		if r is None:
-			r = func_(*args_)
+			r = func_(*args_, **kwargs_)
 			get_memcache_client().set(key, r)
 		g_in_process_cache_key_to_value[key] = r
 	return r
 
 def decorate(user_function_):
-	def decorating_function(*args):
-		return get(user_function_, args)
+	def decorating_function(*args, **kwargs):
+		return get(user_function_, args, kwargs)
 	
 	return decorating_function
 
@@ -118,6 +119,10 @@ def stop_memcache_windows(instance_):
 		print 'Was not started.'
 	else:
 		subprocess.check_call(['taskkill', '/f', '/pid', str(pid)])
+		time.sleep(2) # I've routinely witnessed the process still showing up in 'ps' and 'netstat' output
+			# shortly (a fraction of a second) after 'taskkill' returns.  So here we fudge it to make sure.
+			# This is not so important on a stop, but very important on a restart, because an 'is running'
+			# check (which uses netstat) will be done before the start.
 
 def stop_memcache(instance_):
 	if we_are_on_linux():
