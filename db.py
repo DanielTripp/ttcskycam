@@ -171,6 +171,7 @@ MIN_DESIRABLE_DIR_STRETCH_LEN = 6
 # if widemofrs go like this: [0, 50, 100, 101, 100, 101, 100, 101, 100, 150, 200, ...] do we throw out the whole middle part
 # [100, 101, 100, 101, 100]?  Wouldn't it be better if we tried to keep the two 101s in there?  That would give us more accurate
 # interpolations in that area.
+@mc.decorate
 def get_vid_to_vis(fudge_route_, dir_, num_minutes_, end_time_em_, for_traffic_, current_conditions_, log_=False):
 	assert dir_ in (0, 1)
 	start_time = end_time_em_ - num_minutes_*60*1000

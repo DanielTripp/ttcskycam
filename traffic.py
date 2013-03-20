@@ -11,7 +11,7 @@ TIME_WINDOW_MINUTES = 30
 
 def get_recent_vehicle_locations(fudgeroute_, dir_, current_, time_, last_returned_timestr_, log_=False):
 	assert (fudgeroute_ in routes.NON_SUBWAY_FUDGEROUTES)
-	time_ = massage_time_arg(time_, 15*1000)
+	time_ = massage_time_arg(time_, 60*1000)
 	r_timestr = em_to_str_ymdhms(time_)
 	if r_timestr != last_returned_timestr_:
 		r_data = get_recent_vehicle_locations_impl(fudgeroute_, dir_, current_, time_, log_)
@@ -42,7 +42,7 @@ def get_recent_vehicle_locations_impl(fudgeroute_, dir_, current_, time_, log_=F
 # there.  Then it stands still for a few minutes there.  Then it continues eastward.  I don't want that to mess things up.
 # TODO: improve this comment.
 def get_vid_to_vis_from_db_for_traffic(fudgeroute_name_, dir_, time_, window_minutes_, usewidemofr_=False, log_=False):
-	r = db.get_vid_to_vis(fudgeroute_name_, dir_, window_minutes_, time_, True, False, log_=log_)
+	r = db.get_vid_to_vis(fudgeroute_name_, dir_, window_minutes_, time_, False, True, log_=log_)
 	for vid, vis in r.items():
 		filter_in_place(vis, lambda vi: (vi.widemofr if usewidemofr_ else vi.mofr) != -1)
 	return r
