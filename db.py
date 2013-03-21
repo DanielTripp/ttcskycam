@@ -172,7 +172,7 @@ MIN_DESIRABLE_DIR_STRETCH_LEN = 6
 # [100, 101, 100, 101, 100]?  Wouldn't it be better if we tried to keep the two 101s in there?  That would give us more accurate
 # interpolations in that area.
 @mc.decorate
-def get_vid_to_vis(fudge_route_, dir_, num_minutes_, end_time_em_, for_traffic_, current_conditions_, log_=False):
+def get_vid_to_vis(fudge_route_, dir_, num_minutes_, end_time_em_, log_=False):
 	assert dir_ in (0, 1)
 	start_time = end_time_em_ - num_minutes_*60*1000
 	vi_list = []
@@ -180,12 +180,6 @@ def get_vid_to_vis(fudge_route_, dir_, num_minutes_, end_time_em_, for_traffic_,
 		vis = list(vi_select_generator(configroute, end_time_em_, start_time, None, True))
 		# We want to get a lot of overshots, because we need a lot of samples in order to determine directions with any certainty.
 		vis += get_outside_overshots(vis, start_time, False, MIN_DESIRABLE_DIR_STRETCH_LEN-1, log_=log_)
-		if not for_traffic_:
-			if current_conditions_:
-				pass # TODO: think about whether to re-introduce the call below.
-				# add_inside_overshots_for_locations(r, direction_, time_window_end_, log_=log_)
-			else:
-				vis[:] = get_outside_overshots(vis, end_time_em_, True, log_=log_) + vis
 		vi_list += vis
 	# TODO: maybe get outside overshots /forward/ here too, for the benefit of historical traffic reports.
 	vid_to_vis = file_under_key(vi_list, lambda vi: vi.vehicle_id)
@@ -405,14 +399,14 @@ def make_whereclause_safe(whereclause_):
 	return re.sub('(?i)insert|delete|drop|create|truncate|alter|update|;', '', whereclause_)
 
 # direction_ can be an integer direction (0 or 1) or a pair of LatLngs from which we will infer that integer direction.
-def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, current_conditions_, time_window_end_, log_=False):
+def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, time_window_end_, log_=False):
 	assert direction_ in (0, 1) or (len(direction_) == 2 and all(isinstance(e, geom.LatLng) for e in direction_))
 	assert (fudgeroute_ in routes.NON_SUBWAY_FUDGEROUTES) and type(num_minutes_) == int
 	if direction_ in (0, 1):
 		direction = direction_
 	else:
 		direction = routes.routeinfo(fudgeroute_).dir_from_latlngs(direction_[0], direction_[1])
-	vid_to_vis = get_vid_to_vis(fudgeroute_, direction, num_minutes_, time_window_end_, False, current_conditions_, log_=log_)
+	vid_to_vis = get_vid_to_vis(fudgeroute_, direction, num_minutes_, time_window_end_, log_=log_)
 	r = []
 	for vid, vis in vid_to_vis.iteritems():
 		if log_:
@@ -422,7 +416,7 @@ def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, current_
 				printerr('\t%s' % vi)
 		r += vis
 	starttime = time_window_end_ - num_minutes_*60*1000
-	r = interp_by_time(r, True, True, current_conditions_, direction, starttime, time_window_end_, log_=log_)
+	r = interp_by_time(r, True, True, True, direction, starttime, time_window_end_, log_=log_)
 	return r
 
 # The idea here is, for each vid, to get one more vi from the db, greater in time than the pre-existing
