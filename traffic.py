@@ -9,12 +9,12 @@ with open('MOFR_STEP') as f:
 
 TIME_WINDOW_MINUTES = 30
 
-def get_recent_vehicle_locations(fudgeroute_, dir_, current_, time_, last_returned_timestr_, log_=False):
+def get_recent_vehicle_locations(fudgeroute_, dir_, time_, last_returned_timestr_, log_=False):
 	assert (fudgeroute_ in routes.NON_SUBWAY_FUDGEROUTES)
 	time_ = massage_time_arg(time_, 60*1000)
 	r_timestr = em_to_str_ymdhms(time_)
 	if r_timestr != last_returned_timestr_:
-		r_data = get_recent_vehicle_locations_impl(fudgeroute_, dir_, current_, time_, log_)
+		r_data = get_recent_vehicle_locations_impl(fudgeroute_, dir_, time_, log_)
 	else:
 		r_data = None
 	return (r_timestr, r_data)
@@ -22,8 +22,8 @@ def get_recent_vehicle_locations(fudgeroute_, dir_, current_, time_, last_return
 # Import to mc.decorate after the massage of time arg because that will usually be 0 (meaning now) 
 # when it comes from the client. 
 @mc.decorate
-def get_recent_vehicle_locations_impl(fudgeroute_, dir_, current_, time_, log_=False):
-	return db.get_recent_vehicle_locations(fudgeroute_, TIME_WINDOW_MINUTES, dir_, current_, time_window_end_=time_, log_=log_)
+def get_recent_vehicle_locations_impl(fudgeroute_, dir_, time_, log_=False):
+	return db.get_recent_vehicle_locations(fudgeroute_, TIME_WINDOW_MINUTES, dir_, time_window_end_=time_, log_=log_)
 
 # returns: key: vid.  value: list of list of VehicleInfo
 # second list - these are 'stretches' of increasing (or decreasing) mofr.  Doing it this way so that if the database gives us a
@@ -42,7 +42,7 @@ def get_recent_vehicle_locations_impl(fudgeroute_, dir_, current_, time_, log_=F
 # there.  Then it stands still for a few minutes there.  Then it continues eastward.  I don't want that to mess things up.
 # TODO: improve this comment.
 def get_vid_to_vis_from_db_for_traffic(fudgeroute_name_, dir_, time_, window_minutes_, usewidemofr_=False, log_=False):
-	r = db.get_vid_to_vis(fudgeroute_name_, dir_, window_minutes_, time_, False, True, log_=log_)
+	r = db.get_vid_to_vis(fudgeroute_name_, dir_, window_minutes_, time_, log_=log_)
 	for vid, vis in r.items():
 		filter_in_place(vis, lambda vi: (vi.widemofr if usewidemofr_ else vi.mofr) != -1)
 	return r
@@ -54,24 +54,24 @@ def between(bound1_, value_, bound2_):
 # 
 # returns elem 0: visuals list - [[timestamp, vi dict, vi dict, ...], ...] 
 #         elem 1: speed map - {mofr1: {'kmph': kmph, 'weight': weight}, ...}
-def get_traffics(fudgeroute_name_, dir_, current_, time_, last_returned_timestr_, window_minutes_=TIME_WINDOW_MINUTES, log_=False):
+def get_traffics(fudgeroute_name_, dir_, time_, last_returned_timestr_, window_minutes_=TIME_WINDOW_MINUTES, log_=False):
 	assert (fudgeroute_name_ in routes.NON_SUBWAY_FUDGEROUTES) and isinstance(window_minutes_, int) and (1 <= window_minutes_ < 120)
 	time_ = massage_time_arg(time_, 60*1000)
 	r_timestr = em_to_str_ymdhms(time_)
 	if r_timestr != last_returned_timestr_:
-		r_data = get_traffics_impl(fudgeroute_name_, dir_, current_, time_, window_minutes_, log_)
+		r_data = get_traffics_impl(fudgeroute_name_, dir_, time_, window_minutes_, log_)
 	else:
 		r_data = None
 	return (r_timestr, r_data)
 
 @mc.decorate
-def get_traffics_impl(fudgeroute_name_, dir_, current_, time_, window_minutes_, log_=False):
+def get_traffics_impl(fudgeroute_name_, dir_, time_, window_minutes_, log_=False):
 	assert dir_ in (0, 1) or (len(dir_) == 2 and all(isinstance(e, geom.LatLng) for e in dir_))
 	if dir_ in (0, 1):
 		direction = dir_
 	else:
 		direction = routes.routeinfo(fudgeroute_name_).dir_from_latlngs(dir_[0], dir_[1])
-	mofr_to_avgspeedandweight = get_traffic_avgspeedsandweights(fudgeroute_name_, direction, time_, current_, window_minutes_, log_=log_)
+	mofr_to_avgspeedandweight = get_traffic_avgspeedsandweights(fudgeroute_name_, direction, time_, True, window_minutes_, log_=log_)
 	return [get_traffics_visuals(mofr_to_avgspeedandweight, fudgeroute_name_, direction), \
 			get_traffics__mofr2speed(mofr_to_avgspeedandweight)]
 
