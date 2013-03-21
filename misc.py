@@ -1,7 +1,7 @@
 #!/usr/bin/python2.6
 
 import sys, os, os.path, time, math, datetime, calendar, bisect, tempfile, subprocess
-from collections import MutableSequence, defaultdict
+from collections import Sequence, MutableSequence, defaultdict
 
 def em_to_str(t_):
 	if t_ is None or t_ == 0:
@@ -525,12 +525,11 @@ def remove_consecutive_duplicates(list_, key=None):
 		i += 1
 
 def svg_to_png(svgstr_):
-	tmpdir = ('/tmp/dt' if os.path.isdir('/tmp/dt') else '/tmp')
-	svg_fileno, svg_filename = tempfile.mkstemp('.svg', 'ttc-temp-svg-to-png-', tmpdir)
+	svg_fileno, svg_filename = tempfile.mkstemp('.svg', 'ttc-temp-svg-to-png-', '.')
 	svg_file = os.fdopen(svg_fileno, 'w')
 	svg_file.write(svgstr_)
 	svg_file.close()
-	subprocess.check_call(['java', '-jar', 'batik-1.7/batik-rasterizer.jar', svg_filename], \
+	subprocess.check_call(['java', '-jar', 'batik-1.7/batik-rasterizer.jar', os.path.basename(svg_filename)], \
 			stdout=open('/dev/null', 'w'), stderr=open('/dev/null', 'w'))
 
 	assert svg_filename[-4:] == '.svg'
@@ -542,11 +541,56 @@ def svg_to_png(svgstr_):
 	os.remove(png_filename)
 	return png_contents
 
+# Batch version.  Writes PNGs to files.  Returns nothing.  
+# We want a batch version Because starting up batik is slow.  (It takes about a 
+# second to start up versus about 0.05 seconds to convert a single SVG.  Between vehicles and streetlabels, 
+# we have thousands of these to deal with.) 
+# arg: a list of 2-tuples: [(dest filename, svg string), ...]
+def svgs_to_pngs(pngfilenames_and_svgstrs_):
+	# Breaking argument list into chunks, because we can only pass so many command-line arguments to java (or any process 
+	# for that matter).  Doing it badly - splitting by arguments while ignoring the length of those arguments.  (The operating 
+	# system limit seems to be about the number of characters.  Run 'getconf ARG_MAX' to see.  Sample output on cygwin - 32000.
+	CHUNK_SIZE = 1000
+	for chunki, pngfilenames_and_svgstrs in enumerate(chunks(pngfilenames_and_svgstrs_, CHUNK_SIZE)):
+		svg_filenames = [] # Writing SVG strings to files temporarily, because batik takes files as input. 
+		for svgstr in [x[1] for x in pngfilenames_and_svgstrs]:
+			svg_fileno, svg_filename = tempfile.mkstemp('.svg', 'temp_svgs_to_pngs_', '.')
+			svg_filename = os.path.basename(svg_filename) # Trickery: removing directory part of path, because I want this to run 
+				# on Windows under cygwin, where this script will be running under cygwin Python but the 'java' called below is 
+				# a Windows version.  If we wrote this temp svg file to eg. /tmp, then we would need to convert that path (with 
+				# cygpath presumably) before we pass it to java / batik.  I don't want to bother doing that, so I create these files 
+				# in the current directory instead and get away with passing a directory-less filename to java. 
+			assert svg_filename[-4:] == '.svg'
+			svg_file = os.fdopen(svg_fileno, 'w')
+			svg_file.write(svgstr)
+			svg_file.close()
+			svg_filenames.append(svg_filename)
+
+		print 'Converting %d to %d of %d.' % (chunki*CHUNK_SIZE, (chunki+1)*CHUNK_SIZE, len(pngfilenames_and_svgstrs_))
+		subprocess.check_call(['java', '-jar', 'batik-1.7/batik-rasterizer.jar'] + svg_filenames)
+				#stdout=open('/dev/null', 'w'), stderr=open('/dev/null', 'w'))
+
+		assert len(svg_filenames) == len(pngfilenames_and_svgstrs)
+		for svg_filename, dest_png_filename in zip(svg_filenames, [x[0] for x in pngfilenames_and_svgstrs]):
+			tmp_png_filename = svg_filename[:-4] + '.png' # batik just created this .png file, with a name based on the svg filename. 
+			os.rename(tmp_png_filename, dest_png_filename)
+			os.remove(svg_filename)
+
 def values_sorted_by_key(dict_):
 	for key in sorted(dict_.keys()):
 		yield dict_[key]
 
+# turn a list into a list of lists, each list length n_. 
+def chunks(list_, n_):
+	assert isinstance(list_, Sequence) and n_ > 0
+	r = []
+	start_idx = 0
+	for start_idx in range(0, len(list_), n_):
+		r.append(list_[start_idx:start_idx+n_])
+	return r
+
 if __name__ == '__main__':
 
-	print invert_dict({1: 'a', 2: 'b'})
+
+	print chunks([1, 2, 4, 5, 6, 6], 1)
 
