@@ -94,11 +94,11 @@ var g_force_show_froutes = new buckets.Set(), g_force_hide_froutes = new buckets
 var g_force_dir0_froutes = new buckets.Set(), g_force_dir1_froutes = new buckets.Set();
 var g_main_path = [], g_extra_path_froutendirs = [];
 
-var HEADING_ROUNDING_DEGREES = 5;
+var HEADING_ROUNDING_DEGREES = <?php readfile('HEADING_ROUNDING'); ?>;
 var REFRESH_INTERVAL_MS = 5*1000;
 var MOVING_VEHICLES_OVERTIME_FLASH_INTERVAL_MS = 500;
 var MOVING_VEHICLES_ANIM_INTERVAL_MS = 100;
-var MOFR_STEP = <?php readfile('MOFR_STEP'); ?>
+var MOFR_STEP = <?php readfile('MOFR_STEP'); ?>;
 var FROUTE_TO_INTDIR_TO_ENGLISHDESC = <?php passthru('python -c "import routes; print routes.get_fudgeroute_to_intdir_to_englishdesc()"'); ?>;
 
 var g_zoom_to_vehicle_size = [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 10, 13, 15, 25, 40, 50, 60, 70, 80, 100, 130, 130, ];
@@ -1109,7 +1109,7 @@ function refresh_streetlabels_singleroute(froute_) {
 				labels.forEach(function(label) {
 					var marker = new google.maps.Marker({position: google_LatLng(label.latlng), 
 						map: g_map, draggable: false, flat: true, clickable: false, zIndex: 4,
-						icon: new google.maps.MarkerImage(get_streetlabel_cgi_url(label.text, label.rotation, zoom), 
+						icon: new google.maps.MarkerImage(get_streetlabel_url(label.text, label.rotation, zoom), 
 								null, null, new google.maps.Point(150, 150)),
 						});
 					g_fudgeroute_data.get(froute_).streetlabel_markers.add(marker);
@@ -1118,8 +1118,9 @@ function refresh_streetlabels_singleroute(froute_) {
 	}
 }
 
-function get_streetlabel_cgi_url(text_, rotation_, zoom_) {
-	return cgi_url('get_streetlabel_image.cgi', [text_, rotation_, zoom_]);
+function get_streetlabel_url(text_, rotation_, zoom_) {
+	var filename = sprintf('%s_%d_%d.png', text_.replace(' ', '_'), rotation_, zoom_);
+	return 'img/'+filename;
 }
 
 /* The whole reason we do our own street labels is because our traffic polylines, to show up reasonably well, have to be 
@@ -1537,7 +1538,7 @@ function make_subway_lines(froute_) {
 
 	var data = g_fudgeroute_data.get(froute_);
 	var latlngs = g_subway_froute_to_route_latlngs[froute_];
-	var width = get_vehicle_size()/3;
+	var width = get_traffic_line_width()*1.5;
 	var line = new google.maps.Polyline({map: g_map, path: google_LatLngs(latlngs), strokeWeight: width, strokeOpacity: 0.5, 
 			strokeColor: 'rgb(0,0,255)', zIndex: -30, visible: g_show_traffic_lines}); 
 	data.traffic_lines.add(line);
