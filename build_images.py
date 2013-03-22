@@ -48,7 +48,6 @@ if __name__ == '__main__':
 
 
 	build_streetlabel_images()
-
-	#build_vehicle_images()
+	build_vehicle_images()
 
 

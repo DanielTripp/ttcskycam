@@ -101,7 +101,7 @@ var MOVING_VEHICLES_ANIM_INTERVAL_MS = 100;
 var MOFR_STEP = <?php readfile('MOFR_STEP'); ?>;
 var FROUTE_TO_INTDIR_TO_ENGLISHDESC = <?php passthru('python -c "import routes; print routes.get_fudgeroute_to_intdir_to_englishdesc()"'); ?>;
 
-var g_zoom_to_vehicle_size = [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 10, 13, 15, 25, 40, 50, 60, 70, 80, 100, 130, 130, ];
+var g_zoom_to_vehicle_size = <?php readfile('zoom-to-vehicle-size.json'); ?>
 var g_zoom_to_traffic_line_width = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 7, 8, 8, 10, 13, 16, 22, 42, 42];
 
 function init_dev_option_values() {
@@ -696,7 +696,7 @@ function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
 			position: new google.maps.LatLng(lat_, lon_),
 			map: g_map,
 			draggable: false,
-			icon: new google.maps.MarkerImage(get_vehicle_cgi_url(size, heading_, static_aot_moving_), 
+			icon: new google.maps.MarkerImage(get_vehicle_url(size, heading_, static_aot_moving_), 
 					null, null, new google.maps.Point(size/2, size/2)),
 			visible: false, 
 			zIndex: 5
@@ -711,10 +711,9 @@ function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
 	return marker;
 }
 
-function get_vehicle_cgi_url(size_, heading_, static_aot_moving_) {
-	var color = (static_aot_moving_ ? 'rgb(100,100,100)' : 'rgb(150,150,150)');
-	var opacity = (static_aot_moving_ ? 0.8 : 0.3);
-	return cgi_url('get_vehicle_image.cgi', [size_, heading_, color, opacity]);
+function get_vehicle_url(size_, heading_, static_aot_moving_) {
+	var filename = sprintf('vehicle_arrow_%d_%d_%s.png' % (size_, heading_, (static_aot_moving_ ? 'static' : 'moving')));
+	return 'img/'+filename;
 }
 
 function add_solo_vid_click_listener(vehicle_marker_, vid_) {

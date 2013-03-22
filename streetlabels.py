@@ -72,7 +72,7 @@ def get_labels_for_zoom(froute_, zoom_):
 	while start_mofr < ri.max_mofr() - text_length_metres:
 		end_mofr = start_mofr + text_length_metres
 		text = get_text(froute_, start_mofr)
-		if (text != get_text(froute_, end_mofr)) or (not is_route_straight_enough_here(ri, start_mofr, end_mofr)):
+		if (text != get_text(froute_, end_mofr)) or (not text) or (not is_route_straight_enough_here(ri, start_mofr, end_mofr)):
 			start_mofr += max(1, mofrstep/10)
 		else:
 			start_latlng = ri.mofr_to_latlon(start_mofr, 0)
@@ -100,9 +100,6 @@ def get_streetlabel_svg(text_, rotation_, zoom_):
 </g>
 </svg>''' % {'text': text_, 'rotation': rotation_, 'fontsize': fontsize, 'textshift': textshift}
 	return svgstr
-
-def get_streetlabel_png(text_, rotation_, zoom_):
-	return svg_to_png(get_streetlabel_svg(text_, rotation_, zoom_))
 
 if __name__ == '__main__':
 
