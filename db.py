@@ -627,10 +627,8 @@ def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, be_clever_, raw_vilist_for_hi
 	if be_clever_ and vi1_.dir_tag and vi2_.dir_tag:
 		if routes.CONFIGROUTE_TO_FUDGEROUTE[vi1_.route_tag] == routes.CONFIGROUTE_TO_FUDGEROUTE[vi2_.route_tag]:
 			config_route = vi1_.route_tag
-			vi1mofr = routes.latlon_to_mofr(config_route, vi1_.latlng)
-			vi2mofr = routes.latlon_to_mofr(config_route, vi2_.latlng)
-			if vi1mofr!=-1 and vi2mofr!=-1:
-				interp_mofr = geom.avg(vi1mofr, vi2mofr, ratio_)
+			if vi1_.mofr!=-1 and vi2_.mofr!=-1:
+				interp_mofr = geom.avg(vi1_.mofr, vi2_.mofr, ratio_)
 				dir_tag_int = vi2_.dir_tag_int
 				if dir_tag_int == None:
 					raise Exception('Could not determine dir_tag_int of %s' % (str(vi2_)))
