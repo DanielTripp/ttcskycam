@@ -101,7 +101,7 @@ var MOVING_VEHICLES_ANIM_INTERVAL_MS = 100;
 var MOFR_STEP = <?php readfile('MOFR_STEP'); ?>;
 var FROUTE_TO_INTDIR_TO_ENGLISHDESC = <?php passthru('python -c "import routes; print routes.get_fudgeroute_to_intdir_to_englishdesc()"'); ?>;
 
-var g_zoom_to_vehicle_size = <?php readfile('zoom-to-vehicle-size.json'); ?>
+var g_zoom_to_vehicle_size = <?php readfile('zoom_to_vehicle_size.json'); ?>;
 var g_zoom_to_traffic_line_width = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 7, 8, 8, 10, 13, 16, 22, 42, 42];
 
 function init_dev_option_values() {
@@ -411,7 +411,11 @@ function remake_moving_vehicles_singleroute(fudgeroute_) {
 }
 
 function round_heading(heading_) {
-	return round(heading_, HEADING_ROUNDING_DEGREES);
+	var r = round(heading_, HEADING_ROUNDING_DEGREES);
+	if(r == 360) {
+		r = 0;
+	}
+	return r;
 }
 
 function update_last_updated_time(timestr_ymdhms_) {
@@ -449,7 +453,7 @@ function remake_static_vehicles_singleroute(fudgeroute_) {
 		var time_to_vid_to_vi = data.time_to_vid_to_vi.get(last_time);
 		if(time_to_vid_to_vi != undefined) {
 			time_to_vid_to_vi.forEach(function(vid, vi) {
-				var marker = make_vehicle_marker(vid, vi.heading, vi.lat, vi.lon, true);
+				var marker = make_vehicle_marker(vid, round_heading(vi.heading), vi.lat, vi.lon, true);
 				data.vid_to_static_vehicle_marker.set(vid, marker);
 			});
 		}
@@ -712,8 +716,9 @@ function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
 }
 
 function get_vehicle_url(size_, heading_, static_aot_moving_) {
-	var filename = sprintf('vehicle_arrow_%d_%d_%s.png' % (size_, heading_, (static_aot_moving_ ? 'static' : 'moving')));
-	return 'img/'+filename;
+	var filename = sprintf('vehicle_arrow_%d_%d_%s.png', size_, heading_, (static_aot_moving_ ? 'static' : 'moving'));
+	var r = 'img/'+filename;
+	return r;
 }
 
 function add_solo_vid_click_listener(vehicle_marker_, vid_) {
@@ -1118,7 +1123,7 @@ function refresh_streetlabels_singleroute(froute_) {
 }
 
 function get_streetlabel_url(text_, rotation_, zoom_) {
-	var filename = sprintf('%s_%d_%d.png', text_.replace(' ', '_'), rotation_, zoom_);
+	var filename = sprintf('streetlabel_%s_%d_%d.png', text_.replace(/ /g, '_'), rotation_, zoom_);
 	return 'img/'+filename;
 }
 
