@@ -104,6 +104,9 @@ def stop_memcache_linux(instance_):
 		print 'Was not started.'
 	else:
 		os.kill(pid, signal.SIGKILL)
+		time.sleep(1) # This is here for the same reason as the sleep in stop_memcache_windows(), but 
+			# where I witnessed the problem on Windows every time, I only saw this happening on Linux very occasionally, 
+			# and only second-hand.  Oh well. 
 
 def get_server_pid_windows(instance_):
 	netstat_stdout_contents = subprocess.Popen(['netstat', '-a', '-b', '-n', '-p', 'tcp'], stdout=subprocess.PIPE).communicate()[0]
