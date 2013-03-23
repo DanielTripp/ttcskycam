@@ -42,9 +42,11 @@ def get_recent_vehicle_locations_impl(fudgeroute_, dir_, time_, log_=False):
 # there.  Then it stands still for a few minutes there.  Then it continues eastward.  I don't want that to mess things up.
 # TODO: improve this comment.
 def get_vid_to_vis_from_db_for_traffic(fudgeroute_name_, dir_, time_, window_minutes_, usewidemofr_=False, log_=False):
-	r = db.get_vid_to_vis(fudgeroute_name_, dir_, window_minutes_, time_, log_=log_)
-	for vid, vis in r.items():
-		filter_in_place(vis, lambda vi: (vi.widemofr if usewidemofr_ else vi.mofr) != -1)
+	src = db.get_vid_to_vis(fudgeroute_name_, dir_, window_minutes_, time_, log_=log_) # We must be careful not to modify this, 
+		# because it is memcached. 
+	r = {}
+	for vid, vis in src.iteritems():
+		r[vid] = filter(lambda vi: (vi.widemofr if usewidemofr_ else vi.mofr) != -1, vis)
 	return r
 
 def between(bound1_, value_, bound2_):
@@ -239,9 +241,6 @@ def get_bounding_mofr_vis(mofr_, vis_, usewidemofr_):
 
 def kmph_to_mps(kmph_):
 	return kmph_*1000.0/(60*60)
-
-def test(a_, b_):
-	return 'test func got: %s and %s' % (a_, b_)
 
 # return -1 if one or more parts of the route have no traffic data.
 # otherwise - return value is in seconds.
