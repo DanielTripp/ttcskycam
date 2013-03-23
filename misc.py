@@ -60,6 +60,22 @@ def hopscotch(iterable_):
 	except StopIteration:
 		pass
 
+# eg. given ['a', 'b', 'c', 'd'], this yields (0, 'a', 1, 'b'), then (1, 'b', 2, 'c'), then (2, 'c', 3, 'd')
+def hopscotch_enumerate(iterable_):
+	it = iter(iterable_)
+	try:
+		e1 = it.next()
+		e2 = it.next()
+		i = 0
+		while True:
+			yield (i, e1, i+1, e2)
+			e3 = it.next()
+			e1 = e2
+			e2 = e3
+			i += 1
+	except StopIteration:
+		pass
+
 # like hopscotch but generalized. 
 def windowiter(iterable_, n_):
 	assert n_ >= 1
