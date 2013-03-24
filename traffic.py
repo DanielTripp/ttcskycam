@@ -67,7 +67,7 @@ def get_traffics(fudgeroute_name_, dir_, time_, last_returned_timestr_, window_m
 	return (r_timestr, r_data)
 
 @mc.decorate
-def get_traffics_impl(fudgeroute_name_, dir_, time_, window_minutes_, log_=False):
+def get_traffics_impl(fudgeroute_name_, dir_, time_, window_minutes_=TIME_WINDOW_MINUTES, log_=False):
 	assert dir_ in (0, 1) or (len(dir_) == 2 and all(isinstance(e, geom.LatLng) for e in dir_))
 	if dir_ in (0, 1):
 		direction = dir_

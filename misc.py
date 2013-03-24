@@ -605,8 +605,14 @@ def chunks(list_, n_):
 		r.append(list_[start_idx:start_idx+n_])
 	return r
 
+def touch(filename_):
+	with file(filename_, 'a'):
+		os.utime(filename_, None)
+
 if __name__ == '__main__':
 
 
-	print chunks([1, 2, 4, 5, 6, 6], 1)
+	pass
+
+
 
