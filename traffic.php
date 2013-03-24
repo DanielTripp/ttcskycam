@@ -170,7 +170,7 @@ function refresh_traffic_from_server(fudgeroute_) {
 	var dir_to_request = data.dir;
 	if(!data.traffic_request_pending) {
 		data.traffic_request_pending = true;
-		callpy('traffic.get_traffics', fudgeroute_, dir_to_request, get_datetime_from_gui(), data.traffic_last_returned_timestr, 
+		callpy('reports.get_traffic_report', fudgeroute_, dir_to_request, get_datetime_from_gui(), data.traffic_last_returned_timestr, 
 			{success: function(r_) {
 				var data = g_fudgeroute_data.get(fudgeroute_);
 				if(data == undefined || data.dir != dir_to_request) {
@@ -204,7 +204,7 @@ function refresh_vehicles_from_server(fudgeroute_) {
 	var dir_to_request = data.dir;
 	if(!data.vehicles_request_pending) {
 		data.vehicles_request_pending = true;
-		callpy('traffic.get_recent_vehicle_locations', fudgeroute_, dir_to_request, get_datetime_from_gui(), data.locations_last_returned_timestr, 
+		callpy('reports.get_locations_report', fudgeroute_, dir_to_request, get_datetime_from_gui(), data.locations_last_returned_timestr, 
 			{success: function(r_) {
 				var data = g_fudgeroute_data.get(fudgeroute_);
 				if(data == undefined || data.dir != dir_to_request) {

@@ -53,9 +53,12 @@ class OurJSONEncoder(json.JSONEncoder):
 		else:
 			return json.JSONEncoder.default(self, o)
 
+def looks_like_json_already(obj_):
+	return isinstance(obj_, basestring) and ((obj_[0] == '[' and obj_[-1] == ']') or (obj_[0] == '{' and obj_[-1] == '}'))
+
 vars = urlparse.parse_qs(os.getenv('QUERY_STRING'))
 module_and_funcname = vars['module_and_funcname'][0]
-allowables = ['web.get_vehicle_svg', 'traffic.get_traffics', 'traffic.get_recent_vehicle_locations', 'routes.get_all_routes_latlons', 'routes.get_trip_endpoint_info', 'routes.snaptest', 'util.get_current_wrong_dirs', 'tracks.get_all_tracks_polylines', 'snaptogrid.get_display_grid', 'routes.get_configroute_to_fudgeroute_map', 'routes.get_fudgeroutes_for_map_bounds', 'routes.get_fudgeroute_to_intdir_to_englishdesc', 'routes.get_stops_dir_to_stoptag_to_latlng', 'paths.get_paths_by_latlngs', 'routes.routepts', 'paths.get_pathgridsquare', 'routes.get_all_froute_latlngs', 'streetlabels.get_labels']
+allowables = ['web.get_vehicle_svg', 'traffic.get_traffics', 'traffic.get_recent_vehicle_locations', 'routes.get_all_routes_latlons', 'routes.get_trip_endpoint_info', 'routes.snaptest', 'util.get_current_wrong_dirs', 'tracks.get_all_tracks_polylines', 'snaptogrid.get_display_grid', 'routes.get_configroute_to_fudgeroute_map', 'routes.get_fudgeroutes_for_map_bounds', 'routes.get_fudgeroute_to_intdir_to_englishdesc', 'routes.get_stops_dir_to_stoptag_to_latlng', 'paths.get_paths_by_latlngs', 'routes.routepts', 'paths.get_pathgridsquare', 'routes.get_all_froute_latlngs', 'streetlabels.get_labels', 'reports.get_traffic_report', 'reports.get_locations_report']
 if (module_and_funcname in allowables) or os.getenv('HTTP_REFERER').endswith('test.24972394874134958.html') \
 		or module_and_funcname.startswith('t.'):
 	modulename = module_and_funcname.split('.')[0]
@@ -64,7 +67,10 @@ if (module_and_funcname in allowables) or os.getenv('HTTP_REFERER').endswith('te
 	if LOG_CALLS:
 		printerr('callpy - %s %s' % (module_and_funcname, args))
 	r = getattr(__import__(modulename), funcname)(*args)
-	print json.dumps(r, cls=OurJSONEncoder)
+	if looks_like_json_already(r):
+		print r
+	else:
+		print json.dumps(r, cls=OurJSONEncoder)
 else:
-	printerr('Method not in allowed list.')
+	printerr('Method %s not in allowed list.' % module_and_funcname)
 

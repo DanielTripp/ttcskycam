@@ -77,7 +77,7 @@ def poll_once(insert_into_db_):
 
 if __name__ == '__main__':
 
-	opts, args = getopt.getopt(sys.argv[1:], '', ['redirect-stdstreams-to-file', 'dont-insert-into-db'])
+	opts, args = getopt.getopt(sys.argv[1:], '', ['redirect-stdstreams-to-file', 'dont-insert-into-db', 'touch-flag-file-on-finish'])
 	if args:
 		sys.exit('No arguments allowed.  Only options.')
 
@@ -85,4 +85,8 @@ if __name__ == '__main__':
 		redirect_stdstreams_to_file('poll_locations_')
 
 	poll_once(not get_opt(opts, 'dont-insert-into-db'))
+
+	if get_opt(opts, 'touch-flag-file-on-finish'):
+		touch('/tmp/ttc-poll-locations-finished-flag')
+		
 
