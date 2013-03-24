@@ -42,7 +42,7 @@ def get_recent_vehicle_locations_impl(fudgeroute_, dir_, time_, log_=False):
 # there.  Then it stands still for a few minutes there.  Then it continues eastward.  I don't want that to mess things up.
 # TODO: improve this comment.
 def get_vid_to_vis_from_db_for_traffic(fudgeroute_name_, dir_, time_, window_minutes_, usewidemofr_=False, log_=False):
-	src = db.get_vid_to_vis(fudgeroute_name_, dir_, window_minutes_, time_, log_=log_) # We must be careful not to modify this, 
+	src = db.get_vid_to_vis_singledir(fudgeroute_name_, dir_, window_minutes_, time_, log_=log_) # We must be careful not to modify this, 
 		# because it is memcached. 
 	r = {}
 	for vid, vis in src.iteritems():

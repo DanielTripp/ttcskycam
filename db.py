@@ -172,12 +172,20 @@ MIN_DESIRABLE_DIR_STRETCH_LEN = 6
 # [100, 101, 100, 101, 100]?  Wouldn't it be better if we tried to keep the two 101s in there?  That would give us more accurate
 # interpolations in that area.
 @mc.decorate
-def get_vid_to_vis(fudge_route_, dir_, num_minutes_, end_time_em_, log_=False):
+def get_vid_to_vis_singledir(fudge_route_, dir_, num_minutes_, end_time_em_, log_=False):
 	assert dir_ in (0, 1)
+	src = get_vid_to_vis_bothdirs(fudge_route_, num_minutes_, end_time_em_, log_=log_)
+	r = {}
+	for vid, vis in src.iteritems():
+		r[vid] = [vi for vi in vis if vi.dir_tag_int == dir_]
+	return r
+
+@mc.decorate
+def get_vid_to_vis_bothdirs(fudge_route_, num_minutes_, end_time_em_, log_=False):
 	start_time = end_time_em_ - num_minutes_*60*1000
 	vi_list = []
 	for configroute in routes.fudgeroute_to_configroutes(fudge_route_):
-		vis = list(vi_select_generator(configroute, end_time_em_, start_time, None, True))
+		vis = list(vi_select_generator(configroute, end_time_em_, start_time-2*MIN_DESIRABLE_DIR_STRETCH_LEN*60*1000, None, True))
 		# We want to get a lot of overshots, because we need a lot of samples in order to determine directions with any certainty.
 		vis += get_outside_overshots(vis, start_time, False, MIN_DESIRABLE_DIR_STRETCH_LEN-1, log_=log_)
 		vi_list += vis
@@ -194,22 +202,20 @@ def get_vid_to_vis(fudge_route_, dir_, num_minutes_, end_time_em_, log_=False):
 		if len(vis) == 0: del vid_to_vis[vid]
 	for vid, vis in vid_to_vis.items():
 		vis_grouped_by_dir = get_maximal_sublists3(vis, lambda vi: vi.dir_tag_int) # See note [1] above
-		vis_desirables_only = filter(lambda e: is_vis_stretch_desirable(e, dir_, log_), vis_grouped_by_dir)
+		vis_desirables_only = filter(lambda e: is_vis_stretch_desirable(e, log_), vis_grouped_by_dir)
 		vis[:] = sum(vis_desirables_only, [])
 	for vid in vid_to_vis.keys():
 		if len(vid_to_vis[vid]) == 0:
 			del vid_to_vis[vid]
 	return vid_to_vis
 
-def is_vis_stretch_desirable(vis_, dir_, log_):
-	assert dir_ in (0, 1)
-	dir_good = (vis_[0].dir_tag_int == dir_)
+def is_vis_stretch_desirable(vis_, log_):
 	stretch_len_good = (len(vis_) >= MIN_DESIRABLE_DIR_STRETCH_LEN)
 	widemofr_span_good = abs(vis_[0].widemofr - vis_[-1].widemofr) > 300
-	r = dir_good and (stretch_len_good or widemofr_span_good)
+	r = (stretch_len_good or widemofr_span_good)
 	if log_:
-		printerr('vi stretch %sdesirable.  (dir good: %s, stretch len good: %s, widemofr span good: %s):' \
-			% (('' if r else 'un'), dir_good, stretch_len_good, widemofr_span_good))
+		printerr('vi stretch %sdesirable.  (stretch len good: %s, widemofr span good: %s):' \
+			% (('' if r else 'un'), stretch_len_good, widemofr_span_good))
 		if len(vis_) == 0:
 			printerr('\tstretch has zero length.')
 		else:
@@ -252,7 +258,8 @@ def fix_dirtags(r_vis_):
 					direction = m[(lo_look_dir,hi_look_dir)]
 					break
 			else:
-				direction = 0
+				direction = 0 # i.e. if we can't figure it out because it hasn't moved in a long time, 
+					# then let's call it 0 by default.  Then at least all vis will have a direction. 
 			fix_dirtag(vis[i], direction)
 
 
@@ -390,7 +397,7 @@ def query1(whereclause_, maxrows_, interp_by_time_):
 		r.append(vinfo.VehicleInfo.from_db(*row))
 	curs.close()
 	if interp_by_time_:
-		r = interp_by_time(r, False, False, False)
+		r = interp_by_time(r, False, False)
 	else:
 		r = group_by_time(r)
 	return r
@@ -406,7 +413,7 @@ def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, time_win
 		direction = direction_
 	else:
 		direction = routes.routeinfo(fudgeroute_).dir_from_latlngs(direction_[0], direction_[1])
-	vid_to_vis = get_vid_to_vis(fudgeroute_, direction, num_minutes_, time_window_end_, log_=log_)
+	vid_to_vis = get_vid_to_vis_bothdirs(fudgeroute_, num_minutes_, time_window_end_, log_=log_)
 	r = []
 	for vid, vis in vid_to_vis.iteritems():
 		if log_:
@@ -416,7 +423,7 @@ def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, time_win
 				printerr('\t%s' % vi)
 		r += vis
 	starttime = time_window_end_ - num_minutes_*60*1000
-	r = interp_by_time(r, True, True, True, direction, starttime, time_window_end_, log_=log_)
+	r = interp_by_time(r, True, True, direction, starttime, time_window_end_, log_=log_)
 	return r
 
 # The idea here is, for each vid, to get one more vi from the db, greater in time than the pre-existing
@@ -467,25 +474,39 @@ def get_outside_overshots(vilist_, time_window_boundary_, forward_in_time_, n_=1
 	for vid in set([vi.vehicle_id for vi in vilist_]):
 		vis_for_vid = [vi for vi in vilist_ if vi.vehicle_id == vid]
 		assert all(vi1.time >= vi2.time for vi1, vi2 in hopscotch(vis_for_vid)) # i.e. is in reverse order 
-		vid_extreme_time = vis_for_vid[0 if forward_in_time_ else -1].time
-		if log_: printerr('Looking for %s overshot for vid %s.  Time to beat is %s.' % (forward_str, vid, em_to_str(vid_extreme_time)))
-		routes = [vi.route_tag for vi in vilist_]
-		sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations ' \
-			+ ' where vehicle_id = %s ' + ' and route_tag in ('+(','.join(['%s']*len(routes)))+')' + ' and time < %s and time > %s '\
-			+ ' order by time '+('' if forward_in_time_ else 'desc')+' limit %s'
-		curs = conn().cursor()
-		query_times = [time_window_boundary_+20*60*1000, vid_extreme_time] if forward_in_time_ else [vid_extreme_time, time_window_boundary_-20*60*1000]
-		args = [vid] + routes + query_times + [n_]
-		curs.execute(sqlstr, args)
-		for row in curs:
-			vi = vinfo.VehicleInfo.from_db(*row)
-			if log_: printerr('Got %s outside overshot: %s' % (forward_str, str(vi)))
-			r.append(vi)
-		curs.close()
+
+		num_overshots_already_present = num_outside_overshots_already_present(vis_for_vid, time_window_boundary_, forward_in_time_)
+		if num_overshots_already_present >= n_:
+			if log_: printerr('Don\'t need to get overshots for vid %s.  (Might need to get "more" overshots though.)' % vid)
+		else:
+			num_more_overshots_to_get = n_ - num_overshots_already_present
+			vid_extreme_time = vis_for_vid[0 if forward_in_time_ else -1].time
+			if log_: printerr('Looking for %s overshots for vid %s.  Time to beat is %s.' % (forward_str, vid, em_to_str(vid_extreme_time)))
+			routes = [vi.route_tag for vi in vilist_]
+			sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations ' \
+				+ ' where vehicle_id = %s ' + ' and route_tag in ('+(','.join(['%s']*len(routes)))+')' + ' and time < %s and time > %s '\
+				+ ' order by time '+('' if forward_in_time_ else 'desc')+' limit %s'
+			curs = conn().cursor()
+			query_times = [time_window_boundary_+20*60*1000, vid_extreme_time] if forward_in_time_ else [vid_extreme_time, time_window_boundary_-20*60*1000]
+			args = [vid] + routes + query_times + [num_more_overshots_to_get]
+			curs.execute(sqlstr, args)
+			for row in curs:
+				vi = vinfo.VehicleInfo.from_db(*row)
+				if log_: printerr('Got %s outside overshot: %s' % (forward_str, str(vi)))
+				r.append(vi)
+			curs.close()
 		vis_for_vid = [vi for vi in r if vi.vehicle_id == vid]
 		r += get_outside_overshots_more(vis_for_vid, time_window_boundary_, forward_in_time_, log_=log_)
 
 	return r
+
+def num_outside_overshots_already_present(single_vid_vis_, time_window_boundary_, forward_in_time_):
+	assert len(set(vi.vehicle_id for vi in single_vid_vis_)) <= 1
+	def is_overshot(vi__):
+		return (vi__.time > time_window_boundary_ if forward_in_time_ else vi__.time < time_window_boundary_)
+	overshots_already_present = [vi for vi in single_vid_vis_ if is_overshot(vi)]
+	return len(overshots_already_present) 
+	
 
 # This function is for when we want to look back far enough to see a change in mofr, so that we can determine the
 # direction of a long-stalled vehicle.
@@ -539,7 +560,7 @@ def group_by_time(vilist_):
 # mofr=134 for 12:02, etc. (making these interpolated returned vis effectively dir=0)?  No it does not.  It's not what the user asked
 # for (they asked for dir=1 vehicles) and it looks awful too - looking at vehicles going both directions on a route is visual chaos and
 # makes it a lot harder to make sense of the dir=1 vehicles that they do want to see.
-def interp_by_time(vilist_, be_clever_, use_db_for_heading_inference_, current_conditions_, dir_=None, start_time_=None, end_time_=None, log_=False):
+def interp_by_time(vilist_, be_clever_, current_conditions_, dir_=None, start_time_=None, end_time_=None, log_=False):
 	assert isinstance(vilist_, Sequence)
 	if len(vilist_) == 0:
 		return []
@@ -554,10 +575,8 @@ def interp_by_time(vilist_, be_clever_, use_db_for_heading_inference_, current_c
 			i_vi = None
 			if lo_vi and hi_vi:
 				if (min(interptime - lo_vi.time, hi_vi.time - interptime) > 3*60*1000) or dirs_disagree(dir_, hi_vi.dir_tag_int)\
-						or (lo_vi.route_tag != hi_vi.route_tag):
+						or dirs_disagree(lo_vi.dir_tag_int, dir_) or (lo_vi.route_tag != hi_vi.route_tag):
 					continue
-				if lo_vi.mofr!=-1 and hi_vi.mofr!=-1 and dirs_disagree(dir_, mofrs_to_dir(lo_vi.mofr, hi_vi.mofr)):
-					continue   # see note [1], above.
 				ratio = (interptime - lo_vi.time)/float(hi_vi.time - lo_vi.time)
 				i_latlon, i_heading, i_mofr = interp_latlonnheadingnmofr(lo_vi, hi_vi, ratio, be_clever_, vilist_)
 				i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, i_heading, vid, i_latlon.lat, i_latlon.lng,
@@ -581,7 +600,7 @@ def interp_by_time(vilist_, be_clever_, use_db_for_heading_inference_, current_c
 					printerr()
 
 		time_to_vis[interptime] = interped_timeslice
-	return massage_to_list(time_to_vis, starttime, endtime)
+	return massage_to_list(time_to_vis, starttime, endtime, log_=log_)
 
 # Either arg could be None (i.e. blank dir_tag).  For this we consider None to 'agree' with 0 or 1.
 def dirs_disagree(dir1_, dir2_):
@@ -654,19 +673,44 @@ def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, be_clever_, raw_vilist_for_hi
 		r = (vi1_.latlng.avg(vi2_.latlng, ratio_), vi1_.latlng.heading(vi2_.latlng), None)
 	return r
 
-def massage_to_list(time_to_vis_, start_time_, end_time_):
-	time_to_vis = time_to_vis_.copy()
-
-	# Deleting one empty timeslice at the end of the time frame.
-	# doing this because the last timeslice is the current vehicle locations of course, and that is an important
-	# timeslice and will be rendered differently in the GUI.
-	#latest_time = sorted(time_to_vis.keys())[-1]
-	#if len(time_to_vis[latest_time]) == 0:
-	#	del time_to_vis[latest_time]
+def massage_to_list(time_to_vis_, start_time_, end_time_, log_=False):
+	time_to_vis = time_to_vis_.copy() # No big need for this copy.  
+			# Just implementating behaviour of returning something and not modifying the argument, I think. 
 
 	for time in time_to_vis.keys():
 		if time < start_time_ or time > end_time_:
 			del time_to_vis[time]
+
+	vid_to_stretches = defaultdict(lambda: [])
+	vid_to_cur_stretch = defaultdict(lambda: [])
+	for time in sorted(time_to_vis.keys()):
+		vis_for_time = time_to_vis[time]
+		for vi in vis_for_time:
+			vid_to_cur_stretch[vi.vehicle_id].append(vi)
+		vids_for_time = [vi.vehicle_id for vi in vis_for_time]
+		for vid in [vid for vid in vid_to_cur_stretch.keys() if vid not in vids_for_time]:
+			vid_to_stretches[vid].append(vid_to_cur_stretch[vid])
+			del vid_to_cur_stretch[vid]
+	for vid, stretch in vid_to_cur_stretch.iteritems():
+		vid_to_stretches[vid].append(stretch)
+
+	for vid, stretches in vid_to_stretches.iteritems():
+		new_stretches = []
+		for stretch in stretches:
+			if len(stretch) >= 2:
+				new_stretches.append(stretch)
+			else:
+				if log_:
+					printerr('Throwing out stretch:')
+					for vi in stretch:
+						printerr('\t%s' % vi)
+		stretches[:] = new_stretches
+
+	time_to_vis = defaultdict(lambda: [])
+	for vid, stretches in vid_to_stretches.iteritems():
+		for stretch in stretches:
+			for vi in stretch:
+				time_to_vis[vi.time].append(vi)
 
 	r = []
 	for time in sorted(time_to_vis.keys()):
