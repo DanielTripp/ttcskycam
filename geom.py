@@ -214,7 +214,7 @@ def is_plausible(dist_m_, speed_kmph_):
 	if dist_m_ < 50: # see note [1]
 		return True
 	elif dist_m_ < 1000:
-		return speed_kmph_ < 60
+		return speed_kmph_ < 55
 	elif dist_m_ < 5000:
 		return speed_kmph_ < 40
 	else:
