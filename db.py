@@ -677,7 +677,7 @@ def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, be_clever_, raw_vilist_for_hi
 	return r
 
 def massage_to_list(time_to_vis_, start_time_, end_time_, log_=False):
-	time_to_vis = time_to_vis_.copy() # No big need for this copy.  
+	time_to_vis = time_to_vis_.copy() # No big need for this copy, I think.  
 			# Just implementating behaviour of returning something and not modifying the argument, I think. 
 
 	for time in time_to_vis.keys():
@@ -709,15 +709,25 @@ def massage_to_list(time_to_vis_, start_time_, end_time_, log_=False):
 						printerr('\t%s' % vi)
 		stretches[:] = new_stretches
 
-	time_to_vis = defaultdict(lambda: [])
+	new_time_to_vis = {}
+	# Making sure that all times that were in the time_to_vis_ arg are in the 
+	# dict that we return, even if we have no vis left for some of those times.   
+	# This is especially important because currently traffic.php, when showing 
+	# multiple routes, shows locations only for the intersection of the times that 
+	# it has for those routes.  So if we return from here only a couple of 
+	# minutes for one of the routes (because for example that route is going out 
+	# of service for the day) then that will result in most of the times for all 
+	# of the other routes not being shown.  That would be unfortunate. 
+	for tyme in time_to_vis.keys():
+		new_time_to_vis[tyme] = []
 	for vid, stretches in vid_to_stretches.iteritems():
 		for stretch in stretches:
 			for vi in stretch:
-				time_to_vis[vi.time].append(vi)
+				new_time_to_vis[vi.time].append(vi)
 
 	r = []
-	for time in sorted(time_to_vis.keys()):
-		vis = time_to_vis[time]
+	for time in sorted(new_time_to_vis.keys()):
+		vis = new_time_to_vis[time]
 		r.append([em_to_str(time)] + vis)
 	return r
 
