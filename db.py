@@ -8,10 +8,13 @@
 # 
 # create table predictions (fudgeroute VARCHAR(100), configroute VARCHAR(100), stoptag VARCHAR(100), time_retrieved_str varchar(30), time_of_prediction_str varchar(30), dirtag VARCHAR(100), vehicle_id VARCHAR(100), is_departure boolean, block VARCHAR(100), triptag VARCHAR(100), branch VARCHAR(100), affected_by_layover boolean, is_schedule_based boolean, delayed boolean, time_retrieved bigint, time_of_prediction bigint, rowid serial unique);
 # create index predictions_idx on predictions (fudgeroute, stoptag, time_retrieved desc);
+#
+# create table reports (app_version varchar(20), report_type varchar(20), froute varchar(100), direction integer, time bigint, timestr varchar(30), time_inserted_str varchar(30), report_json text);
+# create index reports_idx on reports (app_version, report_type, froute, direction, time desc) ;
 
 import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket, datetime, calendar, math
 from collections import defaultdict, Sequence
-import vinfo, geom, traffic, routes, yards, tracks, predictions, mc
+import vinfo, geom, traffic, routes, yards, tracks, predictions, mc, c, util
 from misc import *
 
 HOSTMONIKER_TO_IP = {'theorem': '72.2.4.176', 'black': '24.52.231.206', 'u': 'localhost'}
@@ -769,10 +772,11 @@ def purge(num_days_):
 @trans
 def purge_delete(num_days_):
 	curs = conn().cursor()
-	# Delete all rows older than 12 hours:
+	# Delete all rows older than X days: 
 	num_millis = 1000*60*60*24*num_days_
 	curs.execute('delete from ttc_vehicle_locations where time < round(extract(epoch from clock_timestamp())*1000) - %d;' % num_millis)
 	curs.execute('delete from predictions where time_retrieved < round(extract(epoch from clock_timestamp())*1000) - %d;' % num_millis)
+	curs.execute('delete from reports where time < round(extract(epoch from clock_timestamp())*1000) - %d;' % num_millis)
 	curs.close()
 
 def purge_vacuum():
@@ -943,6 +947,45 @@ def _get_observed_arrival_time_caught_vehicle_passing_vis(froute_, startstoptag_
 			raise Exception('No passing vehicle found at start point within reasonable time frame.')
 	finally:
 		curs.close()
+
+# returns report json.  None is row does not exist. 
+@mc.decorate
+def get_report(report_type_, froute_, dir_, time_):
+	assert isinstance(time_, long)
+	curs = conn().cursor()
+	try:
+		curs.execute('select report_json from reports where app_version = %s and report_type = %s and froute = %s and direction = %s '\
+				+' and time = %s', [c.VERSION, report_type_, froute_, dir_, time_])
+		for row in curs:
+			return row[0]
+		else:
+			return None
+	finally:
+		curs.close()
+
+# returns 2-tuple - time string, report json.   Both elements always non-None.  
+def get_latest_report(report_type_, froute_, dir_):
+	curs = conn().cursor('cursor_%d' % (int(time.time()*1000)))
+	try:
+		curs.execute('select time, report_json from reports where app_version = %s and report_type = %s and froute = %s and direction = %s '\
+				+' and time > %s order by time desc', [c.VERSION, report_type_, froute_, dir_, now_em() - 1000*60*10])
+		row = curs.next()
+		reports_time, report_json = row
+		if reports_time < now_em() - 1000*60*10:
+			raise Exception('Most current report in database is too old.')
+		return (em_to_str(reports_time), report_json)
+	finally:
+		curs.close()
+
+@trans
+def insert_report(report_type_, froute_, dir_, time_, report_data_obj_):
+	assert report_type_ in ('traffic', 'locations') and froute_ in routes.NON_SUBWAY_FUDGEROUTES and dir_ in (0, 1)
+	assert abs(time_ - now_em()) < 1000*60*5 and report_data_obj_ is not None
+	curs = conn().cursor()
+	cols = [c.VERSION, report_type_, froute_, dir_, time_, em_to_str(time_), now_str(), util.to_json_str(report_data_obj_)]
+	curs.execute('insert into reports values (%s,%s,%s,%s,%s,%s,%s,%s)', cols)
+	curs.close()
+
 
 if __name__ == '__main__':
 
