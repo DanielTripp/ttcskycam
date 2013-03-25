@@ -29,7 +29,7 @@ def get_current_report(report_type_, froute_, dir_, last_gotten_timestr_, log_=F
 	if GET_CURRENT_REPORTS_FROM_DB:
 		return get_current_report_from_db(report_type_, froute_, dir_, last_gotten_timestr_, log_=log_)
 	else:
-		return calc_report(report_type_, froute_, dir_, last_gotten_timestr_)
+		return calc_current_report(report_type_, froute_, dir_, last_gotten_timestr_)
 
 def calc_current_report(report_type_, froute_, dir_, last_gotten_timestr_):
 	time_arg = round_down_by_minute(now_em())
