@@ -948,7 +948,7 @@ def _get_observed_arrival_time_caught_vehicle_passing_vis(froute_, startstoptag_
 	finally:
 		curs.close()
 
-# returns report json.  None is row does not exist. 
+# returns report json, always non-None.  raises ReportNotFoundException if report does not exist in db. 
 @mc.decorate
 def get_report(report_type_, froute_, dir_, time_):
 	assert isinstance(time_, long)
@@ -959,9 +959,13 @@ def get_report(report_type_, froute_, dir_, time_):
 		for row in curs:
 			return row[0]
 		else:
-			return None
+			raise ReportNotFoundException()
 	finally:
 		curs.close()
+
+class ReportNotFoundException(Exception):
+	pass
+
 
 # returns 2-tuple - time string, report json.   Both elements always non-None.  
 def get_latest_report(report_type_, froute_, dir_):
@@ -969,11 +973,12 @@ def get_latest_report(report_type_, froute_, dir_):
 	try:
 		curs.execute('select time, report_json from reports where app_version = %s and report_type = %s and froute = %s and direction = %s '\
 				+' and time > %s order by time desc', [c.VERSION, report_type_, froute_, dir_, now_em() - 1000*60*10])
-		row = curs.next()
-		reports_time, report_json = row
-		if reports_time < now_em() - 1000*60*10:
-			raise Exception('Most current report in database is too old.')
-		return (em_to_str(reports_time), report_json)
+		for row in curs:
+			reports_time, report_json = row
+			if reports_time < now_em() - 1000*60*10:
+				break
+			return (em_to_str(reports_time), report_json)
+		raise Exception('Most current report in database is too old.')
 	finally:
 		curs.close()
 

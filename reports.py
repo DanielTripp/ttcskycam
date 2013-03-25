@@ -56,20 +56,20 @@ def get_current_report_from_db(report_type_, froute_, dir_, last_gotten_timestr_
 		return (last_gotten_timestr_, None)
 	else:
 		# db.get_report() is memcached, so it's our first choice, for performance reasons.  (Will avoid hitting db): 
-		report_json = db.get_report(report_type_, froute_, dir_, cur_time_rounded_up)
-		if report_json is not None:
+		try:
+			report_json = db.get_report(report_type_, froute_, dir_, cur_time_rounded_up)
 			return '[%s, %s]' % (json.dumps(em_to_str(cur_time_rounded_up)), report_json)
-		else:
+		except db.ReportNotFoundException:
 			cur_time_rounded_down = round_down_by_minute(now_epoch_millis)
 			if cur_time_rounded_down == last_gotten_time:
 				return (last_gotten_timestr_, None)
 			else:
-				report_json = db.get_report(report_type_, froute_, dir_, cur_time_rounded_down)
-				if report_json is not None:
+				try:
+					report_json = db.get_report(report_type_, froute_, dir_, cur_time_rounded_down)
 					return '[%s, %s]' % (json.dumps(em_to_str(cur_time_rounded_down)), report_json)
-				else:
+				except db.ReportNotFoundException:
 					# But maybe the reports in the database are lagging behind by a couple of minutes for some reason.  
-					# Here we gracefully degrade in that scenario.
+					# Here we gracefully degrade in that scenario, and return the most recent report that we do have, within reason. 
 					report_time_str, report_json = db.get_latest_report(report_type_, froute_, dir_)
 					if str_to_em(report_time_str) == last_gotten_time:
 						return (last_gotten_timestr_, None)
