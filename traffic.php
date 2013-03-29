@@ -199,6 +199,11 @@ function refresh_traffic_from_server(fudgeroute_) {
 	}
 }
 
+// note [1]: We need to remake _all_ routes b/c we may have (in the appropriate_vehicle_locations() 
+// call above) updated g_times like so: eg. 12:30 used to be the last time visible for some other route X, but now 12:31 is, 
+// (i.e. we had data up to 12:31 for route X all along, but this route had only up to 12:30 -- until this present call returned.) 
+// So starting now, without us doing anything, the animation is going to go to 12:31 with the moving vehicles, because all 
+// of those markers exist already.  But for static vehicles, here we need to make sure that they are in compliance. 
 function refresh_vehicles_from_server(fudgeroute_) {
 	var data = g_fudgeroute_data.get(fudgeroute_);
 	var dir_to_request = data.dir;
@@ -219,11 +224,10 @@ function refresh_vehicles_from_server(fudgeroute_) {
 				data.locations_last_returned_timestr = returned_timestr;
 				assert(r_[1] != null, "location data is null even though timestamp has been updated.");
 
-				forget_vehicles(fudgeroute_);
 				update_last_updated_time(returned_timestr);
 				appropriate_vehicle_locations(fudgeroute_, r_[1]);
 				$('#playpause_button').prop('disabled', false);
-				remake_static_vehicles_singleroute(fudgeroute_);
+				remake_static_vehicles_allroutes();  // see note [1] above. 
 				remake_moving_vehicles_singleroute(fudgeroute_);
 				refresh_vid_checkboxes_html();
 				if(g_cur_minute_idx >= g_times.size()) { // want to keep animation going smoothly if possible - but if for some reason 
@@ -349,7 +353,6 @@ function update_g_times() {
 						// received any data from the server yet for routes with an empty one of these. 
 					new_times_set.intersection(array_to_set(data.time_to_vid_to_vi.keys()));
 				}
-				var newsize = new_times_set.size();
 			}
 		}
 	});
@@ -391,6 +394,7 @@ function remake_moving_vehicles_allroutes(fudgeroute_) {
 }
 
 function remake_moving_vehicles_singleroute(fudgeroute_) {
+	forget_moving_vehicles(fudgeroute_);
 	var data = g_fudgeroute_data.get(fudgeroute_);
 	var new_vid_to_heading_to_moving_vehicle_marker = new buckets.Dictionary();
 	data.time_to_vid_to_vi.forEach(function(timestr, vid_to_vi) {
@@ -447,6 +451,7 @@ function remake_static_vehicles_allroutes() {
 }
 
 function remake_static_vehicles_singleroute(fudgeroute_) {
+	forget_static_vehicles(fudgeroute_);
 	if(g_times.size() > 0) {
 		var data = g_fudgeroute_data.get(fudgeroute_);
 		var last_time = g_times.elementAtIndex(g_times.size()-1);
