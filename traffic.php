@@ -708,6 +708,7 @@ function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
 			icon: new google.maps.MarkerImage(get_vehicle_url(size, heading_, static_aot_moving_), 
 					null, null, new google.maps.Point(size/2, size/2)),
 			visible: false, 
+			clickable: false,
 			zIndex: 5
 		});
 	if(!TEST_INVISIBLE) {
