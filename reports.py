@@ -9,14 +9,20 @@ GET_CURRENT_REPORTS_FROM_DB = os.path.exists('GET_CURRENT_REPORTS_FROM_DB')
 DISALLOW_HISTORICAL_REPORTS = os.path.exists('DISALLOW_HISTORICAL_REPORTS')
 
 # returns JSON. 
+# dir_ can be an int (0 or 1) or a latlng pair.
 def get_report(report_type_, froute_, dir_, time_, last_gotten_timestr_, log_=False):
 	assert report_type_ in ('traffic', 'locations')
-	assert isinstance(froute_, basestring) and (dir_ in (0, 1)) and (time_ == 0 or abs(str_to_em(time_) - now_em()) < 1000*60*60*24*365*10)
+	assert isinstance(froute_, basestring) and (time_ == 0 or abs(str_to_em(time_) - now_em()) < 1000*60*60*24*365*10)
+	assert (dir_ in (0, 1)) or (len(dir_) == 2 and all(isinstance(e, geom.LatLng) for e in dir_))
 	assert (last_gotten_timestr_ is None) or isinstance(last_gotten_timestr_, basestring)
-	if time_ == 0:
-		return get_current_report(report_type_, froute_, dir_, last_gotten_timestr_, log_=log_)
+	if dir_ in (0, 1):
+		direction = dir_
 	else:
-		return get_historical_report(report_type_, froute_, dir_, str_to_em(time_), log_=log_)
+		direction = routes.routeinfo(froute_).dir_from_latlngs(dir_[0], dir_[1])
+	if time_ == 0:
+		return get_current_report(report_type_, froute_, direction, last_gotten_timestr_, log_=log_)
+	else:
+		return get_historical_report(report_type_, froute_, direction, str_to_em(time_), log_=log_)
 
 def get_historical_report(report_type_, froute_, dir_, time_, log_=False):
 	assert isinstance(time_, long)
