@@ -101,7 +101,8 @@ var MOVING_VEHICLES_ANIM_INTERVAL_MS = 100;
 var MOFR_STEP = <?php readfile('MOFR_STEP'); ?>;
 var FROUTE_TO_INTDIR_TO_ENGLISHDESC = <?php passthru('python -c "import routes; print routes.get_fudgeroute_to_intdir_to_englishdesc()"'); ?>;
 
-var g_zoom_to_vehicle_size = <?php readfile('zoom_to_vehicle_size.json'); ?>;
+var g_zoom_to_vehicle_rendered_img_size = <?php readfile('zoom_to_vehicle_rendered_img_size.json'); ?>;
+var g_zoom_to_vehicle_arrow_img_size = <?php readfile('zoom_to_vehicle_arrow_img_size.json'); ?>;
 var g_zoom_to_traffic_line_width = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 7, 8, 8, 10, 13, 16, 22, 42, 42];
 
 function init_dev_option_values() {
@@ -124,10 +125,11 @@ function init_dev_option_values() {
 }
 
 function get_vehicle_size_by_zoom(zoom_) {
-	if(0 <= zoom_ && zoom_ < g_zoom_to_vehicle_size.length) {
-		return g_zoom_to_vehicle_size[zoom_];
+	var arr = g_zoom_to_vehicle_rendered_img_size;
+	if(0 <= zoom_ && zoom_ < arr.length) {
+		return arr[zoom_];
 	} else {
-		return g_zoom_to_vehicle_size[g_zoom_to_vehicle_size.length];
+		return arr[arr.length-1];
 	}
 }
 
@@ -705,7 +707,7 @@ function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
 			position: new google.maps.LatLng(lat_, lon_),
 			map: g_map,
 			draggable: false,
-			icon: new google.maps.MarkerImage(get_vehicle_url(size, heading_, static_aot_moving_), 
+			icon: new google.maps.MarkerImage(get_vehicle_url(vid_, size, heading_, static_aot_moving_), 
 					null, null, new google.maps.Point(size/2, size/2)),
 			visible: false, 
 			clickable: false,
@@ -721,8 +723,10 @@ function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
 	return marker;
 }
 
-function get_vehicle_url(size_, heading_, static_aot_moving_) {
-	var filename = sprintf('vehicle_arrow_%d_%d_%s.png', size_, heading_, (static_aot_moving_ ? 'static' : 'moving'));
+function get_vehicle_url(vid_, size_, heading_, static_aot_moving_) {
+	var vehicletype = (is_a_streetcar(vid_) ? 'streetcar' : 'bus');
+	//var filename = sprintf('vehicle_arrow_%d_%d_%s.png', size_, heading_, (static_aot_moving_ ? 'static' : 'moving'));
+	var filename = sprintf('%s-%s-size-%d-heading-%d.png', vehicletype, (static_aot_moving_ ? 'static' : 'moving'), size_, heading_);
 	var r = 'img/'+filename;
 	return r;
 }
@@ -1830,6 +1834,11 @@ function on_show_traffic_lines_checkbox_clicked() {
 			line.setVisible(g_show_traffic_lines);
 		});
 	});
+}
+
+function is_a_streetcar(vid_) {
+	// At least, I think that starting w/ 4 means streetcar.  This logic is also implemented in vinfo.py. 
+	return vid_.charAt(0) == '4';
 }
 
 $(document).ready(initialize);
