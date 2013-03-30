@@ -1893,27 +1893,24 @@ $(document).ready(initialize);
 				<br/><p id='p_framerate'/>
 				<br/><p id='p_worktime'/>
 			</div>
-			<br/>
-
-			Show:
-			<input type="checkbox" id="show_static_vehicles_checkbox" checked="checked" onclick="on_show_static_vehicles_checkbox_clicked()"/>
+			<input type="checkbox" id="show_static_vehicles_checkbox" checked="checked" 
+				onclick="on_show_static_vehicles_checkbox_clicked()" title="Show/Hide current vehicle locations (stationary markers)"/>
 			<label for="show_static_vehicles_checkbox" onclick=""> 
-			<img src="static-vehicle-for-legend.png"/> 
-			Current vehicle locations (stationary markers)
+			<img src="static-vehicle-for-legend.png"                title="Show/Hide current vehicle locations (stationary markers)"/> 
 			</label> 
-/
-			<input type="checkbox" id="show_moving_vehicles_checkbox" checked="checked" onclick="on_show_moving_vehicles_checkbox_clicked()"/>
+&nbsp;&nbsp;
+			<input type="checkbox" id="show_moving_vehicles_checkbox" checked="checked" 
+				onclick="on_show_moving_vehicles_checkbox_clicked()" title="Show/Hide the past 30 minutes of vehicle locations (animated markers)"/>
 			<label for="show_moving_vehicles_checkbox" onclick=""> 
-			<img src="moving-vehicle-for-legend.png"/> 
-			Past 30 minutes of vehicle locations (animated markers)
+			<img src="moving-vehicle-for-legend.png"               title="Show/Hide the past 30 minutes of vehicle locations (animated markers)"/> 
 			</label> 
-/
-			<input type="checkbox" id="show_traffic_lines_checkbox" checked="checked" onclick="on_show_traffic_lines_checkbox_clicked()"/>
+&nbsp;&nbsp;
+			<input type="checkbox" id="show_traffic_lines_checkbox" checked="checked" 
+				onclick="on_show_traffic_lines_checkbox_clicked()"       title="Show/Hide recent traffic speed (coloured lines)"/>
 			<label for="show_traffic_lines_checkbox" onclick=""> 
-			Recent traffic speed (coloured lines) 
-			<img src="traffic-color-legend.gif" style="float: bottom;"/><br/>
+			<img src="traffic-color-legend.gif" style="float: bottom;" title="Show/Hide recent traffic speed (coloured lines)"/>
 			</label> 
-			<br/>
+			<br/><br/>
 
 			<hr>
 			<div style="float: left;  width: 45%;">
