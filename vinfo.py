@@ -141,7 +141,8 @@ class VehicleInfo:
 		return self.latlng.lng
 
 	def is_a_streetcar(self):
-		return self.vehicle_id.startswith('4')
+		# At least, I think that starting w/ 4 means streetcar.  This logic is also implemented in traffic.php. 
+		return self.vehicle_id.startswith('4') 
 
 	def copy(self):
 		r = copy.copy(self)
