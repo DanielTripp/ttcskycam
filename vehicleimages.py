@@ -6,7 +6,7 @@ with open('HEADING_ROUNDING') as fin:
 	HEADING_ROUNDING = int(fin.read())
 
 def get_all_vehicle_img_sizes():
-	with open('zoom_to_vehicle_size.json') as fin:
+	with open('zoom_to_vehicle_rendered_img_size.json') as fin:
 		zoom_to_vehicle_size = json.load(fin)
 	return set(zoom_to_vehicle_size)
 
