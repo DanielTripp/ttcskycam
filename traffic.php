@@ -167,6 +167,16 @@ function interp_color(c1_, c2_, percent_) {
 	return r;
 }
 
+// note [1]: This is dealing with three facts: 
+// - We get these linedefs from the server in increasing mofr order, starting from 0.  
+// - We draw them all with the same zIndex, so the last one drawn is displayed on top.  
+// - Google Maps Polylines, at considerable thicknesses (which our traffic lines usually are), are drawn with rounded 
+// (circular) ends.  
+// So straightforwardly drawing these linedefs will result in the rounded polyline ends pointing their convex sides towards 
+// mofr == 0, whether the direction we're displaying is 0 or 1.  I think that these rounded ends don't look very good anyway, 
+// but they look even worse when the convex ends are pointing in the opposite direction that the vehicle location markers are 
+// moving.  I think that the direction that the convex ends are pointing tends to suggest to the typical person the direction 
+// of travel.  So here I am ensuring that the convex ends are pointing that way.  
 function refresh_traffic_from_server(fudgeroute_) {
 	var data = g_fudgeroute_data.get(fudgeroute_);
 	var dir_to_request = data.dir;
@@ -185,7 +195,8 @@ function refresh_traffic_from_server(fudgeroute_) {
 				}
 				data.traffic_last_returned_timestr = returned_timestr;
 				assert(r_[1] != null, "traffic data is null even though timestamp has been updated.");
-				data.traffic_linedefs = to_buckets_list(r_[1][0]);
+				var dir_returned = r_[2];
+				data.traffic_linedefs = to_buckets_list(r_[1][0], (dir_returned==0)); // see note [1] above. 
 				data.traffic_mofr2speed = to_buckets_dict(r_[1][1]);
 				update_last_updated_time(returned_timestr);
 				remake_traffic_lines_singleroute(fudgeroute_);

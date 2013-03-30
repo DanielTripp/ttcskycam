@@ -10,6 +10,9 @@ DISALLOW_HISTORICAL_REPORTS = os.path.exists('DISALLOW_HISTORICAL_REPORTS')
 
 # returns JSON. 
 # dir_ can be an int (0 or 1) or a latlng pair.
+# The returned JSON is a list containing three things - [0] time string of data, [1] the data, and [2] direction returned. 
+# if the dir_ arg is 0 or 1 then [2] will be the same as the dir_  arg, 
+# but if the dir_ arg is a latlng pair then [2] wil be more informative. 
 def get_report(report_type_, froute_, dir_, time_, last_gotten_timestr_, log_=False):
 	assert report_type_ in ('traffic', 'locations')
 	assert isinstance(froute_, basestring) and (time_ == 0 or abs(str_to_em(time_) - now_em()) < 1000*60*60*24*365*10)
@@ -40,7 +43,7 @@ def get_current_report(report_type_, froute_, dir_, last_gotten_timestr_, log_=F
 def calc_current_report(report_type_, froute_, dir_, last_gotten_timestr_):
 	time_arg = round_down_by_minute(now_em())
 	if (last_gotten_timestr_ is not None) and (str_to_em(last_gotten_timestr_) == time_arg):
-		return util.to_json_str((em_to_str(time_arg), None))
+		return util.to_json_str((em_to_str(time_arg), None, dir_))
 	else:
 		return calc_report(report_type_, froute_, dir_, time_arg)
 
@@ -52,19 +55,19 @@ def calc_report(report_type_, froute_, dir_, time_):
 		report_data_obj = traffic.get_recent_vehicle_locations_impl(froute_, dir_, time_)
 	else:
 		assert False
-	return util.to_json_str((em_to_str(time_), report_data_obj))
+	return util.to_json_str((em_to_str(time_), report_data_obj, dir_))
 
 def get_current_report_from_db(report_type_, froute_, dir_, last_gotten_timestr_, log_=False):
 	last_gotten_time = (None if last_gotten_timestr_ is None else str_to_em(last_gotten_timestr_))
 	now_epoch_millis = now_em()
 	cur_time_rounded_up = round_up_by_minute(now_epoch_millis)
 	if cur_time_rounded_up == last_gotten_time:
-		return (last_gotten_timestr_, None)
+		return (last_gotten_timestr_, None, dir_)
 	else:
 		# db.get_report() is memcached, so it's our first choice, for performance reasons.  (Will avoid hitting db): 
 		try:
 			report_json = db.get_report(report_type_, froute_, dir_, cur_time_rounded_up)
-			return '[%s, %s]' % (json.dumps(em_to_str(cur_time_rounded_up)), report_json)
+			return '[%s, %s, %d]' % (json.dumps(em_to_str(cur_time_rounded_up)), report_json, dir_)
 		except db.ReportNotFoundException:
 			cur_time_rounded_down = round_down_by_minute(now_epoch_millis)
 			if cur_time_rounded_down == last_gotten_time:
@@ -72,15 +75,15 @@ def get_current_report_from_db(report_type_, froute_, dir_, last_gotten_timestr_
 			else:
 				try:
 					report_json = db.get_report(report_type_, froute_, dir_, cur_time_rounded_down)
-					return '[%s, %s]' % (json.dumps(em_to_str(cur_time_rounded_down)), report_json)
+					return '[%s, %s, %d]' % (json.dumps(em_to_str(cur_time_rounded_down)), report_json, dir_)
 				except db.ReportNotFoundException:
 					# But maybe the reports in the database are lagging behind by a couple of minutes for some reason.  
 					# Here we gracefully degrade in that scenario, and return the most recent report that we do have, within reason. 
 					report_time_str, report_json = db.get_latest_report(report_type_, froute_, dir_)
 					if str_to_em(report_time_str) == last_gotten_time:
-						return (last_gotten_timestr_, None)
+						return (last_gotten_timestr_, None, dir_)
 					else:
-						return '[%s, %s]' % (json.dumps(report_time_str), report_json)
+						return '[%s, %s, %d]' % (json.dumps(report_time_str), report_json, dir_)
 
 def get_traffic_report(froute_, dir_, time_, last_gotten_timestr_, log_=False):
 	return get_report('traffic', froute_, dir_, time_, last_gotten_timestr_, log_=log_)

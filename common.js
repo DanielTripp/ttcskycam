@@ -355,11 +355,21 @@ function add_all(dest_list_, src_list_) {
 	});
 }
 
-function to_buckets_list(array_) {
+function to_buckets_list(array_, reverse_) {
+	var reverse = false;
+	if(reverse_ != undefined) {
+		reverse = reverse_;
+	}
 	var r = new buckets.LinkedList();
-	array_.forEach(function(e) {
-		r.add(e);
-	});
+	if(reverse) {
+		for(var i=array_.length-1; i>=0; i--) {
+			r.add(array_[i]);
+		}
+	} else {
+		for(var i=0; i<array_.length; i++) {
+			r.add(array_[i]);
+		}
+	}
 	return r;
 }
 
