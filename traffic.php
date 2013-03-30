@@ -93,6 +93,7 @@ var g_route_options_dialog_froute = null;
 var g_force_show_froutes = new buckets.Set(), g_force_hide_froutes = new buckets.Set();
 var g_force_dir0_froutes = new buckets.Set(), g_force_dir1_froutes = new buckets.Set();
 var g_main_path = [], g_extra_path_froutendirs = [];
+var g_use_rendered_aot_arrow_vehicle_icons = true;
 
 var HEADING_ROUNDING_DEGREES = <?php readfile('HEADING_ROUNDING'); ?>;
 var REFRESH_INTERVAL_MS = 5*1000;
@@ -125,7 +126,7 @@ function init_dev_option_values() {
 }
 
 function get_vehicle_size_by_zoom(zoom_) {
-	var arr = g_zoom_to_vehicle_rendered_img_size;
+	var arr = (g_use_rendered_aot_arrow_vehicle_icons ? g_zoom_to_vehicle_rendered_img_size : g_zoom_to_vehicle_arrow_img_size);
 	if(0 <= zoom_ && zoom_ < arr.length) {
 		return arr[zoom_];
 	} else {
@@ -735,11 +736,14 @@ function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
 }
 
 function get_vehicle_url(vid_, size_, heading_, static_aot_moving_) {
-	var vehicletype = (is_a_streetcar(vid_) ? 'streetcar' : 'bus');
-	//var filename = sprintf('vehicle_arrow_%d_%d_%s.png', size_, heading_, (static_aot_moving_ ? 'static' : 'moving'));
-	var filename = sprintf('%s-%s-size-%d-heading-%d.png', vehicletype, (static_aot_moving_ ? 'static' : 'moving'), size_, heading_);
-	var r = 'img/'+filename;
-	return r;
+	var filename = '';
+	if(g_use_rendered_aot_arrow_vehicle_icons) {
+		var vehicletype = (is_a_streetcar(vid_) ? 'streetcar' : 'bus');
+		filename = sprintf('%s-%s-size-%d-heading-%d.png', vehicletype, (static_aot_moving_ ? 'static' : 'moving'), size_, heading_);
+	} else {
+		filename = sprintf('vehicle_arrow_%d_%d_%s.png', size_, heading_, (static_aot_moving_ ? 'static' : 'moving'));
+	}
+	return 'img/'+filename;
 }
 
 function add_solo_vid_click_listener(vehicle_marker_, vid_) {
@@ -862,7 +866,7 @@ function hide_vehicles(list_) {
 	});
 }
 
-function redraw_vehicle_markers() {
+function remake_all_vehicle_markers() {
 	forget_vehicles_allroutes();
 	remake_static_vehicles_allroutes();
 	remake_moving_vehicles_allroutes();
@@ -937,6 +941,7 @@ function init_everything_that_doesnt_depend_on_map() {
 
 	init_route_options_dialog();
 
+	init_rendered_aot_arrow_vehicle_icons_buttons();
 }
 
 // For IE8 etc.  
@@ -1044,7 +1049,7 @@ function init_everything_that_depends_on_map() {
 	google.maps.event.addListener(g_map, 'zoom_changed', function() {
 		//set_contents('p_zoom', ""+(g_map.getZoom()));
 		remake_traffic_lines_allroutes();
-		redraw_vehicle_markers();
+		remake_all_vehicle_markers();
 	});
 
 	g_play_timer = setTimeout('moving_vehicles_timer_func()', 0);
@@ -1852,6 +1857,25 @@ function is_a_streetcar(vid_) {
 	return vid_.charAt(0) == '4';
 }
 
+function set_vehicle_checkbox_imgs_appropriately() {
+	var icontypestr = (g_use_rendered_aot_arrow_vehicle_icons ? 'rendered' : 'arrow');
+	$("#static_vehicle_legend_img").attr('src', sprintf('static-vehicle-%s-for-legend.png', icontypestr));
+	$("#moving_vehicle_legend_img").attr('src', sprintf('moving-vehicle-%s-for-legend.png', icontypestr));
+}
+
+function on_rendered_aot_arrow_vehicle_icons_button_clicked() {
+	g_use_rendered_aot_arrow_vehicle_icons = (radio_val('vehicleicontype') == 'rendered');
+	set_vehicle_checkbox_imgs_appropriately();
+	remake_all_vehicle_markers();
+}
+
+function init_rendered_aot_arrow_vehicle_icons_buttons() {
+	set_selected((g_use_rendered_aot_arrow_vehicle_icons ? 'rendered_button' : 'arrow_button'), true);
+	set_vehicle_checkbox_imgs_appropriately();
+}
+
+
+
 $(document).ready(initialize);
 
     </script>
@@ -1894,21 +1918,22 @@ $(document).ready(initialize);
 				<br/><p id='p_worktime'/>
 			</div>
 			<input type="checkbox" id="show_static_vehicles_checkbox" checked="checked" 
-				onclick="on_show_static_vehicles_checkbox_clicked()" title="Show/Hide current vehicle locations (stationary markers)"/>
+				onclick="on_show_static_vehicles_checkbox_clicked()"                  title="Show/Hide current vehicle locations (stationary icons)"/>
 			<label for="show_static_vehicles_checkbox" onclick=""> 
-			<img src="static-vehicle-for-legend.png"                title="Show/Hide current vehicle locations (stationary markers)"/> 
+			<img id="static_vehicle_legend_img" src="static-vehicle-arrow-for-legend.png" title="Show/Hide current vehicle locations (stationary icons)"/> 
 			</label> 
 &nbsp;&nbsp;
 			<input type="checkbox" id="show_moving_vehicles_checkbox" checked="checked" 
-				onclick="on_show_moving_vehicles_checkbox_clicked()" title="Show/Hide the past 30 minutes of vehicle locations (animated markers)"/>
+				onclick="on_show_moving_vehicles_checkbox_clicked()"                  title="Show/Hide the past 30 minutes of vehicle locations (animated icons)"/>
 			<label for="show_moving_vehicles_checkbox" onclick=""> 
-			<img src="moving-vehicle-for-legend.png"               title="Show/Hide the past 30 minutes of vehicle locations (animated markers)"/> 
+			<img id="moving_vehicle_legend_img" src="moving-vehicle-arrow-for-legend.png" title="Show/Hide the past 30 minutes of vehicle locations (animated icons)"/> 
 			</label> 
 &nbsp;&nbsp;
 			<input type="checkbox" id="show_traffic_lines_checkbox" checked="checked" 
 				onclick="on_show_traffic_lines_checkbox_clicked()"       title="Show/Hide recent traffic speed (coloured lines)"/>
 			<label for="show_traffic_lines_checkbox" onclick=""> 
 			<img src="traffic-color-legend.gif" style="float: bottom;" title="Show/Hide recent traffic speed (coloured lines)"/>
+			                                    <!-- ^^^ I don't know why that style/float is there. -->
 			</label> 
 
 			<hr>
@@ -1934,13 +1959,28 @@ $(document).ready(initialize);
 				<span id="p_last_updated"></span>
 			</div>
 			<div style="float: right; width: 55%;">
-				<!--<div id="routeselectauto_controls_div" style="clear: both; float: right; display: none;"> -->
-					<div style="clear: both; float: right;">
-						<br/>
-						# extra routes to show:<br/><font size="+2"><span id="span_num_extra_routes"></span></font>  
-						<img id="down_img" src="down.png"/> <img id="up_img" src="up.png"/> <br/>
-					</div>
-				<!-- </div> -->
+				<div style="clear: both; float: right;">
+					<br/>
+					# extra routes to show:<br/><font size="+2"><span id="span_num_extra_routes"></span></font>  
+					<img id="down_img" src="down.png"/> <img id="up_img" src="up.png"/> <br/>
+				</div>
+				<br/>
+				<br/>
+				<br/>
+				<br/>
+				<br/>
+				<div style="clear: both; float: right;">
+					<input id="rendered_button" type="radio" name="vehicleicontype" value="rendered" 
+						onclick="on_rendered_aot_arrow_vehicle_icons_button_clicked()" 
+						                           title="Use streetcar and bus icons" />
+					<label for="rendered_button" title="Use streetcar and bus icons"><img src="static-vehicle-rendered-for-legend.png"/></label>
+
+					<input id="arrow_button" type="radio" name="vehicleicontype" value="arrow" 
+						onclick="on_rendered_aot_arrow_vehicle_icons_button_clicked()" 
+						                        title="Use arrow icons" 
+						/>
+					<label for="arrow_button" title="Use arrow icons"><img src="static-vehicle-arrow-for-legend.png"/></label>
+				</div>
 			</div>
 			<div>
 			</div>
