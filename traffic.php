@@ -1910,7 +1910,6 @@ $(document).ready(initialize);
 			<label for="show_traffic_lines_checkbox" onclick=""> 
 			<img src="traffic-color-legend.gif" style="float: bottom;" title="Show/Hide recent traffic speed (coloured lines)"/>
 			</label> 
-			<br/><br/>
 
 			<hr>
 			<div style="float: left;  width: 45%;">
