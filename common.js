@@ -25,6 +25,7 @@ function add_to_loading_urls(url_) {
 		}
 		var img = document.getElementById('loading_img');
 		if(img != null) {
+			img.src = 'loading.gif';
 			img.style.visibility = 'visible';
 		}
 	}
@@ -42,7 +43,7 @@ function update_p_loading_urls() {
 	}
 }
 
-function remove_from_loading_urls(url_) {
+function remove_from_loading_urls(url_, success_) {
 	var was_removed = g_loading_urls.remove(url_);
 	assert(was_removed, "url "+url_+" not found in list.");
 	if(g_loading_urls.size() == 0) {
@@ -51,7 +52,11 @@ function remove_from_loading_urls(url_) {
 		}
 		var img = document.getElementById('loading_img');
 		if(img != null) {
-			img.style.visibility = 'hidden';
+			if(success_) {
+				img.style.visibility = 'hidden';
+			} else {
+				img.src = 'error.png';
+			}
 		}
 	}
 	update_p_loading_urls();
@@ -72,14 +77,13 @@ function get(url_, funcs_arg_) {
 			if(g_page_is_unloading) {
 				return;
 			}
-			remove_from_loading_urls(url_);
+			remove_from_loading_urls(url_, false);
 			if(error_func != undefined) {
 				error_func();
 			}
-			alert(sprintf("Error - %s %s _%s_", jqXHR_, textStatus_, errorThrown_));
 		}, 
 		success: function(data_, textStatus_, jqXHR_) {
-			remove_from_loading_urls(url_);
+			remove_from_loading_urls(url_, true);
 			success_func($.parseJSON(data_));
 		}
 	});
