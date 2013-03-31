@@ -20,6 +20,7 @@
 		<script type="text/javascript" src="common.js"></script>
     <script type="text/javascript">
 
+var SHOW_INSTRUCTIONS = true;
 var TEST_INVISIBLE = false;
 var DISABLE_OVERTIME = false;
 var SHOW_FRAMERATE = false;
@@ -98,6 +99,8 @@ echo (is_desktop(getenv('HTTP_USER_AGENT')) ? 'true' : 'false');
 
 var g_num_extra_routes_to_show = (g_browser_is_desktop ? 3 : 0);
 var g_trip_orig_marker = null, g_trip_dest_marker = null;
+var g_num_trip_marker_moves_so_far = 0;
+var g_instructions_orig_infowin = null, g_instructions_dest_infowin = null, g_instructions_also_infobox = null;
 var g_route_options_dialog_froute = null;
 var g_force_show_froutes = new buckets.Set(), g_force_hide_froutes = new buckets.Set();
 var g_force_dir0_froutes = new buckets.Set(), g_force_dir1_froutes = new buckets.Set();
@@ -1072,7 +1075,7 @@ function init_everything_that_depends_on_map() {
 	init_trip_markers();
 	init_geolocation();
 
-	// The first 'get' of data from the server will happen due to the on_trip_marker_moved() call below.  
+	// The first 'get' of data from the server will happen due to the get_paths_from_server() call below.  
 	schedule_refresh_data_from_server(); // But this call here will cause a periodic refresh of all routes.  The first refresh 
 			// caused by this will happen not right away, but in a few seconds. 
 
@@ -1088,7 +1091,7 @@ function init_everything_that_depends_on_map() {
 	}
 
 	if(!HARDCODE_DISPLAY_SET) {
-		on_trip_marker_moved();
+		get_paths_from_server();
 	} else {
 		show_hardcoded_display_set();
 	}
@@ -1114,7 +1117,7 @@ function init_geolocation() {
 				var latlng = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
 				g_trip_orig_marker.setPosition(latlng);
 				g_map.panTo(latlng);
-				on_trip_marker_moved();
+				get_paths_from_server();
 			};
 			navigator.geolocation.getCurrentPosition(on_success, null, {timeout: 10000});
 		}
@@ -1126,6 +1129,7 @@ function map_fit_bounds_to_trip_markers() {
 	var sw = new google.maps.LatLng(Math.min(p1.lat(), p2.lat()), Math.min(p1.lng(), p2.lng()));
 	var ne = new google.maps.LatLng(Math.max(p1.lat(), p2.lat()), Math.max(p1.lng(), p2.lng()));
 	g_map.fitBounds(new google.maps.LatLngBounds(sw, ne));
+	g_map.setZoom(g_map.getZoom()-2);
 }
 
 function refresh_streetlabels_allroutes() {
@@ -1304,7 +1308,7 @@ function on_route_clicked(froute_, latlng_) {
 		show = 'hide';
 	}
 	html = sprintf('<b>- %(froute)s -</b><br>'
-		+ 'Show this route:<br>'
+		+ 'Show this route?<br>'
 		+ '<input id="showshowbutton" type="radio" name="show" value="show" onclick="" %(showchecked)s />'
 		+ '<label for="showshowbutton" onclick="">Show</label><br>'
 		+ '<input id="showhidebutton" type="radio" name="show" value="hide" onclick="" %(hidechecked)s />'
@@ -1322,7 +1326,7 @@ function on_route_clicked(froute_, latlng_) {
 		} else if(g_force_dir1_froutes.contains(froute_)) {
 			dir = '1';
 		}
-		html += sprintf('Direction:<br>'
+		html += sprintf('Direction to show:<br>'
 			+ '<input id="dir0button" type="radio" name="dir" value="dir0" onclick="" %(dir0checked)s />'
 			+ '<label for="dir0button" onclick="">%(dir0text)s</label><br>'
 			+ '<input id="dir1button" type="radio" name="dir" value="dir1" onclick="" %(dir1checked)s />'
@@ -1376,18 +1380,48 @@ function draw_pathgridsquares() {
 }
 
 function init_trip_markers() {
-	g_trip_orig_marker = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.64939110196153, -79.42446513374944), 
+	g_trip_orig_marker = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.6494532, -79.4314174), 
 		draggable: true});
-	g_trip_dest_marker = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.664, -79.40369410713811), 
+	g_trip_dest_marker = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.6523100, -79.4063549), 
 		draggable: true});
 
-	google.maps.event.addListener(g_trip_orig_marker, 'dragend', on_trip_marker_moved);
-	google.maps.event.addListener(g_trip_dest_marker, 'dragend', on_trip_marker_moved);
+	google.maps.event.addListener(g_trip_orig_marker, 'dragend', on_trip_orig_marker_moved);
+	google.maps.event.addListener(g_trip_dest_marker, 'dragend', on_trip_dest_marker_moved);
 
 	map_fit_bounds_to_trip_markers();
+
+	if(SHOW_INSTRUCTIONS) {
+		g_instructions_orig_infowin = new google.maps.InfoWindow({content: 'Move this marker to where<br>you are starting from.', zIndex: 2});
+		g_instructions_orig_infowin.open(g_map, g_trip_orig_marker);
+		g_instructions_dest_infowin = new google.maps.InfoWindow({content: '... and this one to where<br>you want to go.', zIndex: 1});
+		g_instructions_dest_infowin.open(g_map, g_trip_dest_marker);
+	}
 }
 
-function on_trip_marker_moved() {
+function on_trip_orig_marker_moved() {
+	on_trip_marker_moved(true);
+}
+
+function on_trip_dest_marker_moved() {
+	on_trip_marker_moved(false);
+}
+
+function on_trip_marker_moved(orig_aot_dest_) {
+	if(SHOW_INSTRUCTIONS) {
+		if(g_num_trip_marker_moves_so_far == 0) {
+			g_num_trip_marker_moves_so_far += 1;
+			g_instructions_orig_infowin.close();
+			g_instructions_dest_infowin.close();
+			var boxText = document.createElement("div");
+			boxText.style.cssText = "border: 1px solid black; margin-top: 8px; background: white; padding: 5px; width: 175px";
+			boxText.innerHTML = "Also, you can click on certain streets for more options.";
+			g_instructions_also_infobox = new InfoBox({content: boxText, pixelOffset: new google.maps.Size(-70, 0)});
+			g_instructions_also_infobox.open(g_map, (orig_aot_dest_ ? g_trip_orig_marker : g_trip_dest_marker));
+		} else if(g_num_trip_marker_moves_so_far == 1) {
+			g_num_trip_marker_moves_so_far += 1;
+			g_instructions_also_infobox.close();
+		}
+	}
 	get_paths_from_server();
 }
 
