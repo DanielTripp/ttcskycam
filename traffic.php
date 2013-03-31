@@ -24,7 +24,7 @@ var TEST_INVISIBLE = false;
 var DISABLE_OVERTIME = false;
 var SHOW_FRAMERATE = false;
 
-var SHOW_TIME_SELECTOR = false;
+var SHOW_DEV_CONTROLS = false;
 var SHOW_HISTORICAL_ON_LOAD = false;
 var HISTORICAL_TIME_DEFAULT = '2013-02-17 12:35';
 
@@ -208,7 +208,6 @@ function refresh_traffic_from_server(fudgeroute_) {
 				var dir_returned = r_[2];
 				data.traffic_linedefs = to_buckets_list(r_[1][0], (dir_returned==0)); // see note [1] above. 
 				data.traffic_mofr2speed = to_buckets_dict(r_[1][1]);
-				update_last_updated_time(returned_timestr);
 				remake_traffic_lines_singleroute(fudgeroute_);
 			}, 
 			error: function() {
@@ -247,7 +246,6 @@ function refresh_vehicles_from_server(fudgeroute_) {
 				data.locations_last_returned_timestr = returned_timestr;
 				assert(r_[1] != null, "location data is null even though timestamp has been updated.");
 
-				update_last_updated_time(returned_timestr);
 				appropriate_vehicle_locations(fudgeroute_, r_[1]);
 				$('#playpause_button').prop('disabled', false);
 				remake_static_vehicles_allroutes();  // see note [1] above. 
@@ -273,6 +271,9 @@ function refresh_vehicles_from_server(fudgeroute_) {
 }
 
 function refresh_vid_checkboxes_html() {
+	if(!SHOW_DEV_CONTROLS) {
+		return;
+	}
 	var html = 'Showing vehicle IDs:<br>';
 	g_fudgeroute_data.forEach(function(fudgeroute, data) {
 		html += fudgeroute+': ';
@@ -443,10 +444,6 @@ function round_heading(heading_) {
 		r = 0;
 	}
 	return r;
-}
-
-function update_last_updated_time(timestr_ymdhms_) {
-	set_contents('p_last_updated', sprintf('(Last updated at %s)', timestr_ymdhms_.substr(11)));
 }
 
 function refresh_data_from_server_timer_func() {
@@ -687,14 +684,12 @@ function update_clock_show_cur_minute() {
 function update_clock(timestr_) {
 	if(timestr_ == null) {
 		set_analog_clock_hour_minute(0, 0);
-		set_contents('p_cur_time', ' ');
 	} else {
 		set_analog_clock_timestr(timestr_);
 		var cur_time_html = timestr_.substr(0, 16);
 		if((g_cur_minute_idx == g_times.size()-1) || (in_overtime() && in_overtime_flash_on())) {
 			cur_time_html = '<b>'+cur_time_html+'</b>';
 		}
-		set_contents('p_cur_time', cur_time_html);
 	}
 }
 
@@ -928,10 +923,10 @@ function initialize() {
 
 function init_everything_that_doesnt_depend_on_map() {
 
-	if(SHOW_TIME_SELECTOR) {
+	if(SHOW_DEV_CONTROLS) {
 		init_datetimepicker();
 	} else {
-		$('#div_time_selector').remove();
+		$('#div_dev_controls').remove();
 	}
 	if(!SHOW_PATHS_TEXT) {
 		$('#p_paths_text').remove();
@@ -951,6 +946,17 @@ function init_everything_that_doesnt_depend_on_map() {
 	init_route_options_dialog();
 
 	init_rendered_aot_arrow_vehicle_icons_buttons();
+
+	$(window).bind("resize", on_browser_window_resized);
+	on_browser_window_resized();
+}
+
+function on_browser_window_resized() {
+	var window_height = $(window).height();
+	var map_height = Math.round(window_height*3/4);
+	$('#map_canvas').css('height', sprintf('%dpx', map_height));
+	$('#div_clock').css('top', sprintf('%dpx', map_height-80));
+	$('#div_loading_img').css('top', sprintf('%dpx', map_height-55));
 }
 
 // For IE8 etc.  
@@ -1692,7 +1698,7 @@ function schedule_refresh_data_from_server() {
 }
 
 function update_datetimepicker_enabledness() {
-	if(SHOW_TIME_SELECTOR) {
+	if(SHOW_DEV_CONTROLS) {
 		$('#datetimepicker_textfield').prop('disabled', is_traffictype_current());
 	}
 }
@@ -1703,7 +1709,7 @@ function substr_int(str_, startidx_, len_) {
 
 // Returns either 0 (an integer) or a string (in yyyy-MM-dd HH:MM format).   Our server functions can handle both. 
 function get_datetime_from_gui() {
-	if(SHOW_TIME_SELECTOR) {
+	if(SHOW_DEV_CONTROLS) {
 		return (is_traffictype_current() ? 0 : get_value('datetimepicker_textfield'));
 	} else {
 		return 0;
@@ -1917,7 +1923,31 @@ $(document).ready(initialize);
     </style>
   </head>
   <body>
-		<div id="map_canvas" style="width:100%; height:100%"></div>
+		<div id="map_wrapper">
+			<div id="map_canvas" style="width:100%; height:100%"></div>
+			<div id="div_clock" style="position: absolute; background-color: transparent; top: 30px; left: 5px; z-index: 99; ">
+				<svg id="clock" viewBox="0 0 100 100" width="50" height="50">
+					<!-- SVG clock from https://gist.github.com/1188550 --> 
+					<circle id="face" cx="50" cy="50" r="45"/> <!-- the clock face -->
+					<g id="ticks">
+						<!-- 12 hour tick marks -->
+						<line x1='50' y1='5.000' x2='50.00' y2='10.00'/> <line x1='72.50' y1='11.03' x2='70.00' y2='15.36'/> <line x1='88.97' y1='27.50' x2='84.64' y2='30.00'/> <line x1='95.00' y1='50.00' x2='90.00' y2='50.00'/> <line x1='88.97' y1='72.50' x2='84.64' y2='70.00'/> <line x1='72.50' y1='88.97' x2='70.00' y2='84.64'/> <line x1='50.00' y1='95.00' x2='50.00' y2='90.00'/> <line x1='27.50' y1='88.97' x2='30.00' y2='84.64'/> <line x1='11.03' y1='72.50' x2='15.36' y2='70.00'/> <line x1='5.000' y1='50.00' x2='10.00' y2='50.00'/> <line x1='11.03' y1='27.50' x2='15.36' y2='30.00'/> <line x1='27.50' y1='11.03' x2='30.00' y2='15.36'/>
+					</g>
+					<g id="numbers">
+						<!-- Number the cardinal directions-->
+						<text x="50" y="18">12</text><text x="85" y="53">3</text> <text x="50" y="88">6</text><text x="15" y="53">9</text>
+					</g>
+					<!-- Draw hands pointing straight up. We rotate them in the code. -->
+					<g id="hands"> <!-- Add shadows to the hands -->
+						<line id="hourhand" x1="50" y1="50" x2="50" y2="24"/> <line id="minutehand" x1="50" y1="50" x2="50" y2="20"/>
+						<!--<line id="secondhand" x1="50" y1="50" x2="50" y2="16"/>-->
+					</g>
+				</svg> <br/>
+			</div>
+			<div id="div_loading_img" style="position: absolute; background-color: transparent; top: 30px; right: 5px; z-index: 99;">
+			<img id="loading_img" src="loading.gif" style="visibility:hidden"/>
+			</div>
+		</div>
 		<div>
 			<!-- <p id="p_zoom"/> -->
 			<p id="p_paths_text"/>
@@ -1945,76 +1975,47 @@ $(document).ready(initialize);
 			                                    <!-- ^^^ I don't know why that style/float is there. -->
 			</label> 
 
-			<hr>
-			<div style="float: left;  width: 45%;">
-				<svg id="clock" viewBox="0 0 100 100" width="100" height="100">
-					<!-- SVG clock from https://gist.github.com/1188550 --> 
-					<circle id="face" cx="50" cy="50" r="45"/> <!-- the clock face -->
-					<g id="ticks">
-						<!-- 12 hour tick marks -->
-						<line x1='50' y1='5.000' x2='50.00' y2='10.00'/> <line x1='72.50' y1='11.03' x2='70.00' y2='15.36'/> <line x1='88.97' y1='27.50' x2='84.64' y2='30.00'/> <line x1='95.00' y1='50.00' x2='90.00' y2='50.00'/> <line x1='88.97' y1='72.50' x2='84.64' y2='70.00'/> <line x1='72.50' y1='88.97' x2='70.00' y2='84.64'/> <line x1='50.00' y1='95.00' x2='50.00' y2='90.00'/> <line x1='27.50' y1='88.97' x2='30.00' y2='84.64'/> <line x1='11.03' y1='72.50' x2='15.36' y2='70.00'/> <line x1='5.000' y1='50.00' x2='10.00' y2='50.00'/> <line x1='11.03' y1='27.50' x2='15.36' y2='30.00'/> <line x1='27.50' y1='11.03' x2='30.00' y2='15.36'/>
-					</g>
-					<g id="numbers">
-						<!-- Number the cardinal directions-->
-						<text x="50" y="18">12</text><text x="85" y="53">3</text> <text x="50" y="88">6</text><text x="15" y="53">9</text>
-					</g>
-					<!-- Draw hands pointing straight up. We rotate them in the code. -->
-					<g id="hands"> <!-- Add shadows to the hands -->
-						<line id="hourhand" x1="50" y1="50" x2="50" y2="24"/> <line id="minutehand" x1="50" y1="50" x2="50" y2="20"/>
-						<!--<line id="secondhand" x1="50" y1="50" x2="50" y2="16"/>-->
-					</g>
-				</svg> <br/>
-				<span id="p_cur_time">&nbsp;</span><br/>
-				<span id="p_last_updated"></span>
-			</div>
-			<div style="float: right; width: 55%;">
-				<div style="clear: both; float: right;">
-					<br/>
-					# extra routes to show:<br/><font size="+2"><span id="span_num_extra_routes"></span></font>  
-					<img id="down_img" src="down.png"/> <img id="up_img" src="up.png"/> <br/>
-				</div>
-				<br/>
-				<br/>
-				<br/>
-				<br/>
-				<br/>
-				<div style="clear: both; float: right;">
-					<input id="rendered_button" type="radio" name="vehicleicontype" value="rendered" 
-						onclick="on_rendered_aot_arrow_vehicle_icons_button_clicked()" 
-						                           title="Use streetcar and bus icons" />
-					<label for="rendered_button" title="Use streetcar and bus icons"><img src="static-vehicle-rendered-for-legend.png"/></label>
+			<hr style="border-top:1px solid #ccc" />
+			# extra routes to show: <font size="+1"><span id="span_num_extra_routes"></span></font>  
+			<img id="down_img" src="down.png"/> <img id="up_img" src="up.png"/> <br/>
+			<hr style="border-top:1px solid #ccc" />
 
-					<input id="arrow_button" type="radio" name="vehicleicontype" value="arrow" 
-						onclick="on_rendered_aot_arrow_vehicle_icons_button_clicked()" 
-						                        title="Use arrow icons" 
-						/>
-					<label for="arrow_button" title="Use arrow icons"><img src="static-vehicle-arrow-for-legend.png"/></label>
-				</div>
-			</div>
-			<div>
-			</div>
-			<div id="animation_controls_div" style="clear: both;">
+			<input id="rendered_button" type="radio" name="vehicleicontype" value="rendered" 
+				onclick="on_rendered_aot_arrow_vehicle_icons_button_clicked()" 
+																	 title="Use streetcar and bus icons" />
+			<label for="rendered_button" title="Use streetcar and bus icons"><img src="static-vehicle-rendered-for-legend.png"/></label>
+
+			<input id="arrow_button" type="radio" name="vehicleicontype" value="arrow" 
+				onclick="on_rendered_aot_arrow_vehicle_icons_button_clicked()" 
+																title="Use arrow icons" 
+				/>
+			<label for="arrow_button" title="Use arrow icons"><img src="static-vehicle-arrow-for-legend.png"/></label>
+			<hr style="border-top:1px solid #ccc" />
+
+			<div id="animation_controls_div">
 				Animated vehicles: 
 				<input type="button" id="playpause_button" onclick="on_playpause_clicked()" value="" />
 				<input type="button" id="back_button" onclick="on_back_clicked()" value="<" />
 				<input type="button" id="forward_button" onclick="on_forward_clicked()" value=">" />
 			</div>
-			<hr/>
-			<br/>
-			<div>
-				<font size="-1">
-				<p>Details:</p>
-				<p id="p_vid_checkboxes">&nbsp;</p>
+
+			<div id="div_dev_controls">
+				<hr style="border-top:1px solid #ccc" />
+				<div>
+					<font size="-1">
+					<p>Details:</p>
+					<p id="p_vid_checkboxes">&nbsp;</p>
+					</font>
+
+					<input id="current_button" type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"  checked="checked"  />
+					<label for="current_button">Now</label>
+					<input id="historical_button" type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()" />
+					<label for="historical_button">Past</label>
+					<input id="datetimepicker_textfield" type="text" name="datetimepicker_textfield" value="" />
+				</div>
 			</div>
-			<div id="div_time_selector">
-			<input id="current_button" type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"  checked="checked"  />
-			<label for="current_button">Now</label>
-			<input id="historical_button" type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()" />
-			<label for="historical_button">Past</label>
-			<input id="datetimepicker_textfield" type="text" name="datetimepicker_textfield" value="" />
-			</div>
-			</font>
-			<hr>
+		<div style="clear: both">
+			<hr style="border-top:1px solid #ccc" />
 			<p><a href="about.html">About this website.</a></p>
 			<p></p>
 		</div>
