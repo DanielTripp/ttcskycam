@@ -87,13 +87,22 @@ var g_playing = true;
 var g_mouseover_infowin = null;
 var g_mouseover_infowin_timer = null;
 
-var g_num_extra_routes_to_show = 5;
+var g_browser_is_desktop = <?php
+function is_desktop($user_agent_) {
+  $mobile_regex = '/iphone|ipod|blackberry|android|palm|windows\s+ce/i';
+  $desktop_regex = '/windows|linux|os\s+[x9]|solaris|bsd/i';
+  return (preg_match($mobile_regex, $user_agent_) == 0) && (preg_match($desktop_regex, $user_agent_) == 1);
+}
+echo (is_desktop(getenv('HTTP_USER_AGENT')) ? 'true' : 'false');
+?>;
+
+var g_num_extra_routes_to_show = (g_browser_is_desktop ? 3 : 0);
 var g_trip_orig_marker = null, g_trip_dest_marker = null;
 var g_route_options_dialog_froute = null;
 var g_force_show_froutes = new buckets.Set(), g_force_hide_froutes = new buckets.Set();
 var g_force_dir0_froutes = new buckets.Set(), g_force_dir1_froutes = new buckets.Set();
 var g_main_path = [], g_extra_path_froutendirs = [];
-var g_use_rendered_aot_arrow_vehicle_icons = true;
+var g_use_rendered_aot_arrow_vehicle_icons = g_browser_is_desktop;
 
 var HEADING_ROUNDING_DEGREES = <?php readfile('HEADING_ROUNDING'); ?>;
 var REFRESH_INTERVAL_MS = 5*1000;
