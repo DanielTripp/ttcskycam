@@ -2046,7 +2046,7 @@ $(document).ready(initialize);
 			<hr style="border-top:1px solid #ccc" />
 
 			<div id="animation_controls_div">
-				Animated vehicles: 
+				Vehicle animation: 
 				<input type="button" id="playpause_button" onclick="on_playpause_clicked()" value="" />
 				<input type="button" id="back_button" onclick="on_back_clicked()" value="<" />
 				<input type="button" id="forward_button" onclick="on_forward_clicked()" value=">" />
