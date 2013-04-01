@@ -302,7 +302,7 @@ function run_query1(whereclause_, maxrows_, interpbytime_) {
 		}
 		recreate_slider();
 	} finally {
-		remove_from_loading_urls('sql');
+		remove_from_loading_urls('sql', true);
 	}
 }
 
