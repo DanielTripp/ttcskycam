@@ -1096,6 +1096,10 @@ function init_everything_that_depends_on_map() {
 		show_hardcoded_display_set();
 	}
 
+	google.maps.event.addListener(g_map, 'click', function() {
+		alert('Sorry, we don\'t support any routes here (yet).');
+	});
+
 }
 
 function show_hardcoded_display_set() {
@@ -1307,8 +1311,8 @@ function on_route_clicked(froute_, latlng_) {
 	} else if(g_force_hide_froutes.contains(froute_)) {
 		show = 'hide';
 	}
-	html = sprintf('<b>- %(froute)s -</b><br>'
-		+ 'Show this route?<br>'
+	html = sprintf(
+		  'Show this route?<br>'
 		+ '<input id="showshowbutton" type="radio" name="show" value="show" onclick="" %(showchecked)s />'
 		+ '<label for="showshowbutton" onclick="">Show</label><br>'
 		+ '<input id="showhidebutton" type="radio" name="show" value="hide" onclick="" %(hidechecked)s />'
@@ -1317,7 +1321,7 @@ function on_route_clicked(froute_, latlng_) {
 		+ '<label for="showautobutton" onclick="">Auto</label><br>'
 		+ '<input id="showsolobutton" type="radio" name="show" value="solo" onclick="" %(solochecked)s />'
 		+ '<label for="showsolobutton" onclick="">Show this route only</label><br>', 
-		{froute: froute_, showchecked: s(show == 'show'), hidechecked: s(show == 'hide'), 
+		{showchecked: s(show == 'show'), hidechecked: s(show == 'hide'), 
 			autochecked: s(show == 'auto'), solochecked: s(show == 'solo')});
 	if(!is_subway(froute_)) {
 		var dir = 'auto';
@@ -1336,8 +1340,23 @@ function on_route_clicked(froute_, latlng_) {
 			{dir0text: FROUTE_TO_INTDIR_TO_ENGLISHDESC[froute_][0], dir1text: FROUTE_TO_INTDIR_TO_ENGLISHDESC[froute_][1], 
 			dir0checked: s(dir == '0'), dir1checked: s(dir == '1'), dirautochecked: s(dir == 'auto')});
 	}
+	$('#route-options-dialog').dialog('option', 'title', get_readable_froute(froute_));
 	$('#route-options-dialog').html(html);
 	$('#route-options-dialog').dialog('open');
+}
+
+function get_readable_froute(froute_) {
+	//var froute = froute_.substring(0, 1).toUpperCase()+froute_.substring(1);
+	var splits = froute_.split('_');
+	var r = '';
+	for(var i=0; i<splits.length; i++) {
+		var split = splits[i];
+		r += split.substring(0, 1).toUpperCase() + split.substring(1);
+		if(i != splits.length-1) {
+			r += '/';
+		}
+	}
+	return r;
 }
 
 function showing_route_solo(froute_) {
