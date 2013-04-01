@@ -157,29 +157,44 @@ def get_traffic_rawspeeds(fudgeroute_name_, dir_, time_, window_minutes_, usewid
 	mofrs_to_get = (range(0, routes.max_mofr(fudgeroute_name_), MOFR_STEP) if singlemofr_ is None else [singlemofr_])
 	for mofr in mofrs_to_get:
 		mofr_to_rawtraffics[mofr] = []
-	for vid, vis in get_vid_to_vis_from_db_for_traffic(fudgeroute_name_, dir_, time_, window_minutes_, usewidemofr_=usewidemofr_, log_=log_).items():
-		if log_: printerr('For vid "%s":' % (vid))
-		if log_:
-			for vi in vis[::-1]:
-				printerr('\traw vinfo: %s' % (str(vi)))
-		if len(vis) < 2:
-			continue
-		def mofr(vi__): return (vi__.widemofr if usewidemofr_ else vi__.mofr)
-		assert all(mofr(vi) != -1 for vi in vis)
-		for interp_mofr in mofrs_to_get:
-			if log_: printerr('\tFor mofr %d:' % (interp_mofr))
-			vi_lo, vi_hi = get_bounding_mofr_vis(interp_mofr, vis, usewidemofr_)
-			if vi_lo and vi_hi:
-				if log_: printerr('\t\tFound bounding vis at mofrs %d and %d (%s and %s).' % (mofr(vi_lo), mofr(vi_hi), vi_lo.timestr, vi_hi.timestr))
-				interp_ratio = (interp_mofr - mofr(vi_lo))/float(mofr(vi_hi) - mofr(vi_lo))
-				interp_t = int(vi_lo.time + interp_ratio*(vi_hi.time - vi_lo.time))
-				speed_kmph = ((mofr(vi_hi) - mofr(vi_lo))/1000.0)/((vi_hi.time - vi_lo.time)/(1000.0*60*60))
-				if log_: printerr('\t\tSpeed: %.1f.  Interpolated time at this mofr: %s' % (speed_kmph, em_to_str_hms(interp_t)))
-				# TODO: fix buggy negative speeds a better way, maybe.
-				mofr_to_rawtraffics[interp_mofr].append({'speed_kmph': speed_kmph, 'time':interp_t, 'vid': vid})
-			else:
-				if log_: printerr('\t\tNo bounding vis found for this mofr step / vid.')
+	for vid, vis_all_stretches in \
+				get_vid_to_vis_from_db_for_traffic(fudgeroute_name_, dir_, time_, window_minutes_, usewidemofr_=usewidemofr_, log_=log_).items():
+		for vis in get_stretches(vis_all_stretches):
+			if log_: printerr('For vid "%s":' % (vid))
+			if log_:
+				for vi in vis[::-1]:
+					printerr('\traw vinfo: %s' % (str(vi)))
+			if len(vis) < 2:
+				continue
+			def mofr(vi__): return (vi__.widemofr if usewidemofr_ else vi__.mofr)
+			assert all(mofr(vi) != -1 for vi in vis)
+			for interp_mofr in mofrs_to_get:
+				if log_: printerr('\tFor mofr %d:' % (interp_mofr))
+				vi_lo, vi_hi = get_bounding_mofr_vis(interp_mofr, vis, usewidemofr_)
+				if vi_lo and vi_hi:
+					if log_: printerr('\t\tFound bounding vis at mofrs %d and %d (%s and %s).' % (mofr(vi_lo), mofr(vi_hi), vi_lo.timestr, vi_hi.timestr))
+					interp_ratio = (interp_mofr - mofr(vi_lo))/float(mofr(vi_hi) - mofr(vi_lo))
+					interp_t = int(vi_lo.time + interp_ratio*(vi_hi.time - vi_lo.time))
+					speed_kmph = ((mofr(vi_hi) - mofr(vi_lo))/1000.0)/((vi_hi.time - vi_lo.time)/(1000.0*60*60))
+					if log_: printerr('\t\tSpeed: %.1f.  Interpolated time at this mofr: %s' % (speed_kmph, em_to_str_hms(interp_t)))
+					# TODO: fix buggy negative speeds a better way, maybe.
+					mofr_to_rawtraffics[interp_mofr].append({'speed_kmph': speed_kmph, 'time':interp_t, 'vid': vid})
+				else:
+					if log_: printerr('\t\tNo bounding vis found for this mofr step / vid.')
 	return (mofr_to_rawtraffics if singlemofr_ is None else mofr_to_rawtraffics.values()[0])
+
+def get_stretches(vis_):
+	if len(vis_) == 0:
+		return []
+	cur_stretch = [vis_[0]]
+	r = [cur_stretch]
+	for vi in vis_[1:]:
+		if abs(cur_stretch[-1].time - vi.time) < 1000*60*10:
+			cur_stretch.append(vi)
+		else:
+			cur_stretch = [vi]
+			r.append(cur_stretch)
+	return r
 
 # return a tuple - (headway in millis, time of earlier passing vehicle, time of later passing vehicle)
 # 	or None if no headway could be found from the vehicles that passed the stop in the given window-minutes.
