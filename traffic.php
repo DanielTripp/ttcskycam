@@ -1097,7 +1097,7 @@ function init_everything_that_depends_on_map() {
 	}
 
 	google.maps.event.addListener(g_map, 'click', function() {
-		alert('You clicked in a place where we don\'t know of any routes.  Either we haven\'t gotten around to supporting the route you want yet, or there is no TTC route here.');
+		alert('You clicked in a place where we don\'t know of any routes.  Either we haven\'t yet gotten around to supporting the route you want, or there is no TTC route here.');
 	});
 
 }
