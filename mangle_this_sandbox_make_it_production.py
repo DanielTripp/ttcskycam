@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import sys, os, os.path, subprocess, shutil
+from misc import *
 
 if __name__ == '__main__':
 
@@ -31,4 +32,6 @@ if __name__ == '__main__':
 				dirnames.remove('.svn')
 
 		os.remove('dev-options-for-traffic-php.txt')
+		touch('GET_CURRENT_REPORTS_FROM_DB')
+		touch('DISALLOW_HISTORICAL_REPORTS')
 
