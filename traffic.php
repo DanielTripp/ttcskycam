@@ -20,7 +20,7 @@
 		<script type="text/javascript" src="common.js"></script>
     <script type="text/javascript">
 
-var SHOW_INSTRUCTIONS = true;
+var SHOW_INSTRUCTIONS = false;
 var TEST_INVISIBLE = false;
 var DISABLE_OVERTIME = false;
 var SHOW_FRAMERATE = false;
