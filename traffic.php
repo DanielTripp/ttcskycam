@@ -2029,7 +2029,7 @@ $(document).ready(initialize);
 			</label> 
 
 			<hr style="border-top:1px solid #ccc" />
-			# extra routes to show: <font size="+1"><span id="span_num_extra_routes"></span></font>  
+			Max. extra routes to show: <font size="+1"><span id="span_num_extra_routes"></span></font>  
 			<img id="down_img" src="down.png"/> <img id="up_img" src="up.png"/> <br/>
 			<hr style="border-top:1px solid #ccc" />
 
