@@ -1434,7 +1434,7 @@ function on_trip_marker_moved(orig_aot_dest_) {
 			var boxText = document.createElement("div");
 			boxText.style.cssText = "border: 1px solid black; margin-top: 8px; background: white; padding: 5px; width: 175px";
 			boxText.innerHTML = "Also, you can click on certain streets for more options.";
-			g_instructions_also_infobox = new InfoBox({content: boxText, pixelOffset: new google.maps.Size(-70, 0)});
+			g_instructions_also_infobox = new InfoBox({content: boxText, pixelOffset: new google.maps.Size(-70, 0), closeBoxMargin: "10px 2px 2px 2px"});
 			g_instructions_also_infobox.open(g_map, (orig_aot_dest_ ? g_trip_orig_marker : g_trip_dest_marker));
 		} else if(g_num_trip_marker_moves_so_far == 1) {
 			g_num_trip_marker_moves_so_far += 1;
