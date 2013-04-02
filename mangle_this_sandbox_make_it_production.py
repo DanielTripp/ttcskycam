@@ -30,3 +30,5 @@ if __name__ == '__main__':
 				shutil.rmtree(os.path.join(dirpath, '.svn'))
 				dirnames.remove('.svn')
 
+		os.remove('dev-options-for-traffic-php.txt')
+
