@@ -31,7 +31,7 @@ var HISTORICAL_TIME_DEFAULT = '2013-02-17 12:35';
 
 var SHOW_PATHS_TEXT = false;
 var SHOW_LOADING_URLS = false;
-var DISABLE_GEOLOCATION = false;
+var DISABLE_GEOLOCATION = true;
 
 var HARDCODE_DISPLAY_SET = false;
 var HARDCODED_DISPLAY_SET = [['dundas', 0]];
