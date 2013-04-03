@@ -1163,7 +1163,7 @@ function refresh_streetlabels_singleroute(froute_) {
 					var marker = new google.maps.Marker({position: google_LatLng(label.latlng), 
 						map: g_map, draggable: false, flat: true, clickable: false, zIndex: 4,
 						icon: new google.maps.MarkerImage(get_streetlabel_url(label.text, label.rotation, zoom), 
-								null, null, new google.maps.Point(150, 150)),
+								null, null, new google.maps.Point(150, 150))
 						});
 					g_fudgeroute_data.get(froute_).streetlabel_markers.add(marker);
 				});
@@ -1314,13 +1314,14 @@ function on_route_clicked(froute_, latlng_) {
 	html = sprintf(
 		  'Show this route?<br>'
 		+ '<input id="showshowbutton" type="radio" name="show" value="show" onclick="" %(showchecked)s />'
-		+ '<label for="showshowbutton" onclick="">Show</label><br>'
+		+ '<label for="showshowbutton" onclick="">Show it</label><br>'
+		+ '<input id="showsolobutton" type="radio" name="show" value="solo" onclick="" %(solochecked)s />'
+		+ '<label for="showsolobutton" onclick="">Show this route <i>only</i></label><br>'
 		+ '<input id="showhidebutton" type="radio" name="show" value="hide" onclick="" %(hidechecked)s />'
-		+ '<label for="showhidebutton" onclick="">Hide</label><br>'
+		+ '<label for="showhidebutton" onclick="">Hide it</label><br>'
 		+ '<input id="showautobutton" type="radio" name="show" value="auto" onclick="" %(autochecked)s />'
 		+ '<label for="showautobutton" onclick="">Auto</label><br>'
-		+ '<input id="showsolobutton" type="radio" name="show" value="solo" onclick="" %(solochecked)s />'
-		+ '<label for="showsolobutton" onclick="">Show this route only</label><br>', 
+		, 
 		{showchecked: s(show == 'show'), hidechecked: s(show == 'hide'), 
 			autochecked: s(show == 'auto'), solochecked: s(show == 'solo')});
 	if(!is_subway(froute_)) {
