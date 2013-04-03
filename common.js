@@ -20,9 +20,6 @@ var g_loading_urls = new buckets.LinkedList();
 function add_to_loading_urls(url_) {
 	g_loading_urls.add(url_)
 	if(g_loading_urls.size() == 1) {
-		if(g_loading_gif_marker!=null) {
-			g_loading_gif_marker.setVisible(true);
-		}
 		var img = document.getElementById('loading_img');
 		if(img != null) {
 			img.src = 'loading.gif';
@@ -47,9 +44,6 @@ function remove_from_loading_urls(url_, success_) {
 	var was_removed = g_loading_urls.remove(url_);
 	assert(was_removed, "url "+url_+" not found in list.");
 	if(g_loading_urls.size() == 0) {
-		if(g_loading_gif_marker!=null) {
-			g_loading_gif_marker.setVisible(false);
-		}
 		var img = document.getElementById('loading_img');
 		if(img != null) {
 			if(success_) {
@@ -148,8 +142,6 @@ function int_to_rgbstr(int_) {
 	return 'rgb('+r+')';
 }
 	
-var g_loading_gif_marker = null;
-
 function init_map() {
 	var myOptions = {
 		center: new google.maps.LatLng(43.65431690357294, -79.40920715332034),
@@ -164,24 +156,7 @@ function init_map() {
 	// The line below seemed not to work on iPhone and even worse, it broke everything too (no data, routes, or 
 	// start / destination markers shown).   
 	//g_map.fitBounds(bounds);
-
-  g_loading_gif_marker = new google.maps.Marker({
-      position: new google.maps.LatLng(43.652868888096386, -79.41064639290471),
-      map: g_map,
-      optimized: false,
-      draggable: false,
-      icon: new google.maps.MarkerImage('loading.gif',
-          null, null, new google.maps.Point(-10, 70)),
-      visible: false
-    });
-
-	google.maps.event.addListener(g_map, 'bounds_changed', reposition_loading_gif_marker);
 }
-
-function reposition_loading_gif_marker() {
-	g_loading_gif_marker.setPosition(g_map.getBounds().getSouthWest());
-}
-
 
 function set_contents(id_, contents_) {
 	var dom_elem = document.getElementById(id_);
