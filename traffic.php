@@ -958,8 +958,8 @@ function on_browser_window_resized() {
 	var window_height = $(window).height();
 	var map_height = Math.round(window_height*3/4);
 	$('#map_canvas').css('height', sprintf('%dpx', map_height));
-	$('#div_clock').css('top', sprintf('%dpx', map_height-80));
-	$('#div_loading_img').css('top', sprintf('%dpx', map_height-55));
+	$('#div_clock').css('top', sprintf('%dpx', map_height-70));
+	$('#div_loading_img').css('top', sprintf('%dpx', map_height-35));
 }
 
 // For IE8 etc.  
@@ -1979,7 +1979,7 @@ $(document).ready(initialize);
   <body>
 		<div id="map_wrapper">
 			<div id="map_canvas" style="width:100%; height:100%"></div>
-			<div id="div_clock" style="position: absolute; background-color: transparent; top: 30px; left: 5px; z-index: 99; ">
+			<div id="div_clock" style="position: absolute; background-color: transparent; top: 30px; right: 2px; z-index: 99; ">
 				<svg id="clock" viewBox="0 0 100 100" width="50" height="50">
 					<!-- SVG clock from https://gist.github.com/1188550 --> 
 					<circle id="face" cx="50" cy="50" r="45"/> <!-- the clock face -->
@@ -1998,8 +1998,8 @@ $(document).ready(initialize);
 					</g>
 				</svg> <br/>
 			</div>
-			<div id="div_loading_img" style="position: absolute; background-color: transparent; top: 30px; right: 5px; z-index: 99;">
-			<img id="loading_img" src="loading.gif" style="visibility:hidden"/>
+			<div id="div_loading_img" style="position: absolute; background-color: transparent; top: 0px; left: 0px; z-index: 99;">
+				<img id="loading_img" src="loading.gif" style="visibility:hidden"/>
 			</div>
 		</div>
 		<div>
