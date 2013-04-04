@@ -1401,9 +1401,9 @@ function draw_pathgridsquares() {
 
 function init_trip_markers() {
 	g_trip_orig_marker = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.6494532, -79.4314174), 
-		draggable: true});
+		draggable: true, icon: 'http://www.google.com/mapfiles/markerA.png'});
 	g_trip_dest_marker = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.6523100, -79.4063549), 
-		draggable: true});
+		draggable: true, icon: 'http://www.google.com/mapfiles/markerB.png'});
 
 	google.maps.event.addListener(g_trip_orig_marker, 'dragend', on_trip_orig_marker_moved);
 	google.maps.event.addListener(g_trip_dest_marker, 'dragend', on_trip_dest_marker_moved);
