@@ -38,6 +38,9 @@ var HARDCODED_DISPLAY_SET = [['dundas', 0]];
 
 init_dev_option_values();
 
+// Thanks to http://stackoverflow.com/questions/654112/how-do-you-detect-support-for-vml-or-svg-in-a-browser 
+var BROWSER_SUPPORTS_SVG = document.implementation.hasFeature("http://www.w3.org/TR/SVG11/feature#BasicStructure", "1.1"); 
+
 init_javascript_array_functions_old_browser_fallbacks();
 
 function new_fudgeroute_data() {
@@ -686,9 +689,9 @@ function update_clock_show_cur_minute() {
 
 function update_clock(timestr_) {
 	if(timestr_ == null) {
-		set_analog_clock_hour_minute(0, 0);
+		set_clock_hour_minute(0, 0);
 	} else {
-		set_analog_clock_timestr(timestr_);
+		set_clock_timestr(timestr_);
 		var cur_time_html = timestr_.substr(0, 16);
 		if((g_cur_minute_idx == g_times.size()-1) || (in_overtime() && in_overtime_flash_on())) {
 			cur_time_html = '<b>'+cur_time_html+'</b>';
@@ -696,28 +699,31 @@ function update_clock(timestr_) {
 	}
 }
 
-function set_analog_clock_timestr(timestr_) {
+function set_clock_timestr(timestr_) {
 	// We want a timestamp in the format: 2012-10-30 01:14:00 
 	assert((new RegExp('\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}')).test(timestr_), "date/time does not match");
 
 	var hour = parseInt(timestr_.substr(11, 2), 10), minute = parseInt(timestr_.substr(14, 2), 10);
-	set_analog_clock_hour_minute(hour, minute);
+	set_clock_hour_minute(hour, minute);
 }
 
-// SVG clock from https://gist.github.com/1188550 
-function set_analog_clock_hour_minute(hour_, minute_) {
-	var hourangle = ((hour_ % 12) + minute_/60)*30;
-	var minangle = minute_*6;
+function set_clock_hour_minute(hour_, minute_) {
+	if(BROWSER_SUPPORTS_SVG) {
+		var hourangle = ((hour_ % 12) + minute_/60)*30;
+		var minangle = minute_*6;
 
-	// Get SVG elements for the hands of the clock
-	//var sechand = document.getElementById('secondhand');
-	var minhand = document.getElementById("minutehand");
-	var hourhand = document.getElementById("hourhand");
+		// Get SVG elements for the hands of the clock
+		//var sechand = document.getElementById('secondhand');
+		var minhand = document.getElementById("minutehand");
+		var hourhand = document.getElementById("hourhand");
 
-	// Set an SVG attribute on them to move them around the clock face
-	//sechand.setAttribute("transform", "rotate(" + secangle + ",50,50)");
-	minhand.setAttribute("transform", "rotate(" + minangle + ",50,50)");
-	hourhand.setAttribute("transform", "rotate(" + hourangle + ",50,50)");
+		// Set an SVG attribute on them to move them around the clock face
+		//sechand.setAttribute("transform", "rotate(" + secangle + ",50,50)");
+		minhand.setAttribute("transform", "rotate(" + minangle + ",50,50)");
+		hourhand.setAttribute("transform", "rotate(" + hourangle + ",50,50)");
+	} else {
+		set_contents('div_clock', sprintf('<b>%02d:%02d </b>', hour_, minute_));
+	}
 }
 
 function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
@@ -952,6 +958,10 @@ function init_everything_that_doesnt_depend_on_map() {
 
 	$(window).bind("resize", on_browser_window_resized);
 	on_browser_window_resized();
+
+	if(!BROWSER_SUPPORTS_SVG) {
+		$('#svg_clock').remove();
+	}
 }
 
 function on_browser_window_resized() {
@@ -1952,7 +1962,7 @@ $(document).ready(initialize);
 		<!-- SVG clock from https://gist.github.com/1188550 --> 
     <style>
       /* These CSS styles all apply to the SVG elements defined below */
-      #clock {
+      #svg_clock {
         /* styles for everything in the clock */
         stroke: black;
         /* black lines */
@@ -1980,7 +1990,7 @@ $(document).ready(initialize);
 		<div id="map_wrapper">
 			<div id="map_canvas" style="width:100%; height:100%"></div>
 			<div id="div_clock" style="position: absolute; background-color: transparent; top: 30px; right: 2px; z-index: 99; ">
-				<svg id="clock" viewBox="0 0 100 100" width="50" height="50">
+				<svg id="svg_clock" viewBox="0 0 100 100" width="50" height="50">
 					<!-- SVG clock from https://gist.github.com/1188550 --> 
 					<circle id="face" cx="50" cy="50" r="45"/> <!-- the clock face -->
 					<g id="ticks">
