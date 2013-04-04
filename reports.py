@@ -96,25 +96,33 @@ def get_locations_report(froute_, dir_, time_, last_gotten_timestr_, log_=False)
 
 
 
+def get_reports_finished_flag_file_mtime():
+	filename = '/tmp/ttc-reports-version-%s-finished-flag' % (c.VERSION)
+	if os.path.exists(filename):
+		return os.path.getmtime(filename)
+	else:
+		return 0
 
-def get_flag_file_mtime():
+def get_poll_finished_flag_file_mtime():
 	filename = '/tmp/ttc-poll-locations-finished-flag'
 	if os.path.exists(filename):
 		return os.path.getmtime(filename)
 	else:
-		return None
+		return 0
 
 def wait_for_locations_poll_to_finish():
-	MAX_WAIT_MINS = 5
+	MAX_WAIT_MINS = 1
 	t0 = time.time()
-	mtime0 = get_flag_file_mtime()
+	mtime0 = get_poll_finished_flag_file_mtime()
+	mtime1 = mtime0
 	while True:
-		mtime1 = get_flag_file_mtime()
+		mtime1 = get_poll_finished_flag_file_mtime()
 		if mtime1 != mtime0:
 			break
 		time.sleep(2)
 		if (time.time() - t0) > 60*MAX_WAIT_MINS:
-			raise Exception('poll locations flag file was not touched in %d minutes.' % MAX_WAIT_MINS)
+			raise Exception('reports: poll locations flag file was not touched in %d minute(s).' % MAX_WAIT_MINS)
+	return (mtime0, mtime1)
 
 def make_all_reports_and_insert_into_db():
 	report_time = round_up_by_minute(now_em())
@@ -125,12 +133,24 @@ def make_all_reports_and_insert_into_db():
 			locations_data = traffic.get_recent_vehicle_locations_impl(froute, direction, report_time)
 			db.insert_report('locations', froute, direction, report_time, locations_data)
 
+def check_last_reports_finished_time(prev_poll_finish_time_, cur_poll_finish_time_):
+	last_reports_finish_time = get_reports_finished_flag_file_mtime()
+	if last_reports_finish_time != 0:
+		if not (prev_poll_finish_time_ <= last_reports_finish_time <= cur_poll_finish_time_):
+			print 'Last round of reports seems not to have finished yet.'
+			print 'Previous poll finish time: %s, current finish time: %s, last reports finish time: %s' % \
+					(em_to_str(t) for t in (prev_poll_finish_time_, cur_poll_finish_time_, last_reports_finish_time))
+			sys.exit(1)
 
 if __name__ == '__main__':
 
 	opts, args = getopt.getopt(sys.argv[1:], '', ['dont-wait-for-poll-to-finish'])
 	if not get_opt(opts, 'dont-wait-for-poll-to-finish'):
-		wait_for_locations_poll_to_finish()
+		prev_poll_finish_time, cur_poll_finish_time = wait_for_locations_poll_to_finish()
+	else:
+		prev_poll_finish_time, cur_poll_finish_time = (0, now_em())
+	check_last_reports_finished_time(prev_poll_finish_time, cur_poll_finish_time)
 	make_all_reports_and_insert_into_db()
+	touch('/tmp/ttc-reports-version-%s-finished-flag' % (c.VERSION))
 
 
