@@ -2010,6 +2010,7 @@ $(document).ready(initialize);
 				<br/><p id='p_framerate'/>
 				<br/><p id='p_worktime'/>
 			</div>
+			<!-- Layers: -->
 			<input type="checkbox" id="show_static_vehicles_checkbox" checked="checked" 
 				onclick="on_show_static_vehicles_checkbox_clicked()"                  title="Show/Hide current vehicle locations (stationary icons)"/>
 			<label for="show_static_vehicles_checkbox" onclick=""> 
@@ -2028,12 +2029,9 @@ $(document).ready(initialize);
 			<img src="traffic-color-legend.gif" style="float: bottom;" title="Show/Hide recent traffic speed (coloured lines)"/>
 			                                    <!-- ^^^ I don't know why that style/float is there. -->
 			</label> 
-
-			<hr style="border-top:1px solid #ccc" />
-			Max. extra routes to show: <font size="+1"><span id="span_num_extra_routes"></span></font>  
-			<img id="down_img" src="down.png"/> <img id="up_img" src="up.png"/> <br/>
 			<hr style="border-top:1px solid #ccc" />
 
+			<!-- Rendered vs. arrow icons: -->
 			<input id="rendered_button" type="radio" name="vehicleicontype" value="rendered" 
 				onclick="on_rendered_aot_arrow_vehicle_icons_button_clicked()" 
 																	 title="Use streetcar and bus icons" />
@@ -2041,11 +2039,16 @@ $(document).ready(initialize);
 
 			<input id="arrow_button" type="radio" name="vehicleicontype" value="arrow" 
 				onclick="on_rendered_aot_arrow_vehicle_icons_button_clicked()" 
-																title="Use arrow icons" 
-				/>
+																title="Use arrow icons" />
 			<label for="arrow_button" title="Use arrow icons"><img src="static-vehicle-arrow-for-legend.png"/></label>
 			<hr style="border-top:1px solid #ccc" />
 
+			<!-- Num extra routes: -->
+			Max. extra routes to show: <font size="+1"><span id="span_num_extra_routes"></span></font>  
+			<img id="down_img" src="down.png"/> <img id="up_img" src="up.png"/> <br/>
+			<hr style="border-top:1px solid #ccc" />
+
+			<!-- Play / pause: -->
 			<div id="animation_controls_div">
 				Vehicle animation: 
 				<input type="button" id="playpause_button" onclick="on_playpause_clicked()" value="" />
