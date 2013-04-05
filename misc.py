@@ -3,6 +3,12 @@
 import sys, os, os.path, time, math, datetime, calendar, bisect, tempfile, subprocess
 from collections import Sequence, MutableSequence, defaultdict
 
+def es_to_str(t_):
+	if t_ is None or t_ == 0:
+		return None
+	else:
+		return em_to_str(long(t_*1000))
+
 def em_to_str(t_):
 	if t_ is None or t_ == 0:
 		return None
