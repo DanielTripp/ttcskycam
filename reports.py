@@ -139,7 +139,7 @@ def check_last_reports_finished_time(prev_poll_finish_time_, cur_poll_finish_tim
 		if not (prev_poll_finish_time_ <= last_reports_finish_time <= cur_poll_finish_time_):
 			print 'Last round of reports seems not to have finished yet.'
 			print 'Previous poll finish time: %s, current finish time: %s, last reports finish time: %s' % \
-					(em_to_str(t) for t in (prev_poll_finish_time_, cur_poll_finish_time_, last_reports_finish_time))
+					tuple(es_to_str(t) for t in (prev_poll_finish_time_, cur_poll_finish_time_, last_reports_finish_time))
 			sys.exit(1)
 
 if __name__ == '__main__':
