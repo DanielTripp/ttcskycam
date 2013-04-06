@@ -151,7 +151,7 @@ class VehicleInfo:
 
 def make_vi(**kwargs):
 	r = VehicleInfo('', -4, '9999', 43.0, -79.0, True, '', 0, 0L, 0L,
-		-1, -1)
+		None, None)
 	for key, val in kwargs.iteritems():
 		setattr(r, key, val)
 	return r
