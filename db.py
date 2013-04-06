@@ -1001,6 +1001,40 @@ def insert_report(report_type_, froute_, dir_, time_, report_data_obj_):
 	curs.execute('insert into reports values (%s,%s,%s,%s,%s,%s,%s,%s)', cols)
 	curs.close()
 
+@trans
+def insert_demo_locations(froute_, demo_report_timestr_, vid_, locations_):
+	if len(locations_) != 31: raise Exception('Got %d locations.  Want 31.' % (len(locations_)))
+	if not demo_report_timestr_.startswith('2007-'): raise Exception()
+	demo_report_time = str_to_em(demo_report_timestr_)
+	for locationi, location in enumerate(locations_):
+		t = demo_report_time - 1000*60*30 + 1000*60*locationi
+		if location is None:
+			continue
+		if isinstance(location, int):
+			latlng = routes.mofr_to_latlon(froute_, location, 0)
+		else:
+			latlng = geom.LatLng(location)
+		croute = demo_froute_to_croute(froute_)
+		vi = vinfo.make_vi(vehicle_id=vid_, latlng=latlng, route_tag=croute, time=t, time_retrieved=t)
+		print 'inserting %d' % (vi.mofr)
+		insert_vehicle_info(vi)
+
+def demo_froute_to_croute(froute_):
+	return routes.FUDGEROUTE_TO_CONFIGROUTES[froute_][0]
+
+@trans
+def delete_demo_locations(froute_, demo_report_timestr_):
+	if not demo_report_timestr_.startswith('2007-'): raise Exception()
+	demo_time = str_to_em(demo_report_timestr_)
+	delete_min_time = demo_time - 1000*60*31
+	delete_max_time = demo_time + 1000*60
+	curs = conn().cursor()
+	croute = demo_froute_to_croute(froute_)
+	curs.execute('delete from ttc_vehicle_locations where route_tag = %s and time_retrieved between %s and %s', \
+			[croute, delete_min_time, delete_max_time])
+	curs.close()
+
+
 
 if __name__ == '__main__':
 
