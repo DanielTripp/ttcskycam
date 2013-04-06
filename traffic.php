@@ -110,19 +110,24 @@ var g_force_dir0_froutes = new buckets.Set(), g_force_dir1_froutes = new buckets
 var g_main_path = [], g_extra_path_froutendirs = [];
 var g_use_rendered_aot_arrow_vehicle_icons = g_browser_is_desktop;
 
-var HEADING_ROUNDING_DEGREES = <?php readfile('HEADING_ROUNDING'); ?>;
+var HEADING_ROUNDING_DEGREES = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
+	readfile('HEADING_ROUNDING'); ?>;
 var REFRESH_INTERVAL_MS = 5*1000;
 var MOVING_VEHICLES_OVERTIME_FLASH_INTERVAL_MS = 500;
 var MOVING_VEHICLES_ANIM_INTERVAL_MS = 100;
-var MOFR_STEP = <?php readfile('MOFR_STEP'); ?>;
-var FROUTE_TO_INTDIR_TO_ENGLISHDESC = <?php passthru('python -c "import routes; print routes.get_fudgeroute_to_intdir_to_englishdesc()"'); ?>;
+var MOFR_STEP = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
+	readfile('MOFR_STEP'); ?>;
+var FROUTE_TO_INTDIR_TO_ENGLISHDESC = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
+	passthru('python -c "import routes; print routes.get_fudgeroute_to_intdir_to_englishdesc()"'); ?>;
 
-var g_zoom_to_vehicle_rendered_img_size = <?php readfile('zoom_to_vehicle_rendered_img_size.json'); ?>;
-var g_zoom_to_vehicle_arrow_img_size = <?php readfile('zoom_to_vehicle_arrow_img_size.json'); ?>;
+var g_zoom_to_vehicle_rendered_img_size = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
+	readfile('zoom_to_vehicle_rendered_img_size.json'); ?>;
+var g_zoom_to_vehicle_arrow_img_size = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
+	readfile('zoom_to_vehicle_arrow_img_size.json'); ?>;
 var g_zoom_to_traffic_line_width = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 7, 8, 8, 10, 13, 16, 22, 42, 42];
 
 function init_dev_option_values() {
-	<?php
+	<?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
 	if(file_exists('dev-options-for-traffic-php.txt')) {
 		foreach(explode("\n", file_get_contents('dev-options-for-traffic-php.txt')) as $line) {
 			if($line != "") {
@@ -1279,7 +1284,8 @@ function is_subway(froute_) {
 }
 
 function add_invisible_route_lines() {
-	var froute_to_latlngs = <?php passthru('python -c "import routes; print routes.get_all_froute_latlngs_json_str()"'); ?>;
+	var froute_to_latlngs = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
+				passthru('python -c "import routes; print routes.get_all_froute_latlngs_json_str()"'); ?>;
 	for(var froute in froute_to_latlngs) {
 		var latlngs = froute_to_latlngs[froute];
 		add_invisible_route_line(froute, latlngs);
