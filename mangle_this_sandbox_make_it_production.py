@@ -14,6 +14,27 @@ def add_python_optimize_flag(file_):
 			else:
 				fout.write(line)
 
+def partially_process_php_file(filename_):
+	with open(filename_) as fin:
+		in_file_contents = fin.read()
+	cur_php_block_lines = None
+	out_file_content = ''
+	for in_line in StringIO.StringIO(in_file_contents):
+		if re.match(r'.*<\?php +# *RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION.*', in_line):
+			cur_php_block_lines = []
+			cur_php_block_lines.append(in_line)
+		elif cur_php_block_lines is not None:
+			cur_php_block_lines.append(in_line)
+			if re.match(r'.*\?>.*', in_line):
+				proc = subprocess.Popen(['php'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
+				php_block_output = proc.communicate(''.join(cur_php_block_lines))[0]
+				cur_php_block_lines = None
+				out_file_content += php_block_output
+		else:
+			out_file_content += in_line
+	with open(filename_, 'w') as fout:
+		fout.write(out_file_content)
+
 if __name__ == '__main__':
 
 	if len(sys.argv) == 1:
@@ -45,6 +66,8 @@ if __name__ == '__main__':
 		os.remove('dev-options-for-traffic-php.txt')
 		touch('GET_CURRENT_REPORTS_FROM_DB')
 		touch('DISALLOW_HISTORICAL_REPORTS')
+		partially_process_php_file('traffic.php')
+
 
 		for pyfile in [f for f in os.listdir('.') if f.endswith('.py')]:
 			add_python_optimize_flag(pyfile)
