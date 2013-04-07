@@ -164,6 +164,11 @@ function set_contents(id_, contents_) {
 	dom_elem.innerHTML = contents_;
 }
 
+function get_contents(id_) {
+	var dom_elem = document.getElementById(id_);
+	return dom_elem.innerHTML;
+}
+
 function radio_val(groupname_) {
 	return $('input[name='+groupname_+']:checked').val();
 }

@@ -320,6 +320,9 @@ def constrain_line_segment_to_box(linesegpt1_, linesegpt2_, box_sw_, box_ne_):
 			line[i] = min(box_side_intersections, key=lambda pt: pt.dist_m(linept))
 	return tuple(line)
 
+def heading(pt1_, pt2_):
+	return pt1_.heading(pt2_)
+
 def degrees_to_heading(degrees_):
 	if degrees_ > 90:
 		r = get_range_val((90, 360), (180, 270), degrees_)
