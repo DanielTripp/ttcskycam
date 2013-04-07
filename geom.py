@@ -5,6 +5,8 @@ from math import *
 import vinfo, routes
 from misc import *
 
+RADIUS_OF_EARTH = 6367.44465
+
 class LatLng:
 
 	def __init__(self, lat_, lng_=None):
@@ -29,7 +31,6 @@ class LatLng:
 		dlat = lat2 - lat1
 		dlng = lng2 - lng1
 		central_angle = 2*asin(sqrt(sin(dlat/2)**2 + cos(lat1)*cos(lat2)*(sin(dlng/2)**2)))
-		RADIUS_OF_EARTH = 6367.44465
 		return central_angle*RADIUS_OF_EARTH*1000
 
 	def add(self, other_):
@@ -62,12 +63,8 @@ class LatLng:
 		return r
 
 	def heading(self, fore_):
-		ang = math.degrees(self.abs_angle(fore_))
-		if ang > 90:
-			heading = get_range_val((90, 360), (180, 270), ang)
-		else:
-			heading = get_range_val((0, 90), (90, 0), ang)
-		return int(heading)
+		ang_degrees = math.degrees(self.abs_angle(fore_))
+		return degrees_to_heading(ang_degrees)
 
 	def avg(self, other_, ratio_=0.5):
 		assert isinstance(other_, LatLng)
@@ -322,6 +319,17 @@ def constrain_line_segment_to_box(linesegpt1_, linesegpt2_, box_sw_, box_ne_):
 		if len(box_side_intersections) > 0:
 			line[i] = min(box_side_intersections, key=lambda pt: pt.dist_m(linept))
 	return tuple(line)
+
+def degrees_to_heading(degrees_):
+	if degrees_ > 90:
+		r = get_range_val((90, 360), (180, 270), degrees_)
+	else:
+		r = get_range_val((0, 90), (90, 0), degrees_)
+	return int(r)
+
+# I don't know if it's a coincidence or what, but the inverse of the 'degrees_to_heading' function is itself. 
+def heading_to_degrees(heading_):
+	return degrees_to_heading(heading_)
 
 class BoundingBox:
 	

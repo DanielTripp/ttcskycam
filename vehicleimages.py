@@ -19,7 +19,7 @@ def get_vehicle_arrow_svg_by_client_args(size_, heading_, static_aot_moving_):
 	assert isinstance(size_, int) and isinstance(heading_, int) and isinstance(static_aot_moving_, bool)
 	color = ('rgb(100,100,100)' if static_aot_moving_ else 'rgb(150,150,150)')
 	opacity = (0.8 if static_aot_moving_ else 0.3)
-	return get_vehicle_svg_by_graphic_args(size_, heading_, color, opacity)
+	return get_vehicle_arrow_svg_by_graphic_args(size_, heading_, color, opacity)
 
 def get_vehicle_arrow_svg_by_graphic_args(size_, heading_, color_, opacity_):
 	return ('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 91 91" width="%dpx" height="%dpx" version="1.1">' + \
@@ -36,14 +36,16 @@ def do_imagemagick_convert(src_filename_, dest_filename_, opacity_, dest_size_):
 
 def build_vehicle_icon_images():
 	for vehicletype in ('streetcar', 'bus'):
-	#for vehicletype in ('streetcar',):
+	#for vehicletype in ('bus',):  # DEV 
 		for heading in range(0, 360, HEADING_ROUNDING):
-		#for heading in range(0, 360, 45):  # TDR 
+		#for heading in range(0, 185, HEADING_ROUNDING):  # DEV
+		#for heading in [315]:  # DEV
 			for size in sorted(get_all_vehicle_img_sizes()):
-			#for size in [60]: # TDR 
-			#if size not in (60,): continue # TDR 
+			#for size in [100]: # DEV
+			#if size not in (60,): continue # DEV
 				src_filename = os.path.join('vehicle-rendered-source-imgs', 'orig-%s-heading-%d.png' % (vehicletype, heading))
 				for static_aot_moving in (True, False):
+				#for static_aot_moving in (True,): # DEV 
 					opacity = {True: 0.7, False: 0.4}[static_aot_moving]
 					static_str = ('static' if static_aot_moving else 'moving')
 					dest_filename = os.path.join('img', '%s-%s-size-%d-heading-%d.png' % (vehicletype, static_str, size, heading))
