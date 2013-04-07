@@ -1332,7 +1332,7 @@ function on_route_clicked(froute_, latlng_) {
 		+ '<input id="showshowbutton" type="radio" name="show" value="show" onclick="" %(showchecked)s />'
 		+ '<label for="showshowbutton" onclick="">Show it</label><br>'
 		+ '<input id="showsolobutton" type="radio" name="show" value="solo" onclick="" %(solochecked)s />'
-		+ '<label for="showsolobutton" onclick="">Show this route <i>only</i></label><br>'
+		+ '<label for="showsolobutton" onclick="">Show this route only</label><br>'
 		+ '<input id="showhidebutton" type="radio" name="show" value="hide" onclick="" %(hidechecked)s />'
 		+ '<label for="showhidebutton" onclick="">Hide it</label><br>'
 		+ '<input id="showautobutton" type="radio" name="show" value="auto" onclick="" %(autochecked)s />'
