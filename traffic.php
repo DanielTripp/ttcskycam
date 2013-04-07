@@ -2028,21 +2028,21 @@ $(document).ready(initialize);
 			</div>
 			<!-- Layers: -->
 			<input type="checkbox" id="show_static_vehicles_checkbox" checked="checked" 
-				onclick="on_show_static_vehicles_checkbox_clicked()"                  title="Show/Hide current vehicle locations (stationary icons)"/>
+				onclick="on_show_static_vehicles_checkbox_clicked()"                  title="Show/Hide layer: current vehicle locations (stationary icons)"/>
 			<label for="show_static_vehicles_checkbox" onclick=""> 
-			<img id="static_vehicle_legend_img" src="static-vehicle-arrow-for-legend.png" title="Show/Hide current vehicle locations (stationary icons)"/> 
+			<img id="static_vehicle_legend_img" src="static-vehicle-arrow-for-legend.png" title="Show/Hide layer: current vehicle locations (stationary icons)"/> 
 			</label> 
 &nbsp;&nbsp;
 			<input type="checkbox" id="show_moving_vehicles_checkbox" checked="checked" 
-				onclick="on_show_moving_vehicles_checkbox_clicked()"                  title="Show/Hide the past 30 minutes of vehicle locations (animated icons)"/>
+				onclick="on_show_moving_vehicles_checkbox_clicked()"                  title="Show/Hide layer: past 30 minutes of vehicle locations (animated icons)"/>
 			<label for="show_moving_vehicles_checkbox" onclick=""> 
-			<img id="moving_vehicle_legend_img" src="moving-vehicle-arrow-for-legend.png" title="Show/Hide the past 30 minutes of vehicle locations (animated icons)"/> 
+			<img id="moving_vehicle_legend_img" src="moving-vehicle-arrow-for-legend.png" title="Show/Hide layer: past 30 minutes of vehicle locations (animated icons)"/> 
 			</label> 
 &nbsp;&nbsp;
 			<input type="checkbox" id="show_traffic_lines_checkbox" checked="checked" 
-				onclick="on_show_traffic_lines_checkbox_clicked()"       title="Show/Hide recent traffic speed (coloured lines)"/>
+				onclick="on_show_traffic_lines_checkbox_clicked()"       title="Show/Hide layer: recent traffic speed (coloured lines)"/>
 			<label for="show_traffic_lines_checkbox" onclick=""> 
-			<img src="traffic-color-legend.gif" style="float: bottom;" title="Show/Hide recent traffic speed (coloured lines)"/>
+			<img src="traffic-color-legend.gif" style="float: bottom;" title="Show/Hide layer: recent traffic speed (coloured lines)"/>
 			                                    <!-- ^^^ I don't know why that style/float is there. -->
 			</label> 
 			<hr style="border-top:1px solid #ccc" />
