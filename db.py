@@ -1016,7 +1016,6 @@ def insert_demo_locations(froute_, demo_report_timestr_, vid_, locations_):
 			latlng = geom.LatLng(location)
 		croute = demo_froute_to_croute(froute_)
 		vi = vinfo.make_vi(vehicle_id=vid_, latlng=latlng, route_tag=croute, time=t, time_retrieved=t)
-		print 'inserting %d' % (vi.mofr)
 		insert_vehicle_info(vi)
 
 def demo_froute_to_croute(froute_):
