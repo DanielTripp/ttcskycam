@@ -124,7 +124,7 @@ def wait_for_locations_poll_to_finish():
 			raise Exception('reports: poll locations flag file was not touched in %d minute(s).' % MAX_WAIT_MINS)
 	return (mtime0, mtime1)
 
-def make_all_reports_and_insert_into_db():
+def make_all_reports_and_insert_into_db_once():
 	report_time = round_up_by_minute(now_em())
 	for froute in routes.NON_SUBWAY_FUDGEROUTES:
 		for direction in (0, 1):
@@ -133,24 +133,19 @@ def make_all_reports_and_insert_into_db():
 			locations_data = traffic.get_recent_vehicle_locations_impl(froute, direction, report_time)
 			db.insert_report('locations', froute, direction, report_time, locations_data)
 
-def check_last_reports_finished_time(prev_poll_finish_time_, cur_poll_finish_time_):
-	last_reports_finish_time = get_reports_finished_flag_file_mtime()
-	if last_reports_finish_time != 0:
-		if not (prev_poll_finish_time_ <= last_reports_finish_time <= cur_poll_finish_time_):
-			print 'Last round of reports seems not to have finished yet.'
-			print 'Previous poll finish time: %s, current finish time: %s, last reports finish time: %s' % \
-					tuple(es_to_str(t) for t in (prev_poll_finish_time_, cur_poll_finish_time_, last_reports_finish_time))
-			sys.exit(1)
+def make_all_reports_and_insert_into_db_forever():
+	while True:
+		wait_for_locations_poll_to_finish()
+		t0 = time.time()
+		make_all_reports_and_insert_into_db_once()
+		t1 = time.time()
+		reports_took_secs = t1 - t0
+		if reports_took_secs > 60:
+			printerr('Reports took too long to generate - %s seconds.  (Finished at %s.)' % (int(reports_took_secs), now_str()))
+
 
 if __name__ == '__main__':
 
-	opts, args = getopt.getopt(sys.argv[1:], '', ['dont-wait-for-poll-to-finish'])
-	if not get_opt(opts, 'dont-wait-for-poll-to-finish'):
-		prev_poll_finish_time, cur_poll_finish_time = wait_for_locations_poll_to_finish()
-	else:
-		prev_poll_finish_time, cur_poll_finish_time = (0, now_em())
-	check_last_reports_finished_time(prev_poll_finish_time, cur_poll_finish_time)
-	make_all_reports_and_insert_into_db()
-	touch('/tmp/ttc-reports-version-%s-finished-flag' % (c.VERSION))
+	make_all_reports_and_insert_into_db_forever()
 
 
