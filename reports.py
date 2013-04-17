@@ -111,7 +111,6 @@ def get_poll_finished_flag_file_mtime():
 		return 0
 
 def wait_for_locations_poll_to_finish():
-	MAX_WAIT_MINS = 1
 	t0 = time.time()
 	mtime0 = get_poll_finished_flag_file_mtime()
 	mtime1 = mtime0
@@ -120,9 +119,11 @@ def wait_for_locations_poll_to_finish():
 		if mtime1 != mtime0:
 			break
 		time.sleep(2)
-		if (time.time() - t0) > 60*MAX_WAIT_MINS:
-			raise Exception('reports: poll locations flag file was not touched in %d minute(s).' % MAX_WAIT_MINS)
-	return (mtime0, mtime1)
+
+	wait_secs = int(time.time() - t0)
+	MAX_WAIT_MINS = 2
+	if wait_secs > 60*MAX_WAIT_MINS:
+		printerr('reports: watched poll locations flag file for %d seconds before it was touched.' % wait_secs)
 
 def make_all_reports_and_insert_into_db_once():
 	report_time = round_up_by_minute(now_em())
