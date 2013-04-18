@@ -143,7 +143,8 @@ def list_running_instances():
 	p('dev')
 	p('prod')
 
-
+def clear_in_process_cache():
+	g_in_process_cache_key_to_value.clear()
 
 if __name__ == '__main__':
 
