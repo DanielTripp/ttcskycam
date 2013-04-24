@@ -8,6 +8,13 @@ from misc import *
 GET_CURRENT_REPORTS_FROM_DB = os.path.exists('GET_CURRENT_REPORTS_FROM_DB')
 DISALLOW_HISTORICAL_REPORTS = os.path.exists('DISALLOW_HISTORICAL_REPORTS')
 
+if os.path.exists('MAKE_REPORTS_FROUTES'):
+	with open('MAKE_REPORTS_FROUTES') as fin:
+		FROUTES = json.load(fin)
+		FROUTES = [str(e) for e in FROUTES] # getting rid of unicode 
+else:
+	FROUTES = routes.NON_SUBWAY_FUDGEROUTES
+
 # returns JSON. 
 # dir_ can be an int (0 or 1) or a latlng pair.
 # The returned JSON is a list containing three things - [0] time string of data, [1] the data, and [2] direction returned. 
@@ -134,7 +141,7 @@ def wait_for_locations_poll_to_finish():
 
 def make_all_reports_and_insert_into_db_once():
 	report_time = round_up_by_minute(now_em())
-	for froute in routes.NON_SUBWAY_FUDGEROUTES:
+	for froute in FROUTES:
 		for direction in (0, 1):
 			traffic_data = traffic.get_traffics_impl(froute, direction, report_time)
 			db.insert_report('traffic', froute, direction, report_time, traffic_data)
