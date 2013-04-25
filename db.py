@@ -977,29 +977,47 @@ class ReportNotFoundException(Exception):
 	pass
 
 
-# returns 2-tuple - time string, report json.   Both elements always non-None.  
-def get_latest_report(report_type_, froute_, dir_):
+def get_latest_report_time(report_type_, froute_, dir_):
+	r = mc.get_from_memcache('db.get_latest_report_time', [report_type_, froute_, dir_], {})
+	if r is not None:
+		return r
+	else:
+		r = get_latest_report_time_impl(report_type_, froute_, dir_)
+		set_latest_report_time_in_memcache(report_type_, froute_, dir_, r)
+		return r
+
+def get_latest_report_time_impl(report_type_, froute_, dir_):
 	curs = conn().cursor('cursor_%d' % (int(time.time()*1000)))
 	try:
-		curs.execute('select time, report_json from reports where app_version = %s and report_type = %s and froute = %s and direction = %s '\
-				+' and time > %s order by time desc', [c.VERSION, report_type_, froute_, dir_, now_em() - 1000*60*10])
+		curs.execute('select time from reports where app_version = %s and report_type = %s and froute = %s and direction = %s '\
+				+' and time > %s order by time desc', [c.VERSION, report_type_, froute_, dir_, now_em() - 1000*60*c.REPORTS_MAX_AGE_MINS])
 		for row in curs:
-			reports_time, report_json = row
-			if reports_time < now_em() - 1000*60*10:
-				break
-			return (em_to_str(reports_time), report_json)
+			reports_time = row[0]
+			return reports_time
 		raise Exception('Most current report in database is too old.')
 	finally:
 		curs.close()
+
+# As in - set a value in memcache for the function db.get_latest_report_time().
+def set_latest_report_time_in_memcache(report_type_, froute_, dir_, time_):
+	assert report_type_ in ('traffic', 'locations') and froute_ in routes.NON_SUBWAY_FUDGEROUTES and dir_ in (0, 1)
+	assert isinstance(time_, long)
+	mc.set('db.get_latest_report_time', [report_type_, froute_, dir_], {}, time_)
+
+def set_report_in_memcache(report_type_, froute_, dir_, time_, data_):
+	mc.set('db.get_report', [report_type_, froute_, dir_, time_], {}, data_)
 
 @trans
 def insert_report(report_type_, froute_, dir_, time_, report_data_obj_):
 	assert report_type_ in ('traffic', 'locations') and froute_ in routes.NON_SUBWAY_FUDGEROUTES and dir_ in (0, 1)
 	assert abs(time_ - now_em()) < 1000*60*5 and report_data_obj_ is not None
 	curs = conn().cursor()
-	cols = [c.VERSION, report_type_, froute_, dir_, time_, em_to_str(time_), now_str(), util.to_json_str(report_data_obj_)]
+	report_json = util.to_json_str(report_data_obj_)
+	cols = [c.VERSION, report_type_, froute_, dir_, time_, em_to_str(time_), now_str(), report_json]
 	curs.execute('insert into reports values (%s,%s,%s,%s,%s,%s,%s,%s)', cols)
 	curs.close()
+	set_report_in_memcache(report_type_, froute_, dir_, time_, report_json)
+	set_latest_report_time_in_memcache(report_type_, froute_, dir_, time_)
 
 @trans
 def insert_demo_locations(froute_, demo_report_timestr_, vid_, locations_):
