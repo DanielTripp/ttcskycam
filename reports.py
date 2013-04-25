@@ -1,7 +1,7 @@
 #!/usr/bin/python2.6
 
 from collections import *
-import os, os.path, json, getopt
+import sys, os, os.path, json, getopt
 import vinfo, db, routes, geom, mc, yards, traffic, c, util
 from misc import *
 
@@ -71,26 +71,12 @@ def get_current_report_from_db(report_type_, froute_, dir_, last_gotten_timestr_
 	if cur_time_rounded_up == last_gotten_time:
 		return (last_gotten_timestr_, None, dir_)
 	else:
-		# db.get_report() is memcached, so it's our first choice, for performance reasons.  (Will avoid hitting db): 
-		try:
-			report_json = db.get_report(report_type_, froute_, dir_, cur_time_rounded_up)
-			return '[%s, %s, %d]' % (json.dumps(em_to_str(cur_time_rounded_up)), report_json, dir_)
-		except db.ReportNotFoundException:
-			cur_time_rounded_down = round_down_by_minute(now_epoch_millis)
-			if cur_time_rounded_down == last_gotten_time:
-				return (last_gotten_timestr_, None)
-			else:
-				try:
-					report_json = db.get_report(report_type_, froute_, dir_, cur_time_rounded_down)
-					return '[%s, %s, %d]' % (json.dumps(em_to_str(cur_time_rounded_down)), report_json, dir_)
-				except db.ReportNotFoundException:
-					# But maybe the reports in the database are lagging behind by a couple of minutes for some reason.  
-					# Here we gracefully degrade in that scenario, and return the most recent report that we do have, within reason. 
-					report_time_str, report_json = db.get_latest_report(report_type_, froute_, dir_)
-					if str_to_em(report_time_str) == last_gotten_time:
-						return (last_gotten_timestr_, None, dir_)
-					else:
-						return '[%s, %s, %d]' % (json.dumps(report_time_str), report_json, dir_)
+		latest_report_time = db.get_latest_report_time(report_type_, froute_, dir_)
+		if latest_report_time == last_gotten_time:
+			return (last_gotten_timestr_, None, dir_)
+		else:
+			report_json = db.get_report(report_type_, froute_, dir_, latest_report_time)
+			return '[%s, %s, %d]' % (json.dumps(em_to_str(latest_report_time)), report_json, dir_)
 
 def get_traffic_report(froute_, dir_, time_, last_gotten_timestr_, log_=False):
 	return get_report('traffic', froute_, dir_, time_, last_gotten_timestr_, log_=log_)
@@ -163,6 +149,9 @@ def make_all_reports_and_insert_into_db_forever():
 
 if __name__ == '__main__':
 
-	make_all_reports_and_insert_into_db_forever()
+	if len(sys.argv) == 2 and sys.argv[1] == '--once':
+		make_all_reports_and_insert_into_db_once()
+	else:
+		make_all_reports_and_insert_into_db_forever()
 
 

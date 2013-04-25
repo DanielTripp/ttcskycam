@@ -1,8 +1,12 @@
 #!/usr/bin/python2.6
 
 import sys, os, os.path, subprocess, signal, re, time
-if len(sys.argv[0]) > 0 and (sys.argv[0] != '-c'): # b/c sys.argv[0] will be '' if this is imported from an interactive interpreter, 
-	os.chdir(os.path.dirname(sys.argv[0])) # and we don't want to chdir in that case anyway. 
+if len(sys.argv[0]) > 0 and (sys.argv[0] != '-c'): 
+	# b/c sys.argv[0] will be '' if this is imported from an interactive interpreter, 
+	# and we don't want to chdir in that case anyway. 
+	new_cwd = os.path.dirname(sys.argv[0])
+	if len(new_cwd) > 0:
+		os.chdir(new_cwd) 
 import memcache
 import c
 
@@ -30,8 +34,11 @@ def get_memcache_client():
 # Important that the return value of this is a str because that's what the memcache client insists on.  
 # Unicode will cause an error right away. 
 # Also - memcached can't handle spaces in keys, so we avoid that. 
-def _make_key(func_, args_, kwargs_):
-	name = '%s.%s' % (func_.__module__, func_.__name__)
+def make_key(func_, args_, kwargs_):
+	if isinstance(func_, str):
+		name = func_
+	else:
+		name = '%s.%s' % (func_.__module__, func_.__name__)
 	str_arg_list = [str(arg) for arg in args_] + ['%s=%s' % (kwargname, kwargs_[kwargname]) for kwargname in sorted(kwargs_.keys())]
 	r = '%s-%s(%s)' % (c.VERSION, name, ','.join(str_arg_list))
 	SPACE_REPLACER = '________'
@@ -39,9 +46,14 @@ def _make_key(func_, args_, kwargs_):
 	r = r.replace(' ', SPACE_REPLACER)
 	return r
 
+def set(func_, args_, kwargs_, value_):
+	key = make_key(func_, args_, kwargs_)
+	get_memcache_client().set(key, value_)
+
+# Will try to get from memcache, and if that fails, then call the func_ (the implementation function.) 
 def get(func_, args_=[], kwargs_={}):
 	args_ = args_[:]
-	key = _make_key(func_, args_, kwargs_)
+	key = make_key(func_, args_, kwargs_)
 	if key in g_in_process_cache_key_to_value:
 		r = g_in_process_cache_key_to_value[key]
 	else:
@@ -51,6 +63,10 @@ def get(func_, args_=[], kwargs_={}):
 			get_memcache_client().set(key, r)
 		g_in_process_cache_key_to_value[key] = r
 	return r
+
+def get_from_memcache(func_, args_, kwargs_):
+	key = make_key(func_, args_, kwargs_)
+	return get_memcache_client().get(key)
 
 def decorate(user_function_):
 	def decorating_function(*args, **kwargs):
