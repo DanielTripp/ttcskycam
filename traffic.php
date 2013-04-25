@@ -112,7 +112,7 @@ var g_use_rendered_aot_arrow_vehicle_icons = g_browser_is_desktop;
 
 var HEADING_ROUNDING_DEGREES = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
 	readfile('HEADING_ROUNDING'); ?>;
-var REFRESH_INTERVAL_MS = 5*1000;
+var REFRESH_INTERVAL_MS = 10*1000;
 var MOVING_VEHICLES_OVERTIME_FLASH_INTERVAL_MS = 500;
 var MOVING_VEHICLES_ANIM_INTERVAL_MS = 100;
 var MOFR_STEP = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
@@ -1098,7 +1098,7 @@ function init_everything_that_depends_on_map() {
 
 	//draw_pathgridsquares();
 
-	add_delayed_event_listener(g_map, 'bounds_changed', refresh_streetlabels_allroutes, 100);
+	add_delayed_event_listener(g_map, 'bounds_changed', refresh_streetlabels_allroutes, 500);
 
 	if(SHOW_HISTORICAL_ON_LOAD) {
 		set_selected('historical_button', true);
