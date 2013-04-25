@@ -82,9 +82,6 @@ def clear_mc_in_process_cache_maybe():
 	if now - g_mc_clear_in_process_cache_last_time_es > 60*10:
 		mc.clear_in_process_cache()
 		g_mc_clear_in_process_cache_last_time_es = now
-		printerr('cleared mc in-process') # TDR 
-	else: # TDR 
-		printerr('did not clear mc in-process') # TDR 
 
 # WSGI entry point.
 def application(environ, start_response):
