@@ -2,15 +2,22 @@
 
 # Tables involved: 
 # 
-# create table ttc_vehicle_locations (vehicle_id varchar(100), route_tag varchar(100), dir_tag varchar(100), lat double precision, lon double precision, secs_since_report integer, time_retrieved bigint, predictable boolean, heading integer, time bigint, time_str varchar(100), rowid serial unique, mofr integer, widemofr integer);
+# create table ttc_vehicle_locations (vehicle_id varchar(100), route_tag varchar(100), dir_tag varchar(100), 
+#     lat double precision, lon double precision, secs_since_report integer, time_retrieved bigint, 
+#     predictable boolean, heading integer, time bigint, time_str varchar(100), rowid serial unique, mofr integer, widemofr integer);
 # create index ttc_vehicle_locations_idx on ttc_vehicle_locations (route_tag, time_retrieved desc);
 # create index ttc_vehicle_locations_idx2 on ttc_vehicle_locations (vehicle_id, time_retrieved desc);
 # 
-# create table predictions (fudgeroute VARCHAR(100), configroute VARCHAR(100), stoptag VARCHAR(100), time_retrieved_str varchar(30), time_of_prediction_str varchar(30), dirtag VARCHAR(100), vehicle_id VARCHAR(100), is_departure boolean, block VARCHAR(100), triptag VARCHAR(100), branch VARCHAR(100), affected_by_layover boolean, is_schedule_based boolean, delayed boolean, time_retrieved bigint, time_of_prediction bigint, rowid serial unique);
+# create table predictions (fudgeroute VARCHAR(100), configroute VARCHAR(100), stoptag VARCHAR(100), 
+#     time_retrieved_str varchar(30), time_of_prediction_str varchar(30), dirtag VARCHAR(100), vehicle_id VARCHAR(100), 
+#     is_departure boolean, block VARCHAR(100), triptag VARCHAR(100), branch VARCHAR(100), affected_by_layover boolean, 
+#     is_schedule_based boolean, delayed boolean, time_retrieved bigint, time_of_prediction bigint, rowid serial unique);
 # create index predictions_idx on predictions (fudgeroute, stoptag, time_retrieved desc);
 #
-# create table reports (app_version varchar(20), report_type varchar(20), froute varchar(100), direction integer, time bigint, timestr varchar(30), time_inserted_str varchar(30), report_json text);
+# create table reports (app_version varchar(20), report_type varchar(20), froute varchar(100), direction integer, 
+#     time bigint, timestr varchar(30), time_inserted_str varchar(30), report_json text);
 # create index reports_idx on reports (app_version, report_type, froute, direction, time desc) ;
+# create index reports_idx_3 on reports ( time desc, time_inserted_str desc ) ;
 
 import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket, datetime, calendar, math
 from collections import defaultdict, Sequence
