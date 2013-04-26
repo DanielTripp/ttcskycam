@@ -17,6 +17,8 @@
 # create table reports (app_version varchar(20), report_type varchar(20), froute varchar(100), direction integer, 
 #     time bigint, timestr varchar(30), time_inserted_str varchar(30), report_json text);
 # create index reports_idx on reports (app_version, report_type, froute, direction, time desc) ;
+# These two indexes are for my personal browsing of the database - not for the code's needs.  
+# create index reports_idx_2 on reports ( time desc) ;  # This one probably isn't used much. 
 # create index reports_idx_3 on reports ( time desc, time_inserted_str desc ) ;
 
 import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket, datetime, calendar, math
