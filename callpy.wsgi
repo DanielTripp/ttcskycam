@@ -3,7 +3,7 @@
 import sys, os, os.path, urlparse, json, time
 from collections import Sequence
 sys.path.append('.')
-import geom, vinfo, mc
+import geom, vinfo, mc, db
 from misc import *
 
 LOG_CALLS = os.path.exists('CALLPY_LOG_CALLS')
@@ -66,7 +66,12 @@ def call_func(query_string_, referer_):
 		args = get_arg_objvals(vars)
 		if LOG_CALLS:
 			printerr('callpy - %s %s' % (module_and_funcname, args))
-		r = getattr(__import__(modulename), funcname)(*args)
+		try: # This is temporary.  I noticed some ImportErrors here when getting streetlabels, but I couldn't reproduce.  
+			# Leaving this in, in the hope that I will catch it some time. 
+			r = getattr(__import__(modulename), funcname)(*args)
+		except ImportError:
+			printerr('---------------- importerror path: ', sys.path)
+			raise
 		if looks_like_json_already(r):
 			return r
 		else:
@@ -85,15 +90,21 @@ def clear_mc_in_process_cache_maybe():
 
 # WSGI entry point.
 def application(environ, start_response):
-	query_string = environ['QUERY_STRING']
-	referer = environ['HTTP_REFERER'] if 'HTTP_REFERER' in environ else None
-	output = call_func(query_string, referer)
+	try:
+		query_string = environ['QUERY_STRING']
+		referer = environ['HTTP_REFERER'] if 'HTTP_REFERER' in environ else None
+		output = call_func(query_string, referer)
 
-	response_headers = [('Content-type', 'text/plain')]
-	start_response('200 OK', response_headers)
+		response_headers = [('Content-type', 'text/plain')]
+		start_response('200 OK', response_headers)
 
-	clear_mc_in_process_cache_maybe()
+		clear_mc_in_process_cache_maybe()
 
-	return [output]
+		return [output]
+
+	except:
+		mc.close_connection()
+		db.close_connection()
+		raise
 
 

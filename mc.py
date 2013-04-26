@@ -1,5 +1,20 @@
 #!/usr/bin/python2.6
 
+# Memcache connections (i.e. memcache.Client objects) behave in some unique ways that are different from 
+# eg. a typical database connection. 
+# If connection fails at creation time, then no error will be raised at connection time or when calling 
+# set() or get() on the client - but all get() calls will return None.
+# If however the memcache server goes down later, after we have made a connection, then 
+# future calls to get() seem to return None.  But future calls to set() might raise an Exception.  
+# They seem to do this only if they haven't been immediately preceeded by a get().  
+# As for a memcache server that was down coming up - there is a 30-second retry time window implemented, where 
+# the memcache client will retry the connection after no less than 30 seconds.  After that, it seems all will be well.  
+
+# I find this behaviour unusual but it works with our current setup.  If the mc client raises an exception in the case 
+# mentioned above, then callpy.wsgi will notice this and dispose of the mc connection (and the db connection too for that 
+# matter), to be re-created on the next incoming request. 
+
+
 import sys, os, os.path, subprocess, signal, re, time
 if len(sys.argv[0]) > 0 and (sys.argv[0] != '-c'): 
 	# b/c sys.argv[0] will be '' if this is imported from an interactive interpreter, 
@@ -161,6 +176,16 @@ def list_running_instances():
 
 def clear_in_process_cache():
 	g_in_process_cache_key_to_value.clear()
+
+def close_connection():
+	global g_memcache_client
+	if g_memcache_client is not None:
+		try:
+			g_memcache_client.close_socket()
+		except:
+			pass
+		g_memcache_client = None
+	
 
 if __name__ == '__main__':
 
