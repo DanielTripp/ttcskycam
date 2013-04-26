@@ -118,12 +118,12 @@ def wait_for_locations_poll_to_finish():
 			break
 
 		if (cur_wait_secs >= MAX_WAIT_SECS) and (prev_wait_secs < MAX_WAIT_SECS):
-			printerr('reports: watched poll locations flag file for %d seconds, still hasn\'t been touched.' % MAX_WAIT_SECS)
+			printerr('%s: reports: watched poll locations flag file for %d seconds, still hasn\'t been touched.' % (now_str(), MAX_WAIT_SECS))
 			
 		time.sleep(2)
 
 	if cur_wait_secs > MAX_WAIT_SECS:
-		printerr('reports: watched poll locations flag file for %d seconds before it was touched.' % cur_wait_secs)
+		printerr('%s: reports: watched poll locations flag file for %d seconds before it was touched.' % (now_str(), cur_wait_secs))
 
 def make_all_reports_and_insert_into_db_once():
 	report_time = round_up_by_minute(now_em())
