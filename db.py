@@ -1051,6 +1051,14 @@ def delete_demo_locations(froute_, demo_report_timestr_):
 			[croute, delete_min_time, delete_max_time])
 	curs.close()
 
+def close_connection():
+	global g_conn
+	if g_conn is not None:
+		try:
+			g_conn.close()
+		except:
+			pass
+		g_conn = None
 
 
 if __name__ == '__main__':
