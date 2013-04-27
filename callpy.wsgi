@@ -66,12 +66,7 @@ def call_func(query_string_, referer_):
 		args = get_arg_objvals(vars)
 		if LOG_CALLS:
 			printerr('callpy - %s %s' % (module_and_funcname, args))
-		try: # This is temporary.  I noticed some ImportErrors here when getting streetlabels, but I couldn't reproduce.  
-			# Leaving this in, in the hope that I will catch it some time. 
-			r = getattr(__import__(modulename), funcname)(*args)
-		except ImportError:
-			printerr('---------------- importerror path: ', sys.path)
-			raise
+		r = getattr(__import__(modulename), funcname)(*args)
 		if looks_like_json_already(r):
 			return r
 		else:
@@ -90,6 +85,10 @@ def clear_mc_in_process_cache_maybe():
 
 # WSGI entry point.
 def application(environ, start_response):
+	if '.' not in sys.path:
+		printerr('----------- having to add to sys.path') # temporary 
+		printerr('sys.path was:', sys.path) # temporary 
+		sys.path.append('.')
 	try:
 		query_string = environ['QUERY_STRING']
 		referer = environ['HTTP_REFERER'] if 'HTTP_REFERER' in environ else None
