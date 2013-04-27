@@ -257,7 +257,7 @@ function callpy_url(module_and_funcname_, func_args_) {
 		var argval_json = window.JSON.stringify(argval);
 		paramstr += "&arg"+i+"="+encode_url_paramval(argval_json);
 	}
-	return "callpy?"+paramstr;
+	return "callpy.wsgi?"+paramstr;
 }
 
 function toJsonString(obj_) {
