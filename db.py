@@ -126,11 +126,11 @@ def vi_select_generator(configroute_, end_time_em_, start_time_em_, dir_=None, i
 	dir_clause = ('and dir_tag like \'%%%%\\\\_%s\\\\_%%%%\' ' % (str(dir_)) if dir_ != None else ' ')
 	sql = 'select '+VI_COLS+' from ttc_vehicle_locations where route_tag = %s '\
 		+('' if include_unpredictables_ else ' and predictable = true ') \
-		+' and time <= %s and time >= %s and time_retrieved <= %s '\
+		+' and time <= %s and time >= %s and time_retrieved <= %s and time_retrieved >= %s '\
 		+(' and vehicle_id = %s ' if vid_ else '') \
 		+ dir_clause \
 		+(' order by time' if forward_in_time_order_ else ' order by time desc')
-	curs.execute(sql, [configroute_, end_time_em_, start_time_em_, end_time_em_] + ([vid_] if vid_ else []))
+	curs.execute(sql, [configroute_, end_time_em_, start_time_em_, end_time_em_, start_time_em_-1000*60] + ([vid_] if vid_ else []))
 	while True:
 		row = curs.fetchone()
 		if not row:
