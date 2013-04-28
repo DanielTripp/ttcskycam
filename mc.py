@@ -24,6 +24,9 @@ if len(sys.argv[0]) > 0 and (sys.argv[0] != '-c'):
 		os.chdir(new_cwd) 
 import memcache
 import c
+from misc import *
+
+LOG = os.path.exists('LOG_MEMCACHE')
 
 NUM_MEGS = 100
 
@@ -70,12 +73,16 @@ def get(func_, args_=[], kwargs_={}):
 	args_ = args_[:]
 	key = make_key(func_, args_, kwargs_)
 	if key in g_in_process_cache_key_to_value:
+		if LOG: printerr('Found in in-process cache: %s' % key)
 		r = g_in_process_cache_key_to_value[key]
 	else:
 		r = get_memcache_client().get(key)
 		if r is None:
+			if LOG: printerr('Not found in memcache:     %s' % key)
 			r = func_(*args_, **kwargs_)
 			get_memcache_client().set(key, r)
+		else:
+			if LOG: printerr('Found in memcache:         %s' % key)
 		g_in_process_cache_key_to_value[key] = r
 	return r
 
@@ -164,7 +171,7 @@ def stop_memcache(instance_):
 	else:
 		stop_memcache_windows(instance_)
 
-def list_running_instances():
+def print_running_instances():
 	def p(instance__):
 		pid = get_server_pid(instance__)
 		if pid is None:
@@ -190,15 +197,19 @@ def close_connection():
 if __name__ == '__main__':
 
 	if len(sys.argv) == 2 and sys.argv[1] == 'list':
-		list_running_instances()
+		print_running_instances()
 	else:
 		command, instance = sys.argv[1:3]
-		if instance not in INSTANCE_TO_PORT or command not in ('start', 'stop', 'restart'):
+		if instance not in INSTANCE_TO_PORT or command not in ('start', 'stop', 'restart', 'start-if-not-running'):
 			sys.exit('Invalid arguments.')
 		if command in ('stop', 'restart'):
 			stop_memcache(instance)
 		if command in ('restart', 'start'):
 			start_memcache(instance)
+		if command == 'start-if-not-running':
+			if not is_server_running(instance):
+				print 'Memcache instance %s was not running.  Will start it now.' % instance 
+				start_memcache(instance)
 
 
 
