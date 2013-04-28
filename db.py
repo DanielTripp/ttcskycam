@@ -1003,7 +1003,7 @@ def get_latest_report_time_impl(report_type_, froute_, dir_):
 		for row in curs:
 			reports_time = row[0]
 			return reports_time
-		raise Exception('Most current report in database is too old.')
+		raise Exception('Either the most current report in database is too old, or no reports for this app version exist.')
 	finally:
 		curs.close()
 
