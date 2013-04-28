@@ -4,6 +4,10 @@ import sys, json, os.path, bisect, xml.dom, xml.dom.minidom
 import geom, mc, c, routes 
 from misc import *
 
+# We don't do streetlabels for all zoom levels.  (These are google maps zoom levels by the way.) 
+# For low zoom (i.e. zoomed out), we draw our traffic coloured lines thin enough that google maps' 
+# own street labels are still visible.   Mostly visible.  Visible enough.
+ZOOMS_WITH_STREETLABELS = range(13, 21+1)
 
 g_froute_to_startmofr_to_text = None
 
@@ -57,7 +61,7 @@ def get_labels(froute_, zoom_, box_sw_, box_ne_):
 def get_labels_for_zoom(froute_, zoom_):
 	assert isinstance(zoom_, int)
 
-	if not (13 <= zoom_ <= 21):
+	if zoom_ not in ZOOMS_WITH_STREETLABELS: 
 		return []
 	ri = routes.routeinfo(froute_)
 	MOFRSTEP_AT_ZOOM_21 = 12
@@ -86,6 +90,7 @@ def get_labels_for_zoom(froute_, zoom_):
 	return r
 
 def get_streetlabel_svg(text_, rotation_, zoom_):
+	assert zoom_ in ZOOMS_WITH_STREETLABELS
 	fontsize = {13:3.5, 14:4, 15:4, 16:4.5, 17:5, 18:5, 19:5, 20:5, 21:5}[zoom_]
 	# In SVG the y location of text seems to be the baseline i.e. bottom of upper-case letters.  So if we set that baseline 
 	# to be the vertical middle of the graphic, and also use that vertical middle to coincide with the middle of the 
@@ -101,6 +106,17 @@ def get_streetlabel_svg(text_, rotation_, zoom_):
 </svg>''' % {'text': text_, 'rotation': rotation_, 'fontsize': fontsize, 'textshift': textshift}
 	return svgstr
 
+# Calculating all street labels for all routes and zoom levels takes about 30 seconds.  
+# Some of the routes take about 1 second each on max zoom.  
+# We might as well try to do that in advance, like when updating the live sandbox.  
+# (That's where this is intended to be called from.  From the script that updates.) 
+# - rather than make various first users wait a second here and a second there 
+# for their street labels. 
+def prime_memcache():
+	for froute in routes.NON_SUBWAY_FUDGEROUTES:
+		for zoom in ZOOMS_WITH_STREETLABELS:
+			get_labels_for_zoom(froute, zoom)
+
 if __name__ == '__main__':
 
 	if 0:
@@ -109,6 +125,5 @@ if __name__ == '__main__':
 		import paths 
 		for label in get_labels('carlton', 14, paths.get_city_sw(), paths.get_city_ne()):
 			print '%s    %s    %s' % (label['latlng'], label['rotation'], label['text'])
-
 
 
