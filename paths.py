@@ -654,74 +654,23 @@ def build_db_main(fill_in_):
 
 if __name__ == '__main__':
 
-	def approx_route_combos(orig_pathgridsquare_, dest_pathgridsquare_):
-		def get_max_midpt_to_corner_dist_m(gridsquare__):
-			dist_midpt_to_sw = gridsquare__.latlng().dist_m(gridsquare__.midpt_latlng())
-			ne = PathGridSquare((gridsquare__.gridlat+1, gridsquare__.gridlng+1))
-			dist_midpt_to_ne = ne.latlng().dist_m(gridsquare__.midpt_latlng())
-			return max(dist_midpt_to_sw, dist_midpt_to_ne)
-		radius_m = int(max(get_max_midpt_to_corner_dist_m(orig_pathgridsquare_), get_max_midpt_to_corner_dist_m(dest_pathgridsquare_)))
-		radius_m += 500
-		o = len(find_nearby_froutenmofrs(orig_pathgridsquare_.midpt_latlng(), radius_m))
-		d = len(find_nearby_froutenmofrs(dest_pathgridsquare_.midpt_latlng(), radius_m))
-		return o*d
 
-	def intWithCommas(x):
-			if type(x) not in [type(0), type(0L)]:
-					raise TypeError("Parameter must be an integer.")
-			if x < 0:
-					return '-' + intWithCommas(-x)
-			result = ''
-			while x >= 1000:
-					x, r = divmod(x, 1000)
-					result = ",%03d%s" % (r, result)
-			return "%d%s" % (x, result)
+	def does_polyline_overlap_box(polyline_, box_sw_, box_ne_):
+		assert isinstance(polyline_, Sequence) and all(isinstance(geom.LatLng) for e in polyline_)
+		assert all(isinstance(geom.LatLng), for e in (box_sw_, box_ne_))
+		for linept1, linept2 in hopscotch(polyline_):
+			if does_line_segment_overlap_box(linept1, linept2, box_sw_, box_ne_):
+				return True
+		return False
+
+	new_route_pts = [ geom.LatLng(e) for e in [[43.671454, -79.473237], [43.688214, -79.393818] ]]
+	pathgridsquares_bothres_combos = list(pathgridsquares_bothres_combos_gen())
+	for orig_square, dest_square in pathgridsquares_bothres_combos:
+		pass
 
 
-	def num_combos():
-		r = 0
-		for sq1, quad1 in pathgridsquares_bothres():
-			for sq2, quad2 in pathgridsquares_bothres():
-				if (sq1, quad1) != (sq2, quad2):
-					r += 1
-		return r
-
-
-	if 0:
-		#o = PathGridSquare(geom.LatLng(43.671993112040994, -79.54188151558537))
-		#d = PathGridSquare(geom.LatLng(43.73751562846032, -79.28576274117131))
-		o = PathGridSquare(geom.LatLng(43.64255915003969, -79.43021578987737))
-		#d = PathGridSquare(geom.LatLng(43.66690219292239, -79.40558238228459))
-		d = PathGridSquare(geom.LatLng(43.695331309135526, -79.4498710175385)) # way up dufferin 
-		t0 = time.time()
-		print find_paths_by_pathgridsquare_far(o, d)
-		print (time.time() - t0)
-		print approx_route_combos(o, d)
-
-	
-	numcombos_to_count = defaultdict(lambda: 0)
-	for i, (origsquare, origquadrant) in enumerate(pathgridsquares_bothres()):
-		for j, (destsquare, destquadrant) in enumerate(pathgridsquares_bothres()):
-			if (origsquare, origquadrant) != (destsquare, destquadrant):
-				print '---'
-				print i, j
-				#print origsquare, origquadrant, '->', destsquare, destquadrant 
-				num_combos = approx_route_combos(origsquare, destsquare)
-				if 0:
-					t0 = time.time()
-					find_paths_by_pathgridsquare_far(origsquare, destsquare)
-					print 'finding paths took %.1f seconds' % ((time.time() - t0))
-					print 'nearby route combos: %d' % num_combos
-				numcombos_to_count[num_combos] += 1
-
-
-	if 0:
-		nc = num_combos()
-		print intWithCommas(nc)
-		SECONDS_PER_COMBO = 5
-		print 'hours: %.1f' % ((nc*SECONDS_PER_COMBO)/(60.0*60.0),)
-		print 'days: %.1f' % ((nc*SECONDS_PER_COMBO)/(60.0*60.0*24),)
-
+		
+		
 
 
 

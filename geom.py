@@ -337,7 +337,7 @@ def heading_to_degrees(heading_):
 class BoundingBox:
 	
 	def __init__(self, polygon_pts_):
-		assert isinstance(polygon_pts_[0], LatLng)
+		assert all(isinstance(e, LatLng) for e in polygon_pts_)
 		self.southwest = LatLng(min(pt.lat for pt in polygon_pts_), min(pt.lng for pt in polygon_pts_))
 		self.northeast = LatLng(max(pt.lat for pt in polygon_pts_), max(pt.lng for pt in polygon_pts_))
 
