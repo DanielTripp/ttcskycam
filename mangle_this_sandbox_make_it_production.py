@@ -3,17 +3,6 @@
 import sys, os, os.path, subprocess, shutil, StringIO, re
 from misc import *
 
-def add_python_optimize_flag(file_):
-	with open(file_) as fin:
-		file_contents = fin.read()
-	with open(file_, 'w') as fout:
-		for linei, line in enumerate(StringIO.StringIO(file_contents)):
-			if linei == 0:
-				modified_line = re.sub('([\r\n]+)', ' -O\\1', line)
-				fout.write(modified_line)
-			else:
-				fout.write(line)
-
 def partially_process_php_file(filename_):
 	with open(filename_) as fin:
 		in_file_contents = fin.read()
