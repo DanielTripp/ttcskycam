@@ -323,6 +323,12 @@ def massage_whereclause_time_args(whereclause_):
 		return whereclause_
 	else:
 		r = whereclause_
+
+		# The index used to be on the 'time' column.  Now it's on 'time_retrieved'.   
+		# So doing selects on 'time' will be slow now. 
+		# I'm used to typing 'time' into the HTML page.  So here I allow myself to keep doing that: 
+		r = re.sub(r'\btime\b', 'time_retrieved', r)
+
 		def repl1(mo_):
 			return str(str_to_em(mo_.group(0).strip('\'"')))
 		r = re.sub(r'[\'"]\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?[\'"]', repl1, r)
@@ -332,8 +338,8 @@ def massage_whereclause_time_args(whereclause_):
 		def repl2(mo_):
 			t = int(mo_.group(1))
 			range = 30*60*1000
-			return 'time > %d and time < %d' % (t - range, t + range)
-		r = re.sub(r'time +around +(\d+)', repl2, r)
+			return 'time_retrieved > %d and time_retrieved < %d' % (t - range, t + range)
+		r = re.sub(r'time_retrieved +around +(\d+)', repl2, r)
 
 		def repl3(mo_):
 			t = int(mo_.group(3))
@@ -343,8 +349,8 @@ def massage_whereclause_time_args(whereclause_):
 				else:
 					return int(str_)*60*1000
 			lo_range = rangestr_to_em(mo_.group(1)); hi_range = rangestr_to_em(mo_.group(2))
-			return 'time > %d and time < %d' % (t - lo_range, t + hi_range)
-		r = re.sub(r'time +around\((\w+),(\w+)\) +(\d+)', repl3, r)
+			return 'time_retrieved > %d and time_retrieved < %d' % (t - lo_range, t + hi_range)
+		r = re.sub(r'time_retrieved +around\((\w+),(\w+)\) +(\d+)', repl3, r)
 		return r
 
 def massage_whereclause_lat_args(whereclause_):
@@ -369,8 +375,8 @@ def massage_whereclause_lon_args(whereclause_):
 
 def massage_whereclause_dir_args(whereclause_):
 	r = whereclause_
-	r = re.sub('dir *= *0', 'dir_tag like \'%%%%\\\\\\\\_0\\\\\\\\_%%%%\'', r)
-	r = re.sub('dir *= *1', 'dir_tag like \'%%%%\\\\\\\\_1\\\\\\\\_%%%%\'', r)
+	r = re.sub('dir *= *0', 'dir_tag like \'%%\\_0\\_%%\'', r)
+	r = re.sub('dir *= *1', 'dir_tag like \'%%\\_1\\_%%\'', r)
 	r = re.sub('dir +blank', 'dir_tag = \'\'', r)
 	return r
 
