@@ -1,6 +1,6 @@
 #!/usr/bin/python2.6
 
-import sys, json, os.path, pprint, sqlite3
+import sys, json, os.path, pprint, sqlite3, multiprocessing, time
 from collections import *
 from lru_cache import lru_cache
 import vinfo, geom, routes, predictions, mc, c, snaptogrid, traffic 
@@ -614,7 +614,14 @@ HEADING_ROUND = 30
 def round_heading_for_paths_db(heading_):
 	return geom.normalize_heading(round(heading_, HEADING_ROUND))
 
-def build_db_main(fill_in_):
+def paths_already_present_in_db(orig_square_, dest_square_, heading_):
+	orig_dest_key = orig_dest_squares_key(orig_square_, dest_square_, heading_)
+	return (g_dbconn.execute('select * from t where key = ?', [orig_dest_key]).fetchone() is not None)
+
+def need_to_calc(fill_in_, orig_square_, dest_square_, heading_):
+	return (not fill_in_) or not paths_already_present_in_db(orig_square_, dest_square_, heading_)
+
+def build_db_start_db(fill_in_):
 	if not fill_in_:
 		if os.path.exists(PATHS_DB_FILENAME):
 			os.remove(PATHS_DB_FILENAME)
@@ -622,56 +629,88 @@ def build_db_main(fill_in_):
 	if not fill_in_:
 		g_dbconn.execute('create table t (key text unique, value text)')
 
-	num_inserts = 0
+def child_worker_main(conn_to_parent_):
+	while True:
+		orig_square, dest_square, heading = conn_to_parent_.recv()
+		paths_result = find_paths_by_pathgridsquare(orig_square, dest_square, heading)
+		conn_to_parent_.send(((orig_square, dest_square, heading), paths_result))
 
-	def calc_and_insert(orig_square_, dest_square_, heading_):
-		orig_dest_key = orig_dest_squares_key(orig_square_, dest_square_, heading_)
-		if (not fill_in_) or (g_dbconn.execute('select * from t where key = ?', [orig_dest_key]).fetchone() is None):
-			value = find_paths_by_pathgridsquare(orig_square_, dest_square_, heading_)
-			g_dbconn.execute('insert into t values (?, ?)', [orig_dest_key, json.dumps(value)])
-			return True
-		return False
+def build_db_start_worker_children(num_children_):
+	children = []
+	child_connections = []
+	for i in range(num_children_):
+		parent_conn, child_conn = multiprocessing.Pipe()
+		child_connections.append(parent_conn)
+		child = multiprocessing.Process(target=child_worker_main, args=(child_conn,))
+		child.daemon = True
+		children.append(child)
+		child.start()
+	return (children, child_connections)
 
-	for num_keys_visited, (orig_square, dest_square) in enumerate(pathgridsquares_bothres_combos_gen()):
+def build_db_send_job_to_a_child(r_num_jobs_sent_, r_send_job_childi_, child_connections_, orig_square_, dest_square_, heading_):
+	r_num_jobs_sent_[0] += 1
+	childi = r_send_job_childi_[0]
+	r_send_job_childi_[0] = (r_send_job_childi_[0] + 1) % len(child_connections_)
+	child_connection = child_connections_[childi]
+	child_connection.send((orig_square_, dest_square_, heading_))
+
+def build_db_receive_jobs_from_children_and_insert_results_into_db(r_num_inserts_, children_, child_connections_):
+	assert len(children_) == len(child_connections_)
+	for childi, (child, child_connection) in enumerate([(children_[i], child_connections_[i]) for i in range(len(children_))]):
+		if not child.is_alive():
+			raise Exception('Child %d exited unexpectedly.' % childi)
+		while child_connection.poll():
+			(orig_square, dest_square, heading), paths_result = child_connection.recv()
+			orig_dest_key = orig_dest_squares_key(orig_square, dest_square, heading)
+			g_dbconn.execute('insert into t values (?, ?)', [orig_dest_key, json.dumps(paths_result)])
+			r_num_inserts_[0] += 1
+			if r_num_inserts_[0] % 10 == 0:
+				g_dbconn.commit()
+
+def build_db_get_square_and_heading_combos():
+	r = []
+	for orig_square, dest_square in pathgridsquares_bothres_combos_gen():
 		if get_paths_use_near_algo(orig_square, dest_square):
 			if orig_square == dest_square:
 				for heading in range(0, 360, HEADING_ROUND):
-					num_inserts += int(calc_and_insert(orig_square, dest_square, heading))
+					r.append((orig_square, dest_square, heading))
 			else:
 				midpt_to_midpt_heading = round_heading_for_paths_db(orig_square.midpt_latlng().heading(dest_square.midpt_latlng()))
 				for heading_offset in range(-90, 91, HEADING_ROUND):
 					heading = geom.normalize_heading(midpt_to_midpt_heading + heading_offset)
-					num_inserts += int(calc_and_insert(orig_square, dest_square, heading))
+					r.append((orig_square, dest_square, heading))
 		else:
-			num_inserts += int(calc_and_insert(orig_square, dest_square, None))
-		if num_keys_visited % 100 == 0:
-			print 'keys visited: %d.  inserts: %d' % (num_keys_visited, num_inserts)
-		if num_inserts % 10 == 0:
-			g_dbconn.commit()
+			r.append((orig_square, dest_square, None))
+	return r
+
+def build_db_print_progress(num_jobs_received_, total_jobs_, t0_):
+	percent_complete = num_jobs_received_*100.0/total_jobs_
+	jobs_per_second = num_jobs_received_/(time.time()-t0_)
+	est_hours_remaining = (total_jobs_ - num_jobs_received_)/(jobs_per_second*60.0*60) if jobs_per_second else -1
+	print 'num jobs received: %d.  %.02f%% complete.  est. hours remaining: %.1f.  jobs received per second: %.02f'\
+		  % (num_jobs_received_, percent_complete, est_hours_remaining, jobs_per_second)
+
+def build_db(fill_in_):
+	build_db_start_db(fill_in_)
+	children, child_connections = build_db_start_worker_children(4)
+	num_jobs_sent = [0]; send_job_childi = [0]; num_jobs_received = [0]
+	t0 = time.time()
+	square_and_heading_combos = build_db_get_square_and_heading_combos() # AKA jobs
+	for jobs_sent_i, (orig_square, dest_square, heading) in enumerate(square_and_heading_combos):
+		if need_to_calc(fill_in_, orig_square, dest_square, heading):
+			build_db_send_job_to_a_child(num_jobs_sent, send_job_childi, child_connections, orig_square, dest_square, heading)
+		if jobs_sent_i % 100 == 99:
+			build_db_receive_jobs_from_children_and_insert_results_into_db(num_jobs_received, children, child_connections)
+			build_db_print_progress(num_jobs_received[0], len(square_and_heading_combos), t0)
+	while num_jobs_received[0] < num_jobs_sent[0]:
+		time.sleep(5)
+		build_db_receive_jobs_from_children_and_insert_results_into_db(num_jobs_received, children, child_connections)
+		build_db_print_progress(num_jobs_received[0], len(square_and_heading_combos), t0)
 	g_dbconn.commit()
 
 
 
 if __name__ == '__main__':
 
-
-	def does_polyline_overlap_box(polyline_, box_sw_, box_ne_):
-		assert isinstance(polyline_, Sequence) and all(isinstance(geom.LatLng) for e in polyline_)
-		assert all(isinstance(geom.LatLng), for e in (box_sw_, box_ne_))
-		for linept1, linept2 in hopscotch(polyline_):
-			if does_line_segment_overlap_box(linept1, linept2, box_sw_, box_ne_):
-				return True
-		return False
-
-	new_route_pts = [ geom.LatLng(e) for e in [[43.671454, -79.473237], [43.688214, -79.393818] ]]
-	pathgridsquares_bothres_combos = list(pathgridsquares_bothres_combos_gen())
-	for orig_square, dest_square in pathgridsquares_bothres_combos:
-		pass
-
-
-		
-		
-
-
-
+	pass
 
