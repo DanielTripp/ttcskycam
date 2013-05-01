@@ -341,6 +341,12 @@ class BoundingBox:
 		self.southwest = LatLng(min(pt.lat for pt in polygon_pts_), min(pt.lng for pt in polygon_pts_))
 		self.northeast = LatLng(max(pt.lat for pt in polygon_pts_), max(pt.lng for pt in polygon_pts_))
 
+	def __str__(self):
+		return 'box:(%s, %s)' % (self.southwest, self.northeast)
+
+	def __repr__(self):
+		return self.__repr__()
+
 if __name__ == '__main__':
 
 
