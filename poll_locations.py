@@ -7,7 +7,7 @@ from xml.parsers.expat import ExpatError
 import db, vinfo, routes
 from misc import *
 
-ADDITIONAL_ROUTES = ['512', '508', '509']
+ADDITIONAL_ROUTES = ['508', '509', '42']
 ROUTES_TO_POLL = routes.CONFIGROUTES + ADDITIONAL_ROUTES
 POLL_PERIOD_SECS = 60
 
