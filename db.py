@@ -237,6 +237,7 @@ def is_vis_stretch_desirable(vis_, log_):
 
 def remove_time_duplicates(vis_):
 	for i in range(len(vis_)-2, -1, -1): # Removing duplicates by time.  Not sure if this ever happens.
+			# I think that it could happen if the code that gets overshots is sloppy. 
 		if vis_[i].time == vis_[i+1]:
 			del vis_[i]
 
@@ -329,6 +330,9 @@ def massage_whereclause_time_args(whereclause_):
 		# I'm used to typing 'time' into the HTML page.  So here I allow myself to keep doing that: 
 		r = re.sub(r'\btime\b', 'time_retrieved', r)
 
+		useoldtimecol = bool(re.search(r'\buseoldtimecol\b', r))
+		r = re.sub(r'\buseoldtimecol\b', '', r)
+
 		def repl1(mo_):
 			return str(str_to_em(mo_.group(0).strip('\'"')))
 		r = re.sub(r'[\'"]\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?[\'"]', repl1, r)
@@ -351,6 +355,9 @@ def massage_whereclause_time_args(whereclause_):
 			lo_range = rangestr_to_em(mo_.group(1)); hi_range = rangestr_to_em(mo_.group(2))
 			return 'time_retrieved > %d and time_retrieved < %d' % (t - lo_range, t + hi_range)
 		r = re.sub(r'time_retrieved +around\((\w+),(\w+)\) +(\d+)', repl3, r)
+
+		if useoldtimecol:
+			r = re.sub('time_retrieved', 'time', r)
 		return r
 
 def massage_whereclause_lat_args(whereclause_):
@@ -502,7 +509,7 @@ def get_outside_overshots(vilist_, time_window_boundary_, forward_in_time_, n_=1
 			if log_: printerr('Looking for %s overshots for vid %s.  Time to beat is %s.' % (forward_str, vid, em_to_str(vid_extreme_time)))
 			routes = [vi.route_tag for vi in vilist_]
 			sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations ' \
-				+ ' where vehicle_id = %s ' + ' and route_tag in ('+(','.join(['%s']*len(routes)))+')' + ' and time < %s and time > %s '\
+				+ ' where vehicle_id = %s ' + ' and route_tag in ('+(','.join(['%s']*len(routes)))+')' + ' and time_retrieved <= %s and time_retrieved >= %s '\
 				+ ' order by time '+('' if forward_in_time_ else 'desc')+' limit %s'
 			curs = conn().cursor()
 			query_times = [time_window_boundary_+20*60*1000, vid_extreme_time] if forward_in_time_ else [vid_extreme_time, time_window_boundary_-20*60*1000]
@@ -539,7 +546,7 @@ def get_outside_overshots_more(vis_so_far_, time_window_boundary_, forward_in_ti
 			curs = conn().cursor()
 			routes = [vi.route_tag for vi in vis_so_far_]
 			sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations '\
-					 + ' where vehicle_id = %s ' + ' and route_tag in ('+(','.join(['%s']*len(routes)))+')' + ' and time < %s and time > %s '\
+					 + ' where vehicle_id = %s ' + ' and route_tag in ('+(','.join(['%s']*len(routes)))+')' + ' and time_retrieved <= %s and time_retrieved >= %s '\
 					 + ' order by time '+('' if forward_in_time_ else 'desc')+' limit %s'
 			curs.execute(sqlstr, [vid] + routes + [vis_so_far_[-1].time, time_window_boundary_-6*60*60*1000] + [999999])
 			for row in curs:
@@ -1025,7 +1032,7 @@ def set_report_in_memcache(report_type_, froute_, dir_, time_, data_):
 @trans
 def insert_report(report_type_, froute_, dir_, time_, report_data_obj_):
 	assert report_type_ in ('traffic', 'locations') and froute_ in routes.NON_SUBWAY_FUDGEROUTES and dir_ in (0, 1)
-	assert abs(time_ - now_em()) < 1000*60*5 and report_data_obj_ is not None
+	assert abs(time_ - now_em()) < 1000*60*60 and report_data_obj_ is not None
 	curs = conn().cursor()
 	report_json = util.to_json_str(report_data_obj_)
 	cols = [c.VERSION, report_type_, froute_, dir_, time_, em_to_str(time_), now_str(), report_json]
