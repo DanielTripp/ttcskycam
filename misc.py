@@ -1,6 +1,6 @@
 #!/usr/bin/python2.6
 
-import sys, os, os.path, time, math, datetime, calendar, bisect, tempfile, subprocess
+import sys, os, os.path, time, math, datetime, calendar, bisect, tempfile, subprocess, StringIO
 from collections import Sequence, MutableSequence, defaultdict
 
 def es_to_str(t_):
