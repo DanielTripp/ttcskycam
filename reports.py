@@ -127,7 +127,7 @@ def wait_for_locations_poll_to_finish():
 
 def make_all_reports_and_insert_into_db_once():
 	report_time = round_up_by_minute(now_em())
-	for froute in FROUTES:
+	for froute in sorted(FROUTES):
 		for direction in (0, 1):
 			traffic_data = traffic.get_traffics_impl(froute, direction, report_time)
 			db.insert_report('traffic', froute, direction, report_time, traffic_data)

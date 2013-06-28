@@ -23,6 +23,7 @@ def get_recent_vehicle_locations(fudgeroute_, dir_, time_, last_returned_timestr
 # when it comes from the client. 
 @mc.decorate
 def get_recent_vehicle_locations_impl(fudgeroute_, dir_, time_, log_=False):
+	assert (time_!=0)
 	return db.get_recent_vehicle_locations(fudgeroute_, TIME_WINDOW_MINUTES, dir_, time_window_end_=time_, log_=log_)
 
 # returns: key: vid.  value: list of list of VehicleInfo
@@ -68,11 +69,12 @@ def get_traffics(fudgeroute_name_, dir_, time_, last_returned_timestr_, window_m
 
 @mc.decorate
 def get_traffics_impl(fudgeroute_name_, dir_, time_, window_minutes_=TIME_WINDOW_MINUTES, log_=False):
-	assert dir_ in (0, 1) or (len(dir_) == 2 and all(isinstance(e, geom.LatLng) for e in dir_))
+	assert dir_ in (0, 1) or (len(dir_) == 2 and all(isinstance(e, geom.LatLng) for e in dir_)) and (time_!=0)
 	if dir_ in (0, 1):
 		direction = dir_
 	else:
 		direction = routes.routeinfo(fudgeroute_name_).dir_from_latlngs(dir_[0], dir_[1])
+	print now_str(), '1'
 	mofr_to_avgspeedandweight = get_traffic_avgspeedsandweights(fudgeroute_name_, direction, time_, True, window_minutes_, log_=log_)
 	return [get_traffics_visuals(mofr_to_avgspeedandweight, fudgeroute_name_, direction), \
 			get_traffics__mofr2speed(mofr_to_avgspeedandweight)]
