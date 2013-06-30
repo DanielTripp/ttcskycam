@@ -127,8 +127,9 @@ def get_streetlabel_svg(text_, rotation_, zoom_):
 # for their street labels. 
 def prime_memcache():
 	for froute in routes.NON_SUBWAY_FUDGEROUTES:
-		for zoom in ZOOMS_WITH_STREETLABELS:
-			get_labels_for_zoom(froute, zoom)
+		for direction in (0, 1):
+			for zoom in ZOOMS_WITH_STREETLABELS:
+				get_labels_for_zoom(froute, direction, zoom)
 
 if __name__ == '__main__':
 
