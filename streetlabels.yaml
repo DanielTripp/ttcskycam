@@ -76,3 +76,28 @@ spadina:
     797: ''
     1104: Spadina Ave
     3371: ''
+
+stclair:
+    0: ''
+    49: St Clair Ave W
+    6519: ''
+
+# Fudging a blank at the start of Keele because google map's label starts right before our fudgeroute begins,  
+# so without this blank from 0 - 500 it would look something like "KeeleKeele St". 
+keele:
+    0:
+        0: ''
+        500: Keele St
+        9421: Rogers Rd
+        10986: Weston Rd
+        12267: Keele St
+    1:
+        0: ''
+        500: Keele St
+        10569: Rogers Rd
+        10869: ''
+        10908: Old Weston Rd
+        11884: St Clair Ave W
+        12263: Keele St
+
+

@@ -6,9 +6,22 @@ from misc import *
 #from mrucache import *
 from lru_cache import lru_cache
 
+# To add a new route: 
+# - Add to FUDGEROUTE_TO_CONFIGROUTES below. 
+# - Make a fudge_route_FROUTE.json file, or fudge_route_FROUTE_dir0.json and fudge_route_FROUTE_dir1.json files.
+# - Make stops file by running: ./get_stoplist_from_routeconfig_multiple.py NAME 
+# - Maybe add special case in get_froute_to_english() (routes.get_froute_to_english()).
+# - ./mc.py restart dev  ,  touch callpy.wsgi  
+# - Add to debug-route.html 
+# - Add street labels to streetlabels.yaml  
+# - Build street label images with python -c "import build_images; build_images.build_streetlabel_images(['NAME'])"
+# - Create DONT_USE_WRITTEN_MOFRS flag file in your sandbox, if the route is already in the 'extra routes' list of dbman's 
+# 		poll_locations.py. 
+# - Create GET_CURRENT_REPORTS_FROM_DB file in your sandbox. 
+
 FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301'], 'king': ['504'], 'spadina': ['510'], \
 'bathurst': ['511', '310'], 'dufferin': ['29', '329'], 'lansdowne': ['47'], 'ossington': ['63', '316'], 'carlton': ['506', '306'], \
-'dupont': ['26']}
+'dupont': ['26'], 'stclair': ['512', '312'], 'keele': ['41']}
 
 CONFIGROUTE_TO_FUDGEROUTE = {}
 for fudgeroute, configroutes in FUDGEROUTE_TO_CONFIGROUTES.items():
@@ -296,8 +309,10 @@ class RouteInfo:
 						self.routeptaddr_to_mofr[dir].append(self.routeptaddr_to_mofr[dir][i-1] + prevpt.dist_m(curpt))
 			assert len(self.routeptaddr_to_mofr[dir]) == len(self.routepts(dir))
 		if self.is_split_by_dir:
-			assert abs(sum(pt1.dist_m(pt2) for pt1, pt2 in hopscotch(self.routepts(0))) - \
-					sum(pt1.dist_m(pt2) for pt1, pt2 in hopscotch(self.routepts(1)))) < 0.1
+			len_dir_0 = geom.dist_m_polyline(self.routepts(0)); len_dir_1 = geom.dist_m_polyline(self.routepts(1))
+			if abs(len_dir_0 - len_dir_1) > 0.1:
+				printerr('route %s: dir 0 length: %0.2f.  dir 1 length: %0.2f.' % (self.name, len_dir_0, len_dir_1))
+				assert False
 
 	def init_stops(self):
 		self.init_stops_dir_to_stoptag_to_stop()
@@ -670,6 +685,17 @@ def heading_to_englishdesc(heading_):
 	else:
 		return 'West'
 
+@mc.decorate
+def get_froute_to_english():
+	r = {'yonge_university_spadina': 'Yonge/University/Spadina', 'bloor_danforth': 'Bloor/Danforth'}
+	for froute in NON_SUBWAY_FUDGEROUTES:
+		if froute == 'stclair':
+			english = 'St. Clair'
+		else:
+			english = froute[0].upper() + froute[1:]
+		r[froute] = english
+	assert len(r) == len(FUDGEROUTES)
+	return r
 
 def snaptest(fudgeroutename_, pt_, tolerance_=0):
 	return routeinfo(fudgeroutename_).snaptest(pt_, tolerance_)

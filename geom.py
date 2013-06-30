@@ -330,6 +330,10 @@ def degrees_to_heading(degrees_):
 		r = get_range_val((0, 90), (90, 0), degrees_)
 	return int(r)
 
+def dist_m_polyline(pts_):
+	assert all(isinstance(e, LatLng) for e in pts_)
+	return sum(pt1.dist_m(pt2) for pt1, pt2 in hopscotch(pts_))
+
 # I don't know if it's a coincidence or what, but the inverse of the 'degrees_to_heading' function is itself. 
 def heading_to_degrees(heading_):
 	return degrees_to_heading(heading_)

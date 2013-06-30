@@ -198,7 +198,7 @@ if __name__ == '__main__':
 
 	if len(sys.argv) == 2 and sys.argv[1] == 'list':
 		print_running_instances()
-	else:
+	elif len(sys.argv) == 3:
 		command, instance = sys.argv[1:3]
 		if instance not in INSTANCE_TO_PORT or command not in ('start', 'stop', 'restart', 'start-if-not-running'):
 			sys.exit('Invalid arguments.')
@@ -210,6 +210,7 @@ if __name__ == '__main__':
 			if not is_server_running(instance):
 				print 'Memcache instance %s was not running.  Will start it now.' % instance 
 				start_memcache(instance)
-
+	else:
+		sys.exit('Usage: mc.py COMMAND [INSTANCE]')
 
 

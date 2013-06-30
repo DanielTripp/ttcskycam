@@ -522,5 +522,29 @@ function intersection(set1_, set2_) {
 }
 
 
+function radians(degrees_) {
+	return degrees_*Math.PI/180.0;
+}
+
+function dist_m(pt1_, pt2_) {
+	var RADIUS_OF_EARTH = 6367.44465;
+	// 'Haversine formula' from http://en.wikipedia.org/wiki/Great-circle_distance
+	var lat1 = radians(pt1_.lat()), lng1 = radians(pt1_.lng());
+	var lat2 = radians(pt2_.lat()), lng2 = radians(pt2_.lng());
+	var dlat = lat2 - lat1;
+	var dlng = lng2 - lng1;
+	var central_angle = 2*Math.asin(Math.sqrt(Math.pow(Math.sin(dlat/2), 2) + Math.cos(lat1)*Math.cos(lat2)*(Math.pow(Math.sin(dlng/2), 2))));
+	return central_angle*RADIUS_OF_EARTH*1000.0;
+}
+
+function dist_m_polyline(pts_) {
+	var r = 0.0;
+	for(var i=0; i<pts_.length-1; i++) {
+		r += dist_m(pts_[i], pts_[i+1]);
+	}
+	return r;
+}
+
 eval(get_sync("js/json2.js"));
+
 

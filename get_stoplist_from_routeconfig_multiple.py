@@ -6,7 +6,12 @@ import traffic, db, vinfo, routes, geom, mc, tracks, util
 
 if __name__ == '__main__':
 	
-	for froute in routes.FUDGEROUTES:
+	if len(sys.argv) == 2:
+		froutes = [sys.argv[1]]
+	else:
+		froutes = routes.FUDGEROUTES
+		
+	for froute in froutes:
 		rc_filenames = []
 		for croute in routes.FUDGEROUTE_TO_CONFIGROUTES[froute]:
 			url = 'http://webservices.nextbus.com/service/publicXMLFeed?command=routeConfig&a=ttc&r=%s&verbose' % croute

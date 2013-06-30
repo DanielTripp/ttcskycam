@@ -19,10 +19,9 @@
     <script type="text/javascript">
 
 var g_map;
-var g_objects = new Array();
+var g_stop_markers = new buckets.LinkedList(), g_lines = new buckets.LinkedList();
+var g_route_markers = new buckets.LinkedList();
 var g_resnapped_markers = [null, null];
-var g_buildfudgeroute_markers = new Array();
-var g_buildfudgeroute_polyline = null;
 var g_stops_dir_to_stoptag_to_latlng = null;
 
 
@@ -75,6 +74,9 @@ function keypress_handler(e) {
 
 function initialize() {
 	init_map();
+	google.maps.event.addListener(g_map, 'click', function(e) {
+		add_route_marker(e.latLng);
+	});
 	init_snaptest_marker();
 
 	document.onkeypress = keypress_handler;
@@ -202,36 +204,38 @@ function set_contents(id_, contents_) {
 	document.getElementById(id_).innerHTML = contents_;
 }
 
-function display_vis_html(vis_by_time_) {
-	r = "<pre>";
-	for(var i=0; i<vis_by_time_.length; i++) {
-		var vis = vis_by_time_[i];
-		for(j=0; j<vis.length; j++) {
-			vi = vis[j];
-			r += vi_to_str_long(vi)+"\n";
-		}
-	}
-	r += "</pre>";
-	set_contents("results", r);
+function remove_objects_of_all_kinds() {
+	remove_route_markers();
+	remove_stop_markers();
+	remove_lines();
 }
 
-function remove_existing_objects() {
-	for(var i=0; i<g_objects.length; i++) {
-		g_objects[i].setMap(null);
-		delete g_objects[i];
-	}
-	delete g_objects;
-	g_objects = new Array();
+function remove_route_markers() {
+	remove_objects(g_route_markers);
+}
+
+function remove_stop_markers() {
+	remove_objects(g_stop_markers);
+}
+
+function remove_lines() {
+	remove_objects(g_lines);
+}
+
+function remove_objects(list_) {
+	list_.forEach(function(marker) {
+		marker.setMap(null);
+	});
+	list_.clear();
 }
 
 function refresh_config_route() {
-	remove_existing_objects();
+	remove_objects_of_all_kinds();
 	set_config_route(radio_val('configroute'), radio_val('configdirection'));
 }
 
 function refresh_fudge_route() {
-	remove_existing_objects();
-	forget_built_fudgeroute();
+	remove_objects_of_all_kinds();
 	set_fudge_route_routepts(radio_val('fudgeroute'), (is_selected('dir0button') ? 0 : 1));
 	set_fudge_route_stops_bothdirs(radio_val('fudgeroute'));
 }
@@ -277,7 +281,7 @@ function draw_stop(latlng_, dir_, stoptag_) {
 					'</svg>', size, size)
 			});
 	}
-	g_objects.push(mark);
+	g_stop_markers.add(mark);
 
 	google.maps.event.addListener(mark, 'click', function() {
 		alert(sprintf('stoptag: %s', stoptag_));
@@ -288,7 +292,7 @@ function set_fudge_route_routepts(route_, dir_) {
 	var route_points = callpy_sync('routes.routepts', route_, dir_);
 	var glatlons = latlonfloatarrays_to_googlemaps(route_points);
 	for(var i=0; i<glatlons.length; i++) {
-		add_buildfudgeroute_marker(glatlons[i]);
+		add_route_marker(glatlons[i]);
 	}
 }
 
@@ -342,51 +346,101 @@ function set_config_route(route_, direction_) {
 	*/
 }
 
-function draw_path_polyline(path_points_, color_) {
+function add_lines_based_on_route_markers() {
+	for(var i=0; i<g_route_markers.size()-1; i++) {
+		add_line(i);
+	}
+}
+
+function add_line(i_) {
+	var latlng1 = g_route_markers.elementAtIndex(i_).getPosition();
+	var latlng2 = g_route_markers.elementAtIndex(i_+1).getPosition();
 	var line = new google.maps.Polyline({
-		clickable: false, 
+		clickable: true, 
 		map: g_map, 
-		path: path_points_, 
-		strokeColor: color_ 
+		path: [latlng1, latlng2], 
+		strokeColor: 'rgb(255,0,0)', strokeWeight: 5
 	});
-	g_objects.push(line);
-	return line;
+	google.maps.event.addListener(line, 'click', function(e__) {
+		split_line(i_, e__.latLng);
+	});
+	g_lines.add(line);
+}
+
+function split_line(lo_marker_ptaddr_, new_latlng_) {
+	var marker_latlngs = new buckets.LinkedList();
+	for(var i=0; i<g_route_markers.size(); i++) {
+		var marker = g_route_markers.elementAtIndex(i);
+		marker_latlngs.add(marker.getPosition());
+		if(i == lo_marker_ptaddr_) {
+			marker_latlngs.add(new_latlng_);
+		}
+	}
+
+	remove_lines();
+	remove_route_markers();
+
+	marker_latlngs.forEach(function(latlng) {
+		add_route_marker(latlng);
+	});
 }
 
 function radio_val(groupname_) {
 	return $('input[name='+groupname_+']:checked').val();
 }
 
-function add_buildfudgeroute_marker(glatlon_) {
+function add_route_marker(glatlon_) {
 	var glatlon = glatlon_;
 	if(glatlon == null) {
-		if(g_buildfudgeroute_markers.length == 0) {
+		if(g_route_markers.size() == 0) {
 			glatlon = g_map.getCenter();
 		} else {
-			if(g_buildfudgeroute_markers.length >= 2) {
-				var pos1 = g_buildfudgeroute_markers[g_buildfudgeroute_markers.length-2].getPosition();
-				var pos2 = g_buildfudgeroute_markers[g_buildfudgeroute_markers.length-1].getPosition();
+			if(g_route_markers.size() >= 2) {
+				var pos1 = g_route_markers.elementAtIndex(g_route_markers.size()-2).getPosition();
+				var pos2 = g_route_markers.elementAtIndex(g_route_markers.size()-1).getPosition();
 				glatlon = new google.maps.LatLng(pos2.lat() + (pos2.lat() - pos1.lat()), pos2.lng() + (pos2.lng() - pos1.lng()));
 			} else {
-				var lastmarkpos = g_buildfudgeroute_markers[g_buildfudgeroute_markers.length-1].getPosition();
+				var lastmarkpos = g_route_markers.elementAtIndex(g_route_markers.size()-1).getPosition();
 				glatlon = new google.maps.LatLng(lastmarkpos.lat(), lastmarkpos.lng()+0.002);
 			}
 			glatlon = constrain_latlng_by_map_bounds(glatlon);
 		}
 	}
-	var marker = new google.maps.Marker({
-		position: glatlon, 
-		map: g_map,
-		title:''+(g_buildfudgeroute_markers.length),
-		draggable: true 
-		});
+
+	var marker_ptaddr = g_route_markers.size();
+
+	var marker = new google.maps.Marker({position: glatlon, map: g_map, title:''+(marker_ptaddr), draggable: true, zIndex: 1});
+
+	g_route_markers.add(marker);
+
 	google.maps.event.addListener(marker, 'drag', function() {
 		redraw_buildfudgeroute_path();
 	});
-	g_buildfudgeroute_markers.push(marker);
-	g_objects.push(marker);
+
+	google.maps.event.addListener(marker, 'click', function() {
+		delete_marker(marker_ptaddr);
+	});
 
 	redraw_buildfudgeroute_path();
+}
+
+function delete_marker(marker_ptaddr_) {
+	var marker_latlngs = new buckets.LinkedList();
+	for(var i=0; i<g_route_markers.size(); i++) {
+		var marker = g_route_markers.elementAtIndex(i);
+		if(i == marker_ptaddr_) {
+			continue;
+		}
+		marker_latlngs.add(marker.getPosition());
+	}
+
+	remove_lines();
+	remove_route_markers();
+
+	marker_latlngs.forEach(function(latlng) {
+		add_route_marker(latlng);
+	});
+
 }
 
 function constrain_latlng_by_map_bounds(latlng_) {
@@ -415,36 +469,29 @@ function constrain_latlng_by_map_bounds(latlng_) {
 	return r;
 }
 
-function forget_built_fudgeroute() {
-	if(g_buildfudgeroute_polyline != null) {
-		g_buildfudgeroute_polyline.setMap(null);
-		g_buildfudgeroute_polyline = null;
+function redraw_buildfudgeroute_path() {
+	remove_lines();
+
+	add_lines_based_on_route_markers();
+
+	var str_repr = '[<br/>';
+	for(var i=0; i<g_route_markers.size(); i++) {
+		var m = g_route_markers.elementAtIndex(i);
+		str_repr += sprintf('[%.6f, %.6f]%s <br/>', m.getPosition().lat(), m.getPosition().lng(), 
+			(i<g_route_markers.size()-1 ? ',' : ''));
 	}
-	g_buildfudgeroute_markers = new Array();
+	str_repr += ']<br/>';
+	set_contents('results', str_repr);
+
+	show_route_dist_m();
 }
 
-function redraw_buildfudgeroute_path() {
-	if(g_buildfudgeroute_polyline != null) {
-		g_buildfudgeroute_polyline.setMap(null);
-		delete g_buildfudgeroute_polyline;
-	}
-	var fudgeroute_points = new Array();
-	for(var i=0; i<g_buildfudgeroute_markers.length; i++) {
-		fudgeroute_points.push(g_buildfudgeroute_markers[i].getPosition());
-	}
-	g_buildfudgeroute_polyline = draw_path_polyline(fudgeroute_points, 'rgb(255,0,0)')
-
-	if(true) {
-		var str_repr = '[<br/>';
-		for(var i=0; i<g_buildfudgeroute_markers.length; i++) {
-			var m = g_buildfudgeroute_markers[i];
-			str_repr += sprintf('[%.6f, %.6f]%s <br/>', m.getPosition().lat(), m.getPosition().lng(), 
-				(i<g_buildfudgeroute_markers.length-1 ? ',' : ''));
-		}
-		str_repr += ']<br/>';
-		set_contents('results', str_repr);
-	}
-
+function show_route_dist_m() {
+	var pts = [];
+	g_route_markers.forEach(function(marker) {
+		pts.push(marker.getPosition());
+	});
+	set_contents('dist', dist_m_polyline(pts));
 }
 
     </script>
@@ -496,11 +543,13 @@ function redraw_buildfudgeroute_path() {
 						<input id="dufferinradiobutton" type="radio" name="fudgeroute" value="dufferin" /><label for="dufferinradiobutton">Dufferin</label><br/>
 						<input id="dundasradiobutton" type="radio" name="fudgeroute" value="dundas" checked="checked" /><label for="dundasradiobutton">Dundas</label><br/>
 						<input id="dupontradiobutton" type="radio" name="fudgeroute" value="dupont" /><label for="dupontradiobutton">Dupont</label><br/>
+						<input id="keeleradiobutton" type="radio" name="fudgeroute" value="keele" /><label for="keeleradiobutton">Keele</label><br/>
 						<input id="kingradiobutton" type="radio" name="fudgeroute" value="king" /><label for="kingradiobutton">King</label><br/>
 						<input id="lansdowneradiobutton" type="radio" name="fudgeroute" value="lansdowne" /><label for="lansdowneradiobutton">Lansdowne</label><br/>
 						<input id="ossingtonradiobutton" type="radio" name="fudgeroute" value="ossington" /><label for="ossingtonradiobutton">Ossington</label><br/>
 						<input id="queenradiobutton" type="radio" name="fudgeroute" value="queen" /><label for="queenradiobutton">Queen</label><br/>
 						<input id="spadinaradiobutton" type="radio" name="fudgeroute" value="spadina" /><label for="spadinaradiobutton">Spadina</label><br/>
+						<input id="stclairradiobutton" type="radio" name="fudgeroute" value="stclair" checked="checked" /><label for="stclairradiobutton">St. Clair</label><br/>
 						<input id="bloordanforthradiobutton" type="radio" name="fudgeroute" value="bloor_danforth" /><label for="bloordanforthradiobutton">Bloor Danforth</label><br/>
 						<input id="yongeuniversityspadinaradiobutton" type="radio" name="fudgeroute" value="yonge_university_spadina" /><label for="yongeuniversityspadinaradiobutton">Yonge University Spadina</label><br/>
 					</td>
@@ -521,7 +570,7 @@ function redraw_buildfudgeroute_path() {
       <table border="1">
 				<tr>
 					<td>
-						Build fudge route:  <input id="add_marker_button" type="button" onclick="add_buildfudgeroute_marker(null)" value="Add marker" /><br/>
+						Build fudge route:  <input id="add_marker_button" type="button" onclick="add_route_marker(null)" value="Add marker" /><br/>
 						(Or press the spacebar.)
 					</td>
 				</tr>
@@ -535,6 +584,8 @@ function redraw_buildfudgeroute_path() {
 				stoptag:<input type="text" size="15" name="stoptag_field" id="stoptag_field" /> 
 				<input type="button" onclick="show_stoptag(this.form.stoptag_field.value)" value="Submit" id="stoptag_submit_button" /><br/>
 			</form>
+			<p id="over">over???</p>
+			<p id="dist">...</p>
 			<p id="snaptest_arg_pt">...</p>
 			<p id="snaptest_result_snappedpt">...</p>
 			<p id="snaptest_result_mofr">...</p>
