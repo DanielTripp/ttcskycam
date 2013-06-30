@@ -7,8 +7,12 @@ from xml.parsers.expat import ExpatError
 import db, vinfo, routes
 from misc import *
 
-ADDITIONAL_ROUTES = ['508', '509', '42']
-ROUTES_TO_POLL = routes.CONFIGROUTES + ADDITIONAL_ROUTES
+try:
+	with open('POLL_LOCATIONS_ADDITIONAL_ROUTES') as fin:
+		ADDITIONAL_ROUTES = json.load(fin)
+except IOError:
+	ADDITIONAL_ROUTES = []
+ROUTES_TO_POLL = set(routes.CONFIGROUTES + ADDITIONAL_ROUTES)
 POLL_PERIOD_SECS = 60
 
 def get_data_from_web_as_str(route_, time_es_=0):
