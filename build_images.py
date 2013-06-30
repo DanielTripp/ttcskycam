@@ -7,13 +7,14 @@ import traffic, db, vinfo, routes, geom, mc, tracks, util, predictions, paths, s
 def get_streetlabel_filename(text_, rotation_, zoom_):
 	return 'streetlabel_%s_%d_%d.png' % (text_.replace(' ', '_'), rotation_, zoom_)
 
-def build_streetlabel_images():
+def build_streetlabel_images(froutes_=None):
 	texts_rotations_zooms = set()
-	for zoom in range(13, 22):
-		for froute in routes.NON_SUBWAY_FUDGEROUTES:
-			for label in streetlabels.get_labels_for_zoom(froute, zoom):
-				text = label['text']; rotation = label['rotation']
-				texts_rotations_zooms.add((text, rotation, zoom))
+	for zoom in streetlabels.ZOOMS_WITH_STREETLABELS:
+		for froute in (froutes_ if froutes_ is not None else routes.NON_SUBWAY_FUDGEROUTES):
+			for direction in (0, 1):
+				for label in streetlabels.get_labels_for_zoom(froute, direction, zoom):
+					text = label['text']; rotation = label['rotation']
+					texts_rotations_zooms.add((text, rotation, zoom))
 	
 	pngfilenames_and_svgstrs = []
 	for text, rotation, zoom in texts_rotations_zooms:

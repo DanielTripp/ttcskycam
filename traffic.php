@@ -119,6 +119,9 @@ var MOFR_STEP = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
 	readfile('MOFR_STEP'); ?>;
 var FROUTE_TO_INTDIR_TO_ENGLISHDESC = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
 	passthru('python -c "import routes; print routes.get_fudgeroute_to_intdir_to_englishdesc()"'); ?>;
+var FROUTE_TO_ENGLISH = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
+	passthru('python -c "import routes; print routes.get_froute_to_english()"'); ?>;
+
 
 var g_zoom_to_vehicle_rendered_img_size = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
 	readfile('zoom_to_vehicle_rendered_img_size.json'); ?>;
@@ -1162,15 +1165,17 @@ function refresh_streetlabels_singleroute(froute_) {
 		return;
 	}
 	var zoom = g_map.getZoom();
+	var direction = g_fudgeroute_data.get(froute_).dir;
 	if(!do_streetlabels_for_zoom(zoom) || !g_show_traffic_lines) {
 		forget_streetlabels_singleroute(froute_);
 	} else {
-		callpy('streetlabels.get_labels', froute_, zoom, g_map.getBounds().getSouthWest(), g_map.getBounds().getNorthEast(), 
+		callpy('streetlabels.get_labels', froute_, direction, zoom, g_map.getBounds().getSouthWest(), g_map.getBounds().getNorthEast(), 
 			function(labels) {
 				// This is a callback so since we started the call, this route could have been hidden or the zoom could have been changed, 
 				// or all traffic lines hidden.  
 				// The map bounds could have changed too but I don't care as much about them right now for some reason. 
-				if(!g_fudgeroute_data.containsKey(froute_) || (g_map.getZoom() != zoom) || !g_show_traffic_lines) {
+				if(!g_fudgeroute_data.containsKey(froute_) || (g_map.getZoom() != zoom) || !g_show_traffic_lines 
+						|| (direction != g_fudgeroute_data.get(froute_).dir)) {
 					return;
 				}
 				forget_streetlabels_singleroute(froute_);
@@ -1357,23 +1362,9 @@ function on_route_clicked(froute_, latlng_) {
 			{dir0text: FROUTE_TO_INTDIR_TO_ENGLISHDESC[froute_][0], dir1text: FROUTE_TO_INTDIR_TO_ENGLISHDESC[froute_][1], 
 			dir0checked: s(dir == '0'), dir1checked: s(dir == '1'), dirautochecked: s(dir == 'auto')});
 	}
-	$('#route-options-dialog').dialog('option', 'title', get_readable_froute(froute_));
+	$('#route-options-dialog').dialog('option', 'title', FROUTE_TO_ENGLISH[froute_]);
 	$('#route-options-dialog').html(html);
 	$('#route-options-dialog').dialog('open');
-}
-
-function get_readable_froute(froute_) {
-	//var froute = froute_.substring(0, 1).toUpperCase()+froute_.substring(1);
-	var splits = froute_.split('_');
-	var r = '';
-	for(var i=0; i<splits.length; i++) {
-		var split = splits[i];
-		r += split.substring(0, 1).toUpperCase() + split.substring(1);
-		if(i != splits.length-1) {
-			r += '/';
-		}
-	}
-	return r;
 }
 
 function showing_route_solo(froute_) {
@@ -1417,9 +1408,9 @@ function draw_pathgridsquares() {
 
 function init_trip_markers() {
 	g_trip_orig_marker = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.6494532, -79.4314174), 
-		draggable: true, icon: 'http://www.google.com/mapfiles/markerA.png'});
+		draggable: true, icon: 'http://www.google.com/mapfiles/markerA.png', zIndex: 6});
 	g_trip_dest_marker = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.6523100, -79.4063549), 
-		draggable: true, icon: 'http://www.google.com/mapfiles/markerB.png'});
+		draggable: true, icon: 'http://www.google.com/mapfiles/markerB.png', zIndex: 6});
 
 	google.maps.event.addListener(g_trip_orig_marker, 'dragend', on_trip_orig_marker_moved);
 	google.maps.event.addListener(g_trip_dest_marker, 'dragend', on_trip_dest_marker_moved);
