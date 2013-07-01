@@ -1,6 +1,6 @@
-#!/usr/bin/python2.6
+#!/usr/bin/python2.6 -O
 
-import sys, json, os.path, pprint, sqlite3, multiprocessing, time
+import sys, json, os.path, pprint, sqlite3, multiprocessing, time, subprocess
 from collections import *
 from lru_cache import lru_cache
 import vinfo, geom, routes, predictions, mc, c, snaptogrid, traffic 
@@ -691,8 +691,9 @@ def build_db_print_progress(num_jobs_received_, total_jobs_, t0_):
 		  % (num_jobs_received_, percent_complete, est_hours_remaining, jobs_per_second)
 
 def build_db(fill_in_):
+	do_amazon_startup_check_if_appropriate()
 	build_db_start_db(fill_in_)
-	children, child_connections = build_db_start_worker_children(4)
+	children, child_connections = build_db_start_worker_children(20)
 	num_jobs_sent = [0]; send_job_childi = [0]; num_jobs_received = [0]
 	t0 = time.time()
 	square_and_heading_combos = build_db_get_square_and_heading_combos() # AKA jobs
@@ -707,10 +708,43 @@ def build_db(fill_in_):
 		build_db_receive_jobs_from_children_and_insert_results_into_db(num_jobs_received, children, child_connections)
 		build_db_print_progress(num_jobs_received[0], len(square_and_heading_combos), t0)
 	g_dbconn.commit()
+	do_amazon_shutdown_instance_if_appropriate()
 
+def get_amazon_instance_id():
+	wget_args = ['wget', '-O', '-', 'http://169.254.169.254/latest/meta-data/instance-id']
+	return subprocess.Popen(wget_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()[0]
+
+def are_we_running_on_amazon():
+	# I would have used the result of wget http://169.254.169.254/latest/meta-data/instance-id to determine whether we're 
+	# running on Amazon, but for some reason that seemed to be hanging when run on non-amazon machines, no matter 
+	# what timeout options to 'wget' I tried.  So let's check AWS_PATH instead, to determine whether we're running on Amazon: 
+	return (os.getenv('AWS_PATH') is not None)
+
+def do_amazon_startup_check_if_appropriate():
+	if are_we_running_on_amazon():
+		print 'We seem to be running on Amazon.'
+		print 'Getting instance ID...'
+		amazon_instance_id = get_amazon_instance_id()
+		print '... instance ID is "%s"' % amazon_instance_id
+		# We are assuming that the environment variables AWS_ACCESS_KEY and AWS_SECRET_KEY are set, presumably 
+		# in local shell initialization.   If they aren't, then the following call will fail.  
+		# We are using this ec2-describe-instances as an early test for whether ec2-stop-instances will work. 
+		# Better we know early so that the developer calling this will notice right away and fix the problem, rather than 
+		# have ec2-stop-instances fail after a few hours of paths calculation, when the developer is not looking any more, 
+		# and thus cause this Amazon instance to stay running and cost money. 
+		subprocess.check_call(['ec2-describe-instances', amazon_instance_id], stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+	else:
+		print 'We seem to not be running on Amazon.'
+
+def do_amazon_shutdown_instance_if_appropriate():
+	if are_we_running_on_amazon():
+		amazon_instance_id = get_amazon_instance_id()
+		subprocess.check_call(['ec2-stop-instances', amazon_instance_id])
 
 
 if __name__ == '__main__':
 
 	pass
+
+
 
