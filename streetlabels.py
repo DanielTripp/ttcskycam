@@ -92,8 +92,8 @@ def get_labels_for_zoom(froute_, dir_, zoom_):
 		if (text != get_text(froute_, dir_, end_mofr)) or (not text) or (not is_route_straight_enough_here(ri, dir_, start_mofr, end_mofr)):
 			start_mofr += max(1, mofrstep/10)
 		else:
-			start_latlng = ri.mofr_to_latlon(start_mofr, 0)
-			end_latlng = ri.mofr_to_latlon(end_mofr, 0)
+			start_latlng = ri.mofr_to_latlon(start_mofr, dir_)
+			end_latlng = ri.mofr_to_latlon(end_mofr, dir_)
 			heading = start_latlng.heading(end_latlng)
 			svg_rotation = heading_to_svg_rotation(heading)
 			if 180 <= heading < 360:
