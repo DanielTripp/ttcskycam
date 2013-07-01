@@ -1,4 +1,4 @@
-#!/usr/bin/python2.6
+#!/usr/bin/python2.6 -O
 
 import sys, json, os.path, pprint, sqlite3, getopt
 import paths
