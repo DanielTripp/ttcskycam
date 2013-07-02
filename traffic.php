@@ -1101,7 +1101,7 @@ function init_everything_that_depends_on_map() {
 	add_invisible_route_lines();
 
 	if(SHOW_PATH_GRID_SQUARES) {
-		draw_pathgridsquares();
+		show_pathgridsquares();
 	}
 
 	add_delayed_event_listener(g_map, 'bounds_changed', refresh_streetlabels_allroutes, 500);
@@ -1377,7 +1377,23 @@ function showing_route_solo(froute_) {
 			&& g_force_hide_froutes.size() == g_all_froutes.length-1);
 }
 
-function draw_pathgridsquares() {
+function show_pathgridsquares() {
+	show_pathgridsquares_draw_grid();
+	show_pathgridsquares_add_rightclick_listener();
+}
+
+function show_pathgridsquares_add_rightclick_listener() {
+	google.maps.event.addListener(g_map, 'rightclick', function(mouse_event) {	
+		var click_latlng = mouse_event.latLng;
+		callpy('paths.get_pathgridsquare', click_latlng, 
+			function(r_) {
+				var infowin = new google.maps.InfoWindow({content: r_, position: click_latlng});
+				infowin.open(g_map);
+			});
+	});
+}
+
+function show_pathgridsquares_draw_grid() {
 	var LATSTEP = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
 	  passthru('python -c "import paths; print paths.LATSTEP"'); ?>;
 	var LNGSTEP = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
