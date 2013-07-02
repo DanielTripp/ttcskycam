@@ -30,6 +30,7 @@ var SHOW_HISTORICAL_ON_LOAD = false;
 var HISTORICAL_TIME_DEFAULT = '2013-02-17 12:35';
 
 var SHOW_PATHS_TEXT = false;
+var SHOW_PATH_GRID_SQUARES = false;
 var SHOW_LOADING_URLS = false;
 var DISABLE_GEOLOCATION = true;
 
@@ -1099,7 +1100,9 @@ function init_everything_that_depends_on_map() {
 
 	add_invisible_route_lines();
 
-	//draw_pathgridsquares();
+	if(SHOW_PATH_GRID_SQUARES) {
+		draw_pathgridsquares();
+	}
 
 	add_delayed_event_listener(g_map, 'bounds_changed', refresh_streetlabels_allroutes, 500);
 
@@ -1375,9 +1378,14 @@ function showing_route_solo(froute_) {
 }
 
 function draw_pathgridsquares() {
-	// these constants copied from paths.py: 
-	var LATSTEP = 0.00899830010516, LNGSTEP = 0.0124379992616;
-	var LATREF = 43.62696696859263, LNGREF = -79.4579391022553;
+	var LATSTEP = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
+	  passthru('python -c "import paths; print paths.LATSTEP"'); ?>;
+	var LNGSTEP = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
+	  passthru('python -c "import paths; print paths.LNGSTEP"'); ?>;
+	var LATREF = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
+	  passthru('python -c "import paths; print paths.LATREF"'); ?>;
+	var LNGREF = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
+	  passthru('python -c "import paths; print paths.LNGREF"'); ?>;
 
 	var minlat = LATREF-30*LATSTEP, maxlat = LATREF+60*LATSTEP;
 	var minlng = LNGREF-40*LNGSTEP, maxlng = LNGREF+60*LNGSTEP;
@@ -1509,10 +1517,12 @@ function get_data_for_selected_routes() {
 }
 
 function get_paths_from_server() {
-	callpy('paths.get_paths_by_latlngs', g_trip_orig_marker.getPosition(), g_trip_dest_marker.getPosition(), 
+	var orig = g_trip_orig_marker.getPosition(), dest = g_trip_dest_marker.getPosition();
+	callpy('paths.get_paths_by_latlngs', orig, dest, 
 		function(r_) {
 			if(SHOW_PATHS_TEXT) {
-				set_contents('p_paths_text', toJsonString(r_));
+				set_contents('p_paths_text', sprintf('%.5f, %.5f -> %.5f, %.5f&nbsp;&nbsp;&nbsp;&nbsp;%s', 
+					orig.lat(), orig.lng(), dest.lat(), dest.lng(), toJsonString(r_)));
 			}
 			g_main_path = r_[0];
 			g_extra_path_froutendirs = r_[1];
