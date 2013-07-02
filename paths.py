@@ -470,6 +470,7 @@ class PathGridSquare(object):
 		r.hires_quadrant = self.hires_quadrant
 		return r
 
+# This returns the same kind of 2-element list as find_paths_by_pathgridsquare(). 
 def get_paths_by_latlngs(orig_latlng_, dest_latlng_):
 	assert isinstance(orig_latlng_, geom.LatLng) and isinstance(dest_latlng_, geom.LatLng)
 	orig_square = PathGridSquare(orig_latlng_)
@@ -488,6 +489,13 @@ def get_paths_by_latlngs(orig_latlng_, dest_latlng_):
 def get_paths_use_near_algo(orig_square_, dest_square_):
 	return (orig_square_ == dest_square_) or orig_square_.is_adjacent(dest_square_)
 
+# Note that this doesn't return paths, it returns a two-element list: 
+# element 0: a list of (fudgeroute, direction) pairs that indicate the shortest route between orig and est.  
+#   These are in the order that a transit rider would have to take them to get from orig to dest. 
+# element 1: a list of (fudgeroute, direction) pairs that include all likely possible transit routes (and directions) 
+#   that one might take when going from orig to dest.  This will be a superset of element 0.  
+#   This list will not be in order of travel, but rather in decreasing order of likelihood of that route being involved in 
+#   a journey from orig to dest. 
 def find_paths_by_pathgridsquare(orig_pathgridsquare_, dest_pathgridsquare_, heading_=None):
 	assert isinstance(orig_pathgridsquare_, PathGridSquare) and isinstance(dest_pathgridsquare_, PathGridSquare)
 	if get_paths_use_near_algo(orig_pathgridsquare_, dest_pathgridsquare_):
