@@ -20,7 +20,7 @@
 		<script type="text/javascript" src="common.js"></script>
     <script type="text/javascript">
 
-var SHOW_INSTRUCTIONS = true;
+var DONT_SHOW_INSTRUCTIONS = false;
 var TEST_INVISIBLE = false;
 var DISABLE_OVERTIME = false;
 var SHOW_FRAMERATE = false;
@@ -1441,12 +1441,16 @@ function init_trip_markers() {
 
 	map_fit_bounds_to_trip_markers();
 
-	if(SHOW_INSTRUCTIONS) {
+	if(show_instructions()) {
 		g_instructions_orig_infowin = new google.maps.InfoWindow({content: 'Move this marker to where<br>you are starting from.', zIndex: 2});
 		g_instructions_orig_infowin.open(g_map, g_trip_orig_marker);
 		g_instructions_dest_infowin = new google.maps.InfoWindow({content: '... and this one to where<br>you want to go.', zIndex: 1});
 		g_instructions_dest_infowin.open(g_map, g_trip_dest_marker);
 	}
+}
+
+function show_instructions() {
+	return !DONT_SHOW_INSTRUCTIONS && g_browser_is_desktop;
 }
 
 function on_trip_orig_marker_moved() {
@@ -1458,7 +1462,7 @@ function on_trip_dest_marker_moved() {
 }
 
 function on_trip_marker_moved(orig_aot_dest_) {
-	if(SHOW_INSTRUCTIONS) {
+	if(show_instructions()) {
 		if(g_num_trip_marker_moves_so_far == 0) {
 			g_num_trip_marker_moves_so_far += 1;
 			g_instructions_orig_infowin.close();
