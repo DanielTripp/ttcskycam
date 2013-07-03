@@ -2075,7 +2075,7 @@ $(document).ready(initialize);
 				onclick="on_rendered_aot_arrow_vehicle_icons_button_clicked()" 
 																	 title="Use streetcar and bus icons" />
 			<label for="rendered_button" title="Use streetcar and bus icons"><img src="static-vehicle-rendered-for-legend.png"/></label>
-
+&nbsp;/
 			<input id="arrow_button" type="radio" name="vehicleicontype" value="arrow" 
 				onclick="on_rendered_aot_arrow_vehicle_icons_button_clicked()" 
 																title="Use arrow icons" />
