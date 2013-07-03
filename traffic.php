@@ -1154,7 +1154,9 @@ function map_fit_bounds_to_trip_markers() {
 	var sw = new google.maps.LatLng(Math.min(p1.lat(), p2.lat()), Math.min(p1.lng(), p2.lng()));
 	var ne = new google.maps.LatLng(Math.max(p1.lat(), p2.lat()), Math.max(p1.lng(), p2.lng()));
 	g_map.fitBounds(new google.maps.LatLngBounds(sw, ne));
-	g_map.setZoom(g_map.getZoom()-2);
+	if(g_browser_is_desktop) {
+		g_map.setZoom(g_map.getZoom()-2);
+	}
 }
 
 function refresh_streetlabels_allroutes() {
