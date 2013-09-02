@@ -668,34 +668,43 @@ def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, be_clever_, raw_vilist_for_hi
 	assert isinstance(vi1_, vinfo.VehicleInfo) and isinstance(vi2_, vinfo.VehicleInfo) and (vi1_.vehicle_id == vi2_.vehicle_id)
 	assert vi1_.time < vi2_.time
 	r = None
-	if be_clever_ and vi1_.dir_tag and vi2_.dir_tag:
-		if routes.CONFIGROUTE_TO_FUDGEROUTE[vi1_.route_tag] == routes.CONFIGROUTE_TO_FUDGEROUTE[vi2_.route_tag]:
-			config_route = vi1_.route_tag
-			if vi1_.mofr!=-1 and vi2_.mofr!=-1:
-				interp_mofr = geom.avg(vi1_.mofr, vi2_.mofr, ratio_)
-				dir_tag_int = vi2_.dir_tag_int
-				if dir_tag_int == None:
-					raise Exception('Could not determine dir_tag_int of %s' % (str(vi2_)))
-				r = routes.mofr_to_latlonnheading(config_route, interp_mofr, dir_tag_int) + (interp_mofr,)
-			elif vi1_.is_a_streetcar():
-				vi1_tracks_snap_result = tracks.snap(vi1_.latlng); vi2_tracks_snap_result = tracks.snap(vi2_.latlng)
-				if vi1_tracks_snap_result is not None and vi2_tracks_snap_result is not None:
-					simple_interped_loc = vi1_.latlng.avg(vi2_.latlng, ratio_)
-					interped_loc_snap_result = tracks.snap(simple_interped_loc, 5000)
-					if interped_loc_snap_result is not None:
-						tracks_based_heading = tracks.heading(interped_loc_snap_result[1], interped_loc_snap_result[2])
-						ref_heading = vi1_.latlng.heading(vi2_.latlng)
-						if vi1_.latlng.dist_m(vi2_.latlng) < 50 and (raw_vilist_for_hint_ is not None): # that 50 could probably be a lot less.
-							for vi in [vi for vi in raw_vilist_for_hint_ if vi.vehicle_id == vi2_.vehicle_id and vi.time < vi2_.time]:
-								if vi.latlng.dist_m(vi2_.latlng) > 50:
-									ref_heading = vi.latlng.heading(vi2_.latlng)
-									break
-						if geom.diff_headings(tracks_based_heading, ref_heading) > 90: # see note [1] above
-							tracks_based_heading = geom.normalize_heading(tracks_based_heading+180)
-						r = (interped_loc_snap_result[0], tracks_based_heading, None)
+	can_be_clever = vi1_.dir_tag and vi2_.dir_tag \
+			and (routes.CONFIGROUTE_TO_FUDGEROUTE[vi1_.route_tag] == routes.CONFIGROUTE_TO_FUDGEROUTE[vi2_.route_tag])
+	being_clever = be_clever_ and can_be_clever
+	if being_clever:
+		assert (vi1_.dir_tag_int == vi2_.dir_tag_int)
+		config_route = vi1_.route_tag
+		if vi1_.mofr!=-1 and vi2_.mofr!=-1:
+			interp_mofr = geom.avg(vi1_.mofr, vi2_.mofr, ratio_)
+			dir_tag_int = vi2_.dir_tag_int
+			if dir_tag_int == None:
+				raise Exception('Could not determine dir_tag_int of %s' % (str(vi2_)))
+			r = routes.mofr_to_latlonnheading(config_route, interp_mofr, dir_tag_int) + (interp_mofr,)
+		elif vi1_.is_a_streetcar():
+			vi1_tracks_snap_result = tracks.snap(vi1_.latlng); vi2_tracks_snap_result = tracks.snap(vi2_.latlng)
+			if vi1_tracks_snap_result is not None and vi2_tracks_snap_result is not None:
+				simple_interped_loc = vi1_.latlng.avg(vi2_.latlng, ratio_)
+				interped_loc_snap_result = tracks.snap(simple_interped_loc, 5000)
+				if interped_loc_snap_result is not None:
+					tracks_based_heading = tracks.heading(interped_loc_snap_result[1], interped_loc_snap_result[2])
+					ref_heading = vi1_.latlng.heading(vi2_.latlng)
+					if vi1_.latlng.dist_m(vi2_.latlng) < 50 and (raw_vilist_for_hint_ is not None): # that 50 could probably be a lot less.
+						for vi in [vi for vi in raw_vilist_for_hint_ if vi.vehicle_id == vi2_.vehicle_id and vi.time < vi2_.time]:
+							if vi.latlng.dist_m(vi2_.latlng) > 50:
+								ref_heading = vi.latlng.heading(vi2_.latlng)
+								break
+					if geom.diff_headings(tracks_based_heading, ref_heading) > 90: # see note [1] above
+						tracks_based_heading = geom.normalize_heading(tracks_based_heading+180)
+					r = (interped_loc_snap_result[0], tracks_based_heading, None)
 
 	if r is None:
-		r = (vi1_.latlng.avg(vi2_.latlng, ratio_), vi1_.latlng.heading(vi2_.latlng), None)
+		vi1_latlng = vi1_.latlng; vi2_latlng = vi2_.latlng
+		if being_clever:
+			if vi1_.mofr!=-1:
+				vi1_latlng = routes.mofr_to_latlon(vi1_.route_tag, vi1_.mofr, vi1_.dir_tag_int)
+			if vi2_.mofr!=-1:
+				vi2_latlng = routes.mofr_to_latlon(vi2_.route_tag, vi2_.mofr, vi2_.dir_tag_int)
+		r = (vi1_latlng.avg(vi2_latlng, ratio_), vi1_latlng.heading(vi2_latlng), None)
 	return r
 
 def massage_to_list(time_to_vis_, start_time_, end_time_, log_=False):
