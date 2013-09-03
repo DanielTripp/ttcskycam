@@ -74,7 +74,6 @@ def get_traffics_impl(fudgeroute_name_, dir_, time_, window_minutes_=TIME_WINDOW
 		direction = dir_
 	else:
 		direction = routes.routeinfo(fudgeroute_name_).dir_from_latlngs(dir_[0], dir_[1])
-	print now_str(), '1'
 	mofr_to_avgspeedandweight = get_traffic_avgspeedsandweights(fudgeroute_name_, direction, time_, True, window_minutes_, log_=log_)
 	return [get_traffics_visuals(mofr_to_avgspeedandweight, fudgeroute_name_, direction), \
 			get_traffics__mofr2speed(mofr_to_avgspeedandweight)]
