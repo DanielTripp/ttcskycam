@@ -9,7 +9,10 @@
     </style>
 		<link type="text/css" href="css/ui-lightness/jquery-ui-1.8.17.custom.css" rel="stylesheet" />
     <script type="text/javascript"
-      src="http://maps.googleapis.com/maps/api/js?sensor=true">
+      src="http://maps.googleapis.com/maps/api/js?sensor=true&v=3">
+			<!-- ^^ using v3 stable b/c at one point the unstable release had our infowindows apearing too small, 
+			and with a vertical scroll bar.  Same as http://stackoverflow.com/questions/18271220/google-maps-info-window-is-smaller-since-last-night 
+			Hope that this issue goes away and that I can then go to a newer google maps version ('visual refresh' version I guess). --> 
     </script>
 		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
 		<script type="text/javascript" src="js/infobox_packed.js"></script>
@@ -1444,6 +1447,12 @@ function init_trip_markers() {
 	map_fit_bounds_to_trip_markers();
 
 	if(show_instructions()) {
+		if(true) { // TDR 
+			var testinfowin = new google.maps.InfoWindow({content: 'Move this marker to where<br>you are starting from.', zIndex: 2});
+			  testinfowin.setPosition(new google.maps.LatLng(43.6500121, -79.4253234));
+				  testinfowin.open(g_map);
+
+		}
 		g_instructions_orig_infowin = new google.maps.InfoWindow({content: 'Move this marker to where<br>you are starting from.', zIndex: 2});
 		g_instructions_orig_infowin.open(g_map, g_trip_orig_marker);
 		g_instructions_dest_infowin = new google.maps.InfoWindow({content: '... and this one to where<br>you want to go.', zIndex: 1});
