@@ -1447,12 +1447,6 @@ function init_trip_markers() {
 	map_fit_bounds_to_trip_markers();
 
 	if(show_instructions()) {
-		if(true) { // TDR 
-			var testinfowin = new google.maps.InfoWindow({content: 'Move this marker to where<br>you are starting from.', zIndex: 2});
-			  testinfowin.setPosition(new google.maps.LatLng(43.6500121, -79.4253234));
-				  testinfowin.open(g_map);
-
-		}
 		g_instructions_orig_infowin = new google.maps.InfoWindow({content: 'Move this marker to where<br>you are starting from.', zIndex: 2});
 		g_instructions_orig_infowin.open(g_map, g_trip_orig_marker);
 		g_instructions_dest_infowin = new google.maps.InfoWindow({content: '... and this one to where<br>you want to go.', zIndex: 1});
