@@ -104,6 +104,6 @@ if __name__ == '__main__':
 	poll_once(not get_opt(opts, 'dont-insert-into-db'))
 
 	if get_opt(opts, 'touch-flag-file-on-finish'):
-		touch('/tmp/ttc-poll-locations-finished-flag')
+		touch('/tmp/ttc-poll-locations-finished-flag_testdb')
 		
 
