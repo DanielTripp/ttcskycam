@@ -7,12 +7,7 @@ from xml.parsers.expat import ExpatError
 import db, vinfo, routes
 from misc import *
 
-try:
-	with open('POLL_LOCATIONS_ADDITIONAL_ROUTES') as fin:
-		ADDITIONAL_ROUTES = json.load(fin)
-except IOError:
-	ADDITIONAL_ROUTES = []
-ROUTES_TO_POLL = set(routes.CONFIGROUTES + ADDITIONAL_ROUTES)
+ROUTES_TO_POLL = set(routes.CONFIGROUTES)
 POLL_PERIOD_SECS = 60
 
 def get_data_from_web_as_str(route_, time_es_=0):
@@ -104,7 +99,7 @@ if __name__ == '__main__':
 		sys.exit('No arguments allowed.  Only options.')
 
 	if get_opt(opts, 'redirect-stdstreams-to-file'):
-		redirect_stdstreams_to_file('poll_locations_')
+		redirect_stdstreams_to_file('poll_locations_tempdb_') # TDR   change back   
 
 	poll_once(not get_opt(opts, 'dont-insert-into-db'))
 

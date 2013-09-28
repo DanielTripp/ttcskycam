@@ -2,24 +2,29 @@
 
 # Tables involved: 
 # 
-# create table ttc_vehicle_locations (vehicle_id varchar(100), route_tag varchar(100), dir_tag varchar(100), 
-#     lat double precision, lon double precision, secs_since_report integer, time_retrieved bigint, 
-#     predictable boolean, heading integer, time bigint, time_str varchar(100), rowid serial unique, mofr integer, widemofr integer);
-# create index ttc_vehicle_locations_idx on ttc_vehicle_locations (route_tag, time_retrieved desc);
-# create index ttc_vehicle_locations_idx2 on ttc_vehicle_locations (vehicle_id, time_retrieved desc);
-# 
-# create table predictions (fudgeroute VARCHAR(100), configroute VARCHAR(100), stoptag VARCHAR(100), 
-#     time_retrieved_str varchar(30), time_of_prediction_str varchar(30), dirtag VARCHAR(100), vehicle_id VARCHAR(100), 
-#     is_departure boolean, block VARCHAR(100), triptag VARCHAR(100), branch VARCHAR(100), affected_by_layover boolean, 
-#     is_schedule_based boolean, delayed boolean, time_retrieved bigint, time_of_prediction bigint, rowid serial unique);
-# create index predictions_idx on predictions (fudgeroute, stoptag, time_retrieved desc);
-#
-# create table reports (app_version varchar(20), report_type varchar(20), froute varchar(100), direction integer, 
-#     time bigint, timestr varchar(30), time_inserted_str varchar(30), report_json text);
-# create index reports_idx on reports (app_version, report_type, froute, direction, time desc) ;
-# These two indexes are for my personal browsing of the database - not for the code's needs.  
-# create index reports_idx_2 on reports ( time desc) ;  # This one probably isn't used much. 
-# create index reports_idx_3 on reports ( time desc, time_inserted_str desc ) ;
+'''
+
+create table ttc_vehicle_locations (vehicle_id varchar(100), fudgeroute varchar(20), route_tag varchar(10), dir_tag varchar(100), 
+     lat double precision, lon double precision, secs_since_report integer, time_retrieved bigint, 
+     predictable boolean, heading integer, time bigint, time_str varchar(100), rowid serial unique, mofr integer, widemofr integer);
+create index ttc_vehicle_locations_idx on ttc_vehicle_locations (fudgeroute, time_retrieved desc);
+create index ttc_vehicle_locations_idx2 on ttc_vehicle_locations (vehicle_id, time_retrieved desc);
+create index ttc_vehicle_locations_idx3 on ttc_vehicle_locations  (time_retrieved) ; 
+
+create table predictions (fudgeroute VARCHAR(100), configroute VARCHAR(100), stoptag VARCHAR(100), 
+     time_retrieved_str varchar(30), time_of_prediction_str varchar(30), dirtag VARCHAR(100), vehicle_id VARCHAR(100), 
+     is_departure boolean, block VARCHAR(100), triptag VARCHAR(100), branch VARCHAR(100), affected_by_layover boolean, 
+     is_schedule_based boolean, delayed boolean, time_retrieved bigint, time_of_prediction bigint, rowid serial unique);
+create index predictions_idx on predictions (fudgeroute, stoptag, time_retrieved desc);
+create index predictions_idx2 on predictions ( time_retrieved );
+
+create table reports (app_version varchar(20), report_type varchar(20), froute varchar(100), direction integer, 
+     time bigint, timestr varchar(30), time_inserted_str varchar(30), report_json text);
+create index reports_idx on reports (app_version, report_type, froute, direction, time desc) ;
+create index reports_idx_3 on reports ( time desc, time_inserted_str desc ) ;
+# The last index above is for my personal browsing of the database - not for the code's needs: 
+
+'''
 
 import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket, datetime, calendar, math
 from collections import defaultdict, Sequence
@@ -28,7 +33,7 @@ from misc import *
 
 HOSTMONIKER_TO_IP = {'theorem': '72.2.4.176', 'black': '24.52.231.206', 'u': 'localhost'}
 
-VI_COLS = ' dir_tag, heading, vehicle_id, lat, lon, predictable, route_tag, secs_since_report, time_retrieved, time, mofr, widemofr '
+VI_COLS = ' dir_tag, heading, vehicle_id, lat, lon, predictable, fudgeroute, route_tag, secs_since_report, time_retrieved, time, mofr, widemofr '
 
 PREDICTION_COLS = ' fudgeroute, configroute, stoptag, time_retrieved, time_of_prediction, vehicle_id, is_departure, block, dirtag, triptag, branch, affected_by_layover, is_schedule_based, delayed'
 
@@ -43,7 +48,7 @@ def force_host(hostmoniker_):
 
 def connect():
 	global g_conn
-	DATABASE_CONNECT_POSITIONAL_ARGS = ("dbname='postgres' user='postgres' host='%s' password='doingthis'" % (get_host()),)
+	DATABASE_CONNECT_POSITIONAL_ARGS = ("dbname='postgres2' user='postgres' host='%s' password='doingthis'" % (get_host()),)
 	DATABASE_CONNECT_KEYWORD_ARGS = {}
 	DATABASE_DRIVER_MODULE_NAME = 'psycopg2'
 	USE_DB_DRIVER_IN_CURRENT_DIRECTORY = socket.gethostname().endswith('theorem.ca')
@@ -115,22 +120,23 @@ def insert_vehicle_info(vi_):
 		mofr = vi_.mofr; widemofr = vi_.widemofr
 	else:
 		mofr = None; widemofr = None
-	cols = [vi_.vehicle_id, vi_.route_tag, vi_.dir_tag, vi_.lat, vi_.lng, vi_.secs_since_report, vi_.time_retrieved, \
+	cols = [vi_.vehicle_id, vi_.fudgeroute, vi_.route_tag, vi_.dir_tag, vi_.lat, vi_.lng, vi_.secs_since_report, vi_.time_retrieved, \
 		vi_.predictable, vi_.heading, vi_.time, em_to_str(vi_.time), mofr, widemofr]
-	curs.execute('INSERT INTO ttc_vehicle_locations VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,default,%s,%s)', cols)
+	curs.execute('INSERT INTO ttc_vehicle_locations VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,default,%s,%s)', cols)
 	curs.close()
 
-def vi_select_generator(configroute_, end_time_em_, start_time_em_, dir_=None, include_unpredictables_=False, vid_=None, \
+def vi_select_generator(froute_, end_time_em_, start_time_em_, dir_=None, include_unpredictables_=False, vid_=None, \
 			forward_in_time_order_=False):
+	assert froute_ in routes.NON_SUBWAY_FUDGEROUTES
 	curs = (conn().cursor('cursor_%d' % (int(time.time()*1000))) if start_time_em_ == 0 else conn().cursor())
 	dir_clause = ('and dir_tag like \'%%%%\\\\_%s\\\\_%%%%\' ' % (str(dir_)) if dir_ != None else ' ')
-	sql = 'select '+VI_COLS+' from ttc_vehicle_locations where route_tag = %s '\
+	sql = 'select '+VI_COLS+' from ttc_vehicle_locations where fudgeroute = %s '\
 		+('' if include_unpredictables_ else ' and predictable = true ') \
 		+' and time <= %s and time >= %s and time_retrieved <= %s and time_retrieved >= %s '\
 		+(' and vehicle_id = %s ' if vid_ else '') \
 		+ dir_clause \
 		+(' order by time' if forward_in_time_order_ else ' order by time desc')
-	curs.execute(sql, [configroute_, end_time_em_, start_time_em_, end_time_em_, start_time_em_-1000*60] + ([vid_] if vid_ else []))
+	curs.execute(sql, [froute_, end_time_em_, start_time_em_, end_time_em_, start_time_em_-1000*60] + ([vid_] if vid_ else []))
 	while True:
 		row = curs.fetchone()
 		if not row:
@@ -196,11 +202,10 @@ def get_vid_to_vis_singledir(fudge_route_, dir_, num_minutes_, end_time_em_, log
 def get_vid_to_vis_bothdirs(fudge_route_, num_minutes_, end_time_em_, log_=False):
 	start_time = end_time_em_ - num_minutes_*60*1000
 	vi_list = []
-	for configroute in routes.fudgeroute_to_configroutes(fudge_route_):
-		vis = list(vi_select_generator(configroute, end_time_em_, start_time-2*MIN_DESIRABLE_DIR_STRETCH_LEN*60*1000, None, True))
-		# We want to get a lot of overshots, because we need a lot of samples in order to determine directions with any certainty.
-		vis += get_outside_overshots(vis, start_time, False, MIN_DESIRABLE_DIR_STRETCH_LEN-1, log_=log_)
-		vi_list += vis
+	vis = list(vi_select_generator(fudge_route_, end_time_em_, start_time-2*MIN_DESIRABLE_DIR_STRETCH_LEN*60*1000, None, True))
+	# We want to get a lot of overshots, because we need a lot of samples in order to determine directions with any certainty.
+	vis += get_outside_overshots(vis, start_time, False, MIN_DESIRABLE_DIR_STRETCH_LEN-1, log_=log_)
+	vi_list += vis
 	# TODO: maybe get outside overshots /forward/ here too, for the benefit of historical traffic reports.
 	vid_to_vis = file_under_key(vi_list, lambda vi: vi.vehicle_id)
 	for vis in vid_to_vis.values():
@@ -308,10 +313,10 @@ def fix_dirtag_str(dir_tag_, dir_, route_tag_):
 	else:
 		raise Exception('Don\'t know how to fix dir_tag "%s"' % dir_tag_)
 
-def find_passing(croute_, vid_, start_time_, end_time_, post_, dir_):
-	assert isinstance(croute_, str) and isinstance(vid_, basestring) and isinstance(post_, geom.LatLng)
+def find_passing(froute_, vid_, start_time_, end_time_, post_, dir_):
+	assert isinstance(froute_, str) and isinstance(vid_, basestring) and isinstance(post_, geom.LatLng)
 	lastvi = None
-	gen = vi_select_generator(croute_, end_time_, start_time_, dir_=dir_, include_unpredictables_=True, vid_=vid_, forward_in_time_order_=True)
+	gen = vi_select_generator(froute_, end_time_, start_time_, dir_=dir_, include_unpredictables_=True, vid_=vid_, forward_in_time_order_=True)
 	for curvi in gen:
 		if lastvi and geom.passes(curvi.latlng, lastvi.latlng, post_, tolerance_=1) \
 				and lastvi.mofr != -1 and curvi.mofr != -1 and mofrs_to_dir(lastvi.mofr, curvi.mofr) == dir_:
@@ -389,7 +394,7 @@ def massage_whereclause_dir_args(whereclause_):
 
 def massage_whereclause_route_args(whereclause_):
 	r = whereclause_
-	r = re.sub(r'route += +(\w+)', 'route_tag = \'\\1\'', r)
+	r = re.sub(r'route += +(\w+)', 'fudgeroute = \'\\1\'', r)
 	return r
 
 def massage_whereclause_vid_args(whereclause_):
@@ -499,6 +504,7 @@ def get_outside_overshots(vilist_, time_window_boundary_, forward_in_time_, n_=1
 	for vid in set([vi.vehicle_id for vi in vilist_]):
 		vis_for_vid = [vi for vi in vilist_ if vi.vehicle_id == vid]
 		assert all(vi1.time >= vi2.time for vi1, vi2 in hopscotch(vis_for_vid)) # i.e. is in reverse order 
+		assert len(set(vi.fudgeroute for vi in vis_for_vid)) == 1
 
 		num_overshots_already_present = num_outside_overshots_already_present(vis_for_vid, time_window_boundary_, forward_in_time_)
 		if num_overshots_already_present >= n_:
@@ -507,13 +513,13 @@ def get_outside_overshots(vilist_, time_window_boundary_, forward_in_time_, n_=1
 			num_more_overshots_to_get = n_ - num_overshots_already_present
 			vid_extreme_time = vis_for_vid[0 if forward_in_time_ else -1].time
 			if log_: printerr('Looking for %s overshots for vid %s.  Time to beat is %s.' % (forward_str, vid, em_to_str(vid_extreme_time)))
-			routes = [vi.route_tag for vi in vilist_]
 			sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations ' \
-				+ ' where vehicle_id = %s ' + ' and route_tag in ('+(','.join(['%s']*len(routes)))+')' + ' and time_retrieved <= %s and time_retrieved >= %s '\
+				+ ' where vehicle_id = %s and fudgeroute = %s and time_retrieved <= %s and time_retrieved >= %s '\
 				+ ' order by time '+('' if forward_in_time_ else 'desc')+' limit %s'
 			curs = conn().cursor()
 			query_times = [time_window_boundary_+20*60*1000, vid_extreme_time] if forward_in_time_ else [vid_extreme_time, time_window_boundary_-20*60*1000]
-			args = [vid] + routes + query_times + [num_more_overshots_to_get]
+			froute = vis_for_vid[0].fudgeroute
+			args = [vid, froute] + query_times + [num_more_overshots_to_get]
 			curs.execute(sqlstr, args)
 			for row in curs:
 				vi = vinfo.VehicleInfo.from_db(*row)
@@ -537,6 +543,7 @@ def num_outside_overshots_already_present(single_vid_vis_, time_window_boundary_
 # direction of a long-stalled vehicle.
 def get_outside_overshots_more(vis_so_far_, time_window_boundary_, forward_in_time_, log_=False):
 	assert len(set(vi.vehicle_id for vi in vis_so_far_)) <= 1
+	assert len(set(vi.fudgeroute for vi in vis_so_far_)) <= 1
 	r = []
 	more_vis = []
 	if not forward_in_time_ and len(vis_so_far_) > 0:
@@ -544,11 +551,11 @@ def get_outside_overshots_more(vis_so_far_, time_window_boundary_, forward_in_ti
 		r_mofr_min = min(vi.mofr for vi in vis_so_far_); r_mofr_max = max(vi.mofr for vi in vis_so_far_)
 		if (r_mofr_max != -1) and (r_mofr_max - r_mofr_min < 50): # 50 metres = small, typical GPS errors.
 			curs = conn().cursor()
-			routes = [vi.route_tag for vi in vis_so_far_]
 			sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations '\
-					 + ' where vehicle_id = %s ' + ' and route_tag in ('+(','.join(['%s']*len(routes)))+')' + ' and time_retrieved <= %s and time_retrieved >= %s '\
+					 + ' where vehicle_id = %s and fudgeroute = %s and time_retrieved <= %s and time_retrieved >= %s '\
 					 + ' order by time '+('' if forward_in_time_ else 'desc')+' limit %s'
-			curs.execute(sqlstr, [vid] + routes + [vis_so_far_[-1].time, time_window_boundary_-6*60*60*1000] + [999999])
+			froute = vis_so_far_[0].fudgeroute
+			curs.execute(sqlstr, [vid, froute, vis_so_far_[-1].time, time_window_boundary_-6*60*60*1000, 999999])
 			for row in curs:
 				vi = vinfo.VehicleInfo.from_db(*row)
 				more_vis.append(vi)
@@ -600,20 +607,20 @@ def interp_by_time(vilist_, be_clever_, current_conditions_, dir_=None, start_ti
 			i_vi = None
 			if lo_vi and hi_vi:
 				if (min(interptime - lo_vi.time, hi_vi.time - interptime) > 3*60*1000) or dirs_disagree(dir_, hi_vi.dir_tag_int)\
-						or dirs_disagree(lo_vi.dir_tag_int, dir_) or (lo_vi.route_tag != hi_vi.route_tag):
+						or dirs_disagree(lo_vi.dir_tag_int, dir_) or (lo_vi.fudgeroute != hi_vi.fudgeroute):
 					continue
 				ratio = (interptime - lo_vi.time)/float(hi_vi.time - lo_vi.time)
 				i_latlon, i_heading, i_mofr = interp_latlonnheadingnmofr(lo_vi, hi_vi, ratio, be_clever_, vilist_)
 				i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, i_heading, vid, i_latlon.lat, i_latlon.lng,
 										 lo_vi.predictable and hi_vi.predictable,
-										 lo_vi.route_tag, 0, interptime, interptime, i_mofr, None)
+										 lo_vi.fudgeroute, lo_vi.route_tag, 0, interptime, interptime, i_mofr, None)
 			elif lo_vi and not hi_vi:
 				if current_conditions_:
 					if (interptime - lo_vi.time > 3*60*1000) or dirs_disagree(dir_, lo_vi.dir_tag_int):
 						continue
 					latlng, heading = get_latlonnheadingnmofr_from_lo_sample(lolo_vi, lo_vi, be_clever_, vilist_)[:2]
 					i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, heading, vid, latlng.lat, latlng.lng,
-							lo_vi.predictable, lo_vi.route_tag, 0, interptime, interptime, lo_vi.mofr, lo_vi.widemofr)
+							lo_vi.predictable, lo_vi.fudgeroute, lo_vi.route_tag, 0, interptime, interptime, lo_vi.mofr, lo_vi.widemofr)
 
 			if i_vi:
 				interped_timeslice.append(i_vi)
@@ -668,18 +675,17 @@ def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, be_clever_, raw_vilist_for_hi
 	assert isinstance(vi1_, vinfo.VehicleInfo) and isinstance(vi2_, vinfo.VehicleInfo) and (vi1_.vehicle_id == vi2_.vehicle_id)
 	assert vi1_.time < vi2_.time
 	r = None
-	can_be_clever = vi1_.dir_tag and vi2_.dir_tag \
-			and (routes.CONFIGROUTE_TO_FUDGEROUTE[vi1_.route_tag] == routes.CONFIGROUTE_TO_FUDGEROUTE[vi2_.route_tag])
+	can_be_clever = vi1_.dir_tag and vi2_.dir_tag and (vi1_.fudgeroute == vi2_.fudgeroute)
 	being_clever = be_clever_ and can_be_clever
 	if being_clever:
 		assert (vi1_.dir_tag_int == vi2_.dir_tag_int)
-		config_route = vi1_.route_tag
+		froute = vi1_.fudgeroute
 		if vi1_.mofr!=-1 and vi2_.mofr!=-1:
 			interp_mofr = geom.avg(vi1_.mofr, vi2_.mofr, ratio_)
 			dir_tag_int = vi2_.dir_tag_int
 			if dir_tag_int == None:
 				raise Exception('Could not determine dir_tag_int of %s' % (str(vi2_)))
-			r = routes.mofr_to_latlonnheading(config_route, interp_mofr, dir_tag_int) + (interp_mofr,)
+			r = routes.mofr_to_latlonnheading(froute, interp_mofr, dir_tag_int) + (interp_mofr,)
 		elif vi1_.is_a_streetcar():
 			vi1_tracks_snap_result = tracks.snap(vi1_.latlng); vi2_tracks_snap_result = tracks.snap(vi2_.latlng)
 			if vi1_tracks_snap_result is not None and vi2_tracks_snap_result is not None:
@@ -701,9 +707,9 @@ def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, be_clever_, raw_vilist_for_hi
 		vi1_latlng = vi1_.latlng; vi2_latlng = vi2_.latlng
 		if being_clever:
 			if vi1_.mofr!=-1:
-				vi1_latlng = routes.mofr_to_latlon(vi1_.route_tag, vi1_.mofr, vi1_.dir_tag_int)
+				vi1_latlng = routes.mofr_to_latlon(vi1_.fudgeroute, vi1_.mofr, vi1_.dir_tag_int)
 			if vi2_.mofr!=-1:
-				vi2_latlng = routes.mofr_to_latlon(vi2_.route_tag, vi2_.mofr, vi2_.dir_tag_int)
+				vi2_latlng = routes.mofr_to_latlon(vi2_.fudgeroute, vi2_.mofr, vi2_.dir_tag_int)
 		r = (vi1_latlng.avg(vi2_latlng, ratio_), vi1_latlng.heading(vi2_latlng), None)
 	return r
 
@@ -784,11 +790,11 @@ def get_nearest_time_vis(vilist_, vid_, t_):
 
 # returns a list of 2-tuples - (fore VehicleInfo, stand VehicleInfo)
 # list probably has max_ elements.
-def get_recent_passing_vehicles(route_, post_, max_, end_time_em_=now_em(), dir_=None, include_unpredictables_=False):
+def get_recent_passing_vehicles(froute_, post_, max_, end_time_em_=now_em(), dir_=None, include_unpredictables_=False):
 	vid_to_lastvi = {}
 	n = 0
 	r = []
-	for curvi in vi_select_generator((route_,), end_time_em_, 0, dir_, include_unpredictables_):
+	for curvi in vi_select_generator(froute_, end_time_em_, 0, dir_, include_unpredictables_):
 		if len(r) >= max_:
 			break
 		vid = curvi.vehicle_id
@@ -815,7 +821,7 @@ def purge_delete(num_days_):
 	curs = conn().cursor()
 	# Delete all rows older than X days: 
 	num_millis = 1000*60*60*24*num_days_
-	curs.execute('delete from ttc_vehicle_locations where time < round(extract(epoch from clock_timestamp())*1000) - %d;' % num_millis)
+	curs.execute('delete from ttc_vehicle_locations where time_retrieved < round(extract(epoch from clock_timestamp())*1000) - %d;' % num_millis)
 	curs.execute('delete from predictions where time_retrieved < round(extract(epoch from clock_timestamp())*1000) - %d;' % num_millis)
 	curs.execute('delete from reports where time < round(extract(epoch from clock_timestamp())*1000) - %d;' % num_millis)
 	curs.close()
@@ -901,20 +907,6 @@ def get_predictions_group_gen(froute_, start_stoptag_, dest_stoptag_, time_retri
 		sort_predictions()
 		yield predictions
 
-def t():
-	#curs = conn().cursor('cursor_%d' % (int(time.time()*1000)))
-	curs = conn().cursor()
-	sql = "select * from ttc_vehicle_locations where route_tag = '505' and time <= 1330492156395 and time >= 1330491481877 and dir_tag like '%%%%\\_0\\_%%%%' and predictable = true order by time desc"
-	curs.execute(sql, [])
-	while True:
-		row = curs.fetchone()
-		if not row:
-			break
-		#print row[0]
-
-def routes_clause(froute_):
-	return 'route_tag in ('+(','.join(["'%s'" % croute for croute in routes.FUDGEROUTE_TO_CONFIGROUTES[froute_]]))+')'
-
 # Scenario - waiting at startmofr_ at time_ for the next vehicle to come.
 # Return map containing keys 'time_caught', 'time_arrived', and 'vid'.
 # Times are absolute epoch times in millis, not a relative time spent travelling.
@@ -970,8 +962,8 @@ def _get_observed_arrival_time_caught_vehicle_passing_vis(froute_, startstoptag_
 	direction = mofrs_to_dir(startmofr, destmofr)
 	curs = conn().cursor()
 	try:
-		curs.execute('select '+VI_COLS+' from ttc_vehicle_locations where '+routes_clause(froute_)+' and time >= %s and time < %s order by time',
-					 [time_ - 1000*60*5, time_ + 1000*60*60])
+		curs.execute('select '+VI_COLS+' from ttc_vehicle_locations where fudgeroute = %s and time >= %s and time < %s order by time',
+					 [froute_, time_ - 1000*60*5, time_ + 1000*60*60])
 		candidate_vid_to_lastvi = {}
 		for row in curs:
 			curvi = vinfo.VehicleInfo.from_db(*row)

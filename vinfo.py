@@ -10,26 +10,41 @@ class VehicleInfo:
 	
 	@classmethod 
 	def from_xml_elem(cls_, elem_):
+		croute = str(elem_.getAttribute('routeTag'))
+		lat = float(elem_.getAttribute('lat'))
+		lng = float(elem_.getAttribute('lon'))
+		froutes = routes.CONFIGROUTE_TO_FUDGEROUTES[croute]
+		if len(froutes) == 0:
+			froute = ''
+		elif len(froutes) == 1:
+			froute = froutes[0]
+		else:
+			for froute_candidate in froutes:
+				if routes.latlon_to_mofr(froute_candidate, geom.LatLng(lat, lng)) != -1:
+					froute = froute_candidate
+					break
+			else:
+				froute = froutes[0]
 		r = cls_(\
 			str(elem_.getAttribute('dirTag')),
 			int(elem_.getAttribute('heading')),
 			str(elem_.getAttribute('id')),
-			float(elem_.getAttribute('lat')), float(elem_.getAttribute('lon')),
+			lat, lng, 
 			(True if elem_.getAttribute('predictable').lower() == 'true' else False),
-			str(elem_.getAttribute('routeTag')),
+			froute, croute, 
 			int(elem_.getAttribute('secsSinceReport')),  
 			0L, 0L, None, None)
 		return r
 
 	@classmethod
-	def from_db(cls_, dir_tag_, heading_, vehicle_id_, lat_, lon_, predictable_, route_tag_, secs_since_report_, time_retrieved_, time_,\
-			mofr_, widemofr_):
-		r = cls_(dir_tag_, heading_, vehicle_id_, lat_, lon_, predictable_, route_tag_, secs_since_report_, time_retrieved_, time_,
+	def from_db(cls_, dir_tag_, heading_, vehicle_id_, lat_, lon_, predictable_, fudgeroute_, route_tag_, secs_since_report_, \
+			time_retrieved_, time_, mofr_, widemofr_):
+		r = cls_(dir_tag_, heading_, vehicle_id_, lat_, lon_, predictable_, fudgeroute_, route_tag_, secs_since_report_, time_retrieved_, time_,
 				 (None if DONT_USE_WRITTEN_MOFRS else mofr_), (None if DONT_USE_WRITTEN_MOFRS else widemofr_))
 		return r
 
-	def __init__(self, dir_tag_, heading_, vehicle_id_, lat_, lon_, predictable_, route_tag_, secs_since_report_, time_retrieved_, time_, \
-				mofr_, widemofr_):
+	def __init__(self, dir_tag_, heading_, vehicle_id_, lat_, lon_, predictable_, fudgeroute_, route_tag_, secs_since_report_, \
+				time_retrieved_, time_, mofr_, widemofr_):
 		assert type(dir_tag_) == str and type(heading_) == int and type(vehicle_id_) == str \
 			and type(lat_) == float and type(lon_) == float \
 			and type(predictable_) == bool and type(route_tag_) == str \
@@ -39,6 +54,7 @@ class VehicleInfo:
 		self.vehicle_id = vehicle_id_
 		self.latlng = geom.LatLng(lat_, lon_)
 		self.predictable = predictable_
+		self.fudgeroute = fudgeroute_
 		self.route_tag = route_tag_
 		self.secs_since_report = secs_since_report_
 		self.time_retrieved = time_retrieved_
@@ -123,11 +139,6 @@ class VehicleInfo:
 				self._widemofr = routes.latlon_to_mofr(self.route_tag, self.latlng, tolerance_=2)
 			return self._widemofr
 
-	# Returns None if we don't seem to have one.
-	@property
-	def fudgeroute(self):
-		return routes.CONFIGROUTE_TO_FUDGEROUTE.get(self.route_tag)
-
 	@property
 	def dir_tag_int(self):
 		return get_dir_tag_int(self.dir_tag)
@@ -150,7 +161,7 @@ class VehicleInfo:
 		return r
 
 def make_vi(**kwargs):
-	r = VehicleInfo('', -4, '9999', 43.0, -79.0, True, '', 0, 0L, 0L,
+	r = VehicleInfo('', -4, '9999', 43.0, -79.0, True, '', '', 0, 0L, 0L,
 		None, None)
 	for key, val in kwargs.iteritems():
 		setattr(r, key, val)

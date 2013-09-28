@@ -19,19 +19,20 @@ from lru_cache import lru_cache
 # 		poll_locations.py. 
 # - Create GET_CURRENT_REPORTS_FROM_DB file in your sandbox. 
 
-FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301'], 'king': ['504'], 'spadina': ['510'], \
+FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301', '502', '503', '508'], 'king': ['504', '508', '503'], \
+'spadina': ['510'], \
 'bathurst': ['511', '310', '7'], 'dufferin': ['29', '329'], 'lansdowne': ['47'], 'ossington': ['63', '316'], 'carlton': ['506', '306'], \
 'dupont': ['26'], 'stclair': ['512', '312'], 'keele': ['41']}
 
-CONFIGROUTE_TO_FUDGEROUTE = {}
+CONFIGROUTE_TO_FUDGEROUTES = defaultdict(lambda: [])
 for fudgeroute, configroutes in FUDGEROUTE_TO_CONFIGROUTES.items():
 	for configroute in configroutes:
-		CONFIGROUTE_TO_FUDGEROUTE[configroute] = fudgeroute
+		CONFIGROUTE_TO_FUDGEROUTES[configroute].append(fudgeroute)
 
 SUBWAY_FUDGEROUTES = ['bloor_danforth', 'yonge_university_spadina']
 NON_SUBWAY_FUDGEROUTES = FUDGEROUTE_TO_CONFIGROUTES.keys()
 FUDGEROUTES = NON_SUBWAY_FUDGEROUTES + SUBWAY_FUDGEROUTES
-CONFIGROUTES = reduce(lambda x, y: x + y, FUDGEROUTE_TO_CONFIGROUTES.values(), [])
+CONFIGROUTES = set(reduce(lambda x, y: x + y, FUDGEROUTE_TO_CONFIGROUTES.values(), []))
 
 
 def is_subway(froute_):
