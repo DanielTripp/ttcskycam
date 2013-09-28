@@ -50,7 +50,7 @@ if __name__ == '__main__':
 			print prediction
 		start_time = prediction.time - 1000*60*15
 		end_time = prediction.time + 1000*60*30
-		vis = db.find_passing(prediction.croute, prediction.vehicle_id, start_time, end_time, stop.latlng, direction)
+		vis = db.find_passing(prediction.froute, prediction.vehicle_id, start_time, end_time, stop.latlng, direction)
 		if vis is None:
 			if PRINT:
 				print '---> Passing not found'

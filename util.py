@@ -45,7 +45,7 @@ def get_old_wrong_dirs(route_, start_time_, end_time_):
 		curs.execute(sql, [vid, route_, start_time_, end_time_])
 		vis = []
 		for row in curs:
-			vis.append(vinfo.VehicleInfo(*row))
+			vis.append(vinfo.VehicleInfo.from_db(*row))
 		curs.close()
 
 		wrong_dir_stretches = get_maximal_sublists2(vis, is_going_wrong_way)
@@ -67,7 +67,7 @@ def get_current_wrong_dirs_impl(start_time_ = now_em()-1000*60*30):
 			curs.execute(sql, [vid, configroute, start_time_, end_time])
 			vis = []
 			for row in curs:
-				vis.append(vinfo.VehicleInfo(*row))
+				vis.append(vinfo.VehicleInfo.from_db(*row))
 			curs.close()
 
 			num_recent_vis_to_scutinize = 5
