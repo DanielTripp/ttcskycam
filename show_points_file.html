@@ -147,7 +147,7 @@ function make_line(latlng_, i_) {
 	// (as of September 2013, anyway). 
 	var latlng2 = new google.maps.LatLng(latlng_.lat(), latlng_.lng()+0.0001);
 	var polyline = new google.maps.Polyline({map: g_map, strokeWeight: get_dot_size(), strokeOpacity: g_dot_opacity, 
-			path: [latlng_, latlng_]});
+			path: [latlng_, latlng2]});
 	var infowin = new google.maps.InfoWindow({position: polyline.getPath().getAt(0), disableAutoPan: true, 
 			content: sprintf('#%d - %.8f, %.8f', i_, latlng_.lat(), latlng_.lng())});
 	google.maps.event.addListener(polyline, 'mouseover', function() {
