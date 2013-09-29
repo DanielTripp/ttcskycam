@@ -8,7 +8,7 @@
       body { height: 70%; margin: 0; padding: 0 }
     </style>
     <script type="text/javascript"
-		      src="http://maps.googleapis.com/maps/api/js?sensor=false">
+		      src="http://maps.googleapis.com/maps/api/js?sensor=false&v=3">
 					    </script>
 		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
 		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
@@ -142,6 +142,10 @@ function draw_all_points() {
 }
 
 function make_line(latlng_, i_) {
+	// I don't know how to make a dot, other than make a short thick line.  
+	// Making a line with the start and end points exactly the same shows up as a dot in Firefox but nothing in Chrome 
+	// (as of September 2013, anyway). 
+	var latlng2 = new google.maps.LatLng(latlng_.lat(), latlng_.lng()+0.0001);
 	var polyline = new google.maps.Polyline({map: g_map, strokeWeight: get_dot_size(), strokeOpacity: g_dot_opacity, 
 			path: [latlng_, latlng_]});
 	var infowin = new google.maps.InfoWindow({position: polyline.getPath().getAt(0), disableAutoPan: true, 
