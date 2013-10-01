@@ -93,8 +93,16 @@ class VehicleInfo:
 		return long(self.time + ratio*(forevi_.time - self.time))
 
 	def __str__(self):
-		return '%s  r=%s, vid=%s, dir: %s%-12s, (%.8f,%.8f), h=%3d, mofr=%5d%s%5d%s' \
-			% (self.timestr, self.route_tag, self.vehicle_id, ('*' if self.is_dir_tag_corrected else ' '), self.dir_tag,
+		if self.fudgeroute in routes.SUBWAY_FUDGEROUTES:
+			assert False # Not a big deal for this function, but since when do we have vehicle locations for subways? 
+			routestr = self.fudgeroute
+		else:
+			routestr = '%3s%-3s' % (self.fudgeroute[:3], self.route_tag)
+			assert len(routestr) == 6 # Not that it's a big deal if it's greater than 6.  It's just that I would like to know, 
+				# and probably rewrite this function, to make sure that the values it returns are always the same length, 
+				# so that when I print out a list of them, every field lines up in the same columns. 
+		return '%s  r=%-6s, vid=%s, dir: %s%-12s, (%.8f,%.8f), h=%3d, mofr=%5d%s%5d%s' \
+			% (self.timestr, routestr, self.vehicle_id, ('*' if self.is_dir_tag_corrected else ' '), self.dir_tag,
 			   self.latlng.lat, self.latlng.lng, self.heading, self.mofr, ('!' if self.mofr!=self.widemofr else ' '), self.widemofr,
 			   ('' if self.predictable else ' UNPREDICTABLE'))
 
