@@ -20,13 +20,15 @@ var g_latlngs = new buckets.LinkedList();
 var g_markers = new buckets.LinkedList();
 var g_i = 0;
 var g_bounding_rect = null;
-var g_dot_opacity = 0.5;
+var g_opacity = 0.5;
+var g_polyline = null;
 
 function initialize() {
 
 	init_map();
 
-	google.maps.event.addListener(g_map, 'zoom_changed', redraw_objects);
+	google.maps.event.addListener(g_map, 'zoom_changed', on_zoom_changed);
+	on_zoom_changed();
 
   $('#filename_field').keydown(function (e){
       if(e.keyCode == 13) {
@@ -40,10 +42,14 @@ function initialize() {
 	}
 }
 
+function on_zoom_changed() {
+	set_contents('p_zoom', sprintf('zoom: %d', g_map.getZoom()));
+}
+
 function refresh_from_file() {
 	forget_drawn_objects();
 	get_latlngs_from_file();
-	draw_all_points();
+	draw_objects();
 }
 
 function get_latlngs_from_file() {
@@ -108,7 +114,7 @@ function cleanup_field(val_) {
 
 function redraw_objects() {
 	forget_drawn_objects();
-	draw_all_points();
+	draw_objects();
 }
 
 function forget_drawn_objects() {
@@ -122,15 +128,24 @@ function forget_drawn_objects() {
 		g_bounding_rect.setMap(null);
 		g_bounding_rect = null;
 	}
+
+	if(g_polyline!=null) {
+		g_polyline.setMap(null);
+		g_polyline = null;
+	}
 }
 
-function draw_all_points() {
+function draw_objects() {
 	var minlat=90, maxlat=0, minlng=0, maxlng=-180;
+
+	var draw_dots = is_selected('dots_checkbox');
 
 	var i=0;
 	g_latlngs.forEach(function(glatlng) {
 
-		make_marker(glatlng, i);
+		if(draw_dots) {
+			make_marker(glatlng, i);
+		}
 
 		minlat = Math.min(minlat, glatlng.lat());
 		maxlat = Math.max(maxlat, glatlng.lat());
@@ -144,11 +159,19 @@ function draw_all_points() {
 			new google.maps.LatLng(minlat, minlng), new google.maps.LatLng(maxlat, maxlng));
 	g_bounding_rect = new google.maps.Rectangle({bounds: rect_bounds, map: g_map, strokeColor: 'rgb(0,0,0)', 
 			strokeOpacity: 0.5, strokeWeight: 1, fillOpacity: 0, zIndex: -10});
+
+	if(is_selected('polyline_checkbox')) {
+		draw_polyline();
+	}
+}
+
+function draw_polyline() {
+	g_polyline = new google.maps.Polyline({path: g_latlngs.toArray(), strokeWeight: 0.75, strokeOpacity: g_opacity, map: g_map});
 }
 
 function make_marker(latlng_, i_) {
 	var marker = new google.maps.Marker({position: latlng_, map: g_map, 
-			icon: {path: google.maps.SymbolPath.CIRCLE, scale: 14, strokeWeight : 0, fillOpacity: g_dot_opacity, fillColor: 'black'}
+			icon: {path: google.maps.SymbolPath.CIRCLE, scale: 14, strokeWeight : 0, fillOpacity: g_opacity, fillColor: 'black'}
 		});
 	//marker = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.6494532, -79.4314174),
 	//marker = new google.maps.Marker({map: g_map, position: latlng_ });
@@ -164,12 +187,12 @@ function make_marker(latlng_, i_) {
 }
 
 function on_opacity_down_clicked() {
-	g_dot_opacity = Math.max(g_dot_opacity-0.1, 0.0);
+	g_opacity = Math.max(g_opacity-0.1, 0.0);
 	redraw_objects();
 }
 
 function on_opacity_up_clicked() {
-	g_dot_opacity = Math.min(g_dot_opacity+0.1, 1.0);
+	g_opacity = Math.min(g_opacity+0.1, 1.0);
 	redraw_objects();
 }
 
@@ -184,6 +207,8 @@ function on_opacity_up_clicked() {
 		<input type="text" size="130" name="filename_field" id="filename_field" />
 		<input type="button" onclick="on_opacity_down_clicked()" value="Opacity DOWN" />
 		<input type="button" onclick="on_opacity_up_clicked()" value="Opacity UP" />
-		<p id="p1"/>
+		<label for="dots_checkbox">Dots:</label><input checked="checked" type="checkbox" id="dots_checkbox" name="dots_checkbox" onclick="redraw_objects()"/>
+		<label for="polyline_checkbox">Polyline:</label><input type="checkbox" id="polyline_checkbox" name="polyline_checkbox" onclick="redraw_objects()"/>
+		<p id="p_zoom"/>
   </body>
 </html>

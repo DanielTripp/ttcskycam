@@ -9,12 +9,12 @@ with open('MOFR_STEP') as f:
 
 TIME_WINDOW_MINUTES = 30
 
-def get_recent_vehicle_locations(fudgeroute_, dir_, time_, last_returned_timestr_, log_=False):
+def get_recent_vehicle_locations(fudgeroute_, dir_, zoom_, time_, last_returned_timestr_, log_=False):
 	assert (fudgeroute_ in routes.NON_SUBWAY_FUDGEROUTES)
 	time_ = massage_time_arg(time_, 60*1000)
 	r_timestr = em_to_str_ymdhms(time_)
 	if r_timestr != last_returned_timestr_:
-		r_data = get_recent_vehicle_locations_impl(fudgeroute_, dir_, time_, log_)
+		r_data = get_recent_vehicle_locations_impl(fudgeroute_, dir_, zoom_, time_, log_)
 	else:
 		r_data = None
 	return (r_timestr, r_data)
@@ -22,9 +22,9 @@ def get_recent_vehicle_locations(fudgeroute_, dir_, time_, last_returned_timestr
 # Import to mc.decorate after the massage of time arg because that will usually be 0 (meaning now) 
 # when it comes from the client. 
 @mc.decorate
-def get_recent_vehicle_locations_impl(fudgeroute_, dir_, time_, log_=False):
+def get_recent_vehicle_locations_impl(fudgeroute_, dir_, zoom_, time_, log_=False):
 	assert (time_!=0)
-	return db.get_recent_vehicle_locations(fudgeroute_, TIME_WINDOW_MINUTES, dir_, time_window_end_=time_, log_=log_)
+	return db.get_recent_vehicle_locations(fudgeroute_, TIME_WINDOW_MINUTES, dir_, zoom_, time_window_end_=time_, log_=log_)
 
 # returns: key: vid.  value: list of list of VehicleInfo
 # second list - these are 'stretches' of increasing (or decreasing) mofr.  Doing it this way so that if the database gives us a
@@ -33,7 +33,7 @@ def get_recent_vehicle_locations_impl(fudgeroute_, dir_, time_, log_=False):
 # handle that.
 # The above case is in my opinion only moderately important to handle.  Our traffic-determinging interpolating code needs monotonic
 # vis like this, but we could get them another way eg. removing the earlier stretch, because it's probably not very crucial
-# to the result anyway.  But the more important case to handle is a buggy GPS or mofr case where a vehicle only appears to doubles back
+# to the result anyway.  But the more important case to handle is a buggy GPS or mofr case where a vehicle only appears to double back
 # (even a little bit) and thus appears to be going in a different direction for a while.  I wouldn't want a case like that to result in
 # the discarding of the more important stretch, and I don't want to write code that makes a judgement call about how many metres or
 # for how many readings should a vehicle have to go in an opposite direction before we believe that it is really going in that direction.
@@ -57,25 +57,25 @@ def between(bound1_, value_, bound2_):
 # 
 # returns elem 0: visuals list - [[timestamp, vi dict, vi dict, ...], ...] 
 #         elem 1: speed map - {mofr1: {'kmph': kmph, 'weight': weight}, ...}
-def get_traffics(fudgeroute_name_, dir_, time_, last_returned_timestr_, window_minutes_=TIME_WINDOW_MINUTES, log_=False):
+def get_traffics(fudgeroute_name_, dir_, zoom_, time_, last_returned_timestr_, window_minutes_=TIME_WINDOW_MINUTES, log_=False):
 	assert (fudgeroute_name_ in routes.NON_SUBWAY_FUDGEROUTES) and isinstance(window_minutes_, int) and (1 <= window_minutes_ < 120)
 	time_ = massage_time_arg(time_, 60*1000)
 	r_timestr = em_to_str_ymdhms(time_)
 	if r_timestr != last_returned_timestr_:
-		r_data = get_traffics_impl(fudgeroute_name_, dir_, time_, window_minutes_, log_)
+		r_data = get_traffics_impl(fudgeroute_name_, dir_, zoom_, time_, window_minutes_, log_)
 	else:
 		r_data = None
 	return (r_timestr, r_data)
 
 @mc.decorate
-def get_traffics_impl(fudgeroute_name_, dir_, time_, window_minutes_=TIME_WINDOW_MINUTES, log_=False):
+def get_traffics_impl(fudgeroute_name_, dir_, zoom_, time_, window_minutes_=TIME_WINDOW_MINUTES, log_=False):
 	assert dir_ in (0, 1) or (len(dir_) == 2 and all(isinstance(e, geom.LatLng) for e in dir_)) and (time_!=0)
 	if dir_ in (0, 1):
 		direction = dir_
 	else:
 		direction = routes.routeinfo(fudgeroute_name_).dir_from_latlngs(dir_[0], dir_[1])
 	mofr_to_avgspeedandweight = get_traffic_avgspeedsandweights(fudgeroute_name_, direction, time_, True, window_minutes_, log_=log_)
-	return [get_traffics_visuals(mofr_to_avgspeedandweight, fudgeroute_name_, direction), \
+	return [get_traffics_visuals(mofr_to_avgspeedandweight, fudgeroute_name_, direction, zoom_), \
 			get_traffics__mofr2speed(mofr_to_avgspeedandweight)]
 
 def get_traffics__mofr2speed(mofr_to_avgspeedandweight_):
@@ -87,10 +87,10 @@ def get_traffics__mofr2speed(mofr_to_avgspeedandweight_):
 			r[mofr] = None
 	return r
 
-def get_traffics_visuals(mofr_to_avgspeedandweight_, fudgeroute_name_, dir_):
+def get_traffics_visuals(mofr_to_avgspeedandweight_, fudgeroute_name_, dir_, zoom_):
 	r = []
 	routept1_mofr = 0
-	for routept1, routept2 in hopscotch(routes.routeinfo(fudgeroute_name_).routepts(dir_)):
+	for routept1, routept2 in hopscotch(routes.routeinfo(fudgeroute_name_).routepts(dir_, routes.zoom_to_rsdt(zoom_))):
 		route_seg_len = routept1.dist_m(routept2)
 		routept2_mofr = routept1_mofr + route_seg_len
 		routept1_mofr_ref = round(routept1_mofr, MOFR_STEP); routept2_mofr_ref = round(routept2_mofr, MOFR_STEP)
@@ -118,6 +118,7 @@ def get_mofr_to_kmph_impl(froute_, dir_, current_, time_, window_minutes_, log_=
 			r[mofr] = None
 	return r
 
+@mc.decorate
 def get_traffic_avgspeedsandweights(fudgeroute_name_, dir_, time_, current_, window_minutes_, log_=False):
 	r = {}
 	mofr_to_rawtraffics = get_traffic_rawspeeds(fudgeroute_name_, dir_, time_, window_minutes_, log_=log_)

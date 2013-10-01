@@ -116,6 +116,10 @@ var g_use_rendered_aot_arrow_vehicle_icons = g_browser_is_desktop;
 
 var HEADING_ROUNDING_DEGREES = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
 	readfile('HEADING_ROUNDING'); ?>;
+var MIN_ZOOM_INCLUSIVE = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
+	readfile('MIN_ZOOM_INCLUSIVE'); ?>;
+var MAX_ZOOM_INCLUSIVE = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
+	readfile('MAX_ZOOM_INCLUSIVE'); ?>;
 var REFRESH_INTERVAL_MS = 10*1000;
 var MOVING_VEHICLES_OVERTIME_FLASH_INTERVAL_MS = 500;
 var MOVING_VEHICLES_ANIM_INTERVAL_MS = 100;
@@ -141,9 +145,9 @@ function init_dev_option_values() {
 				$line_splits = preg_split("/[\s]+/", $line, 2);
 				$varname = $line_splits[0];
 				echo $varname, ";\n"; // This is to make sure that the variable name in the .txt file has already been declared in 
-					// this html files.  A line of javascript of the form "VARNAME;" will do nothing, but it will cause an show-stoping 
+					// this html files.  A line of javascript of the form "VARNAME;" will do nothing, but it will cause an show-stopping 
 					// error in the javascript interpreter (a ReferenceError I believe) if that variable hasn't been defined already.  
-					// We want only variables that have already been defined in this .html file to be defined in the .txt, so this 
+					// We want only variables that have already been defined in this php file to be defined in the .txt, so this 
 					// is how we do it. 
 				echo $line, "\n"; // <-- This is the more important part - setting the overridden value. 
 			}
@@ -210,7 +214,7 @@ function refresh_traffic_from_server(fudgeroute_) {
 	var dir_to_request = data.dir;
 	if(!data.traffic_request_pending) {
 		data.traffic_request_pending = true;
-		callpy('reports.get_traffic_report', fudgeroute_, dir_to_request, get_datetime_from_gui(), data.traffic_last_returned_timestr, 
+		callpy('reports.get_traffic_report', fudgeroute_, dir_to_request, g_map.getZoom(), get_datetime_from_gui(), data.traffic_last_returned_timestr, 
 			{success: function(r_) {
 				var data = g_fudgeroute_data.get(fudgeroute_);
 				if(data == undefined || data.dir != dir_to_request) {
@@ -249,7 +253,7 @@ function refresh_vehicles_from_server(fudgeroute_) {
 	var dir_to_request = data.dir;
 	if(!data.vehicles_request_pending) {
 		data.vehicles_request_pending = true;
-		callpy('reports.get_locations_report', fudgeroute_, dir_to_request, get_datetime_from_gui(), data.locations_last_returned_timestr, 
+		callpy('reports.get_locations_report', fudgeroute_, dir_to_request, g_map.getZoom(), get_datetime_from_gui(), data.locations_last_returned_timestr, 
 			{success: function(r_) {
 				var data = g_fudgeroute_data.get(fudgeroute_);
 				if(data == undefined || data.dir != dir_to_request) {
@@ -1087,9 +1091,15 @@ function init_javascript_array_functions_old_browser_fallbacks() {
 
 function init_everything_that_depends_on_map() {
 	google.maps.event.addListener(g_map, 'zoom_changed', function() {
-		//set_contents('p_zoom', ""+(g_map.getZoom()));
-		remake_traffic_lines_allroutes();
-		remake_all_vehicle_markers();
+		set_contents('p_zoom', ""+(g_map.getZoom())); // TDR comment again 
+		if(g_map.getZoom() < MIN_ZOOM_INCLUSIVE) {
+			g_map.setZoom(MIN_ZOOM_INCLUSIVE);
+		} else if(g_map.getZoom() > MAX_ZOOM_INCLUSIVE) {
+			g_map.setZoom(MAX_ZOOM_INCLUSIVE);
+		} else {
+			remake_traffic_lines_allroutes();
+			remake_all_vehicle_markers();
+		}
 	});
 
 	g_play_timer = setTimeout('moving_vehicles_timer_func()', 0);
@@ -2045,7 +2055,7 @@ $(document).ready(initialize);
 			</div>
 		</div>
 		<div>
-			<!-- <p id="p_zoom"/> -->
+			 <p id="p_zoom"/>   <!-- TDR  comment again -->
 			<p id="p_paths_text"/>
 			<p id="p_loading_urls"/>
 			<div id="div_framerate">

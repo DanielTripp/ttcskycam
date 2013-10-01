@@ -85,19 +85,6 @@ class LineSegAddr(object):
 	def __repr__(self):
 		return self.__str__()
 
-class LineSeg(object):
-
-	def __init__(self, start_, end_):
-		assert isinstance(start_, geom.LatLng) and isinstance(end_, geom.LatLng)
-		self.start = start_
-		self.end = end_
-
-	def __str__(self):
-		return '[%s -> %s]' % (self.start, self.end)
-
-	def __repr__(self):
-		return self.__str__()
-
 # This can be pickled i.e. memcached. 
 class SnapToGridCache(object):
 
@@ -121,7 +108,7 @@ class SnapToGridCache(object):
 
 	def get_lineseg(self, linesegaddr_):
 		polyline = self.polylines[linesegaddr_.polylineidx]
-		return LineSeg(polyline[linesegaddr_.startptidx], polyline[linesegaddr_.startptidx+1])
+		return geom.LineSeg(polyline[linesegaddr_.startptidx], polyline[linesegaddr_.startptidx+1])
 
 	def get_point(self, linesegaddr_):
 		return self.polylines[linesegaddr_.polylineidx][linesegaddr_.startptidx]
@@ -151,7 +138,7 @@ class SnapToGridCache(object):
 		best_yet_snapresult = None; best_yet_linesegaddr = None
 		for linesegaddr in self._snap_get_endgame_linesegaddrs(target_gridsquare, endgame_search_radius):
 			lineseg = self.get_lineseg(linesegaddr)
-			cur_snapresult = snap_to_line(target_, lineseg)
+			cur_snapresult = target_.snap_to_lineseg(lineseg)
 			if best_yet_snapresult==None or cur_snapresult[2]<best_yet_snapresult[2]:
 				best_yet_snapresult = cur_snapresult
 				best_yet_linesegaddr = linesegaddr
@@ -175,8 +162,8 @@ class SnapToGridCache(object):
 		return r
 
 	def _snap_get_endgame_search_radius(self, a_nearby_lineseg_, target_gridsquare_):
-		assert isinstance(a_nearby_lineseg_, LineSeg) and isinstance(target_gridsquare_, GridSquare)
-		r = max(snap_result[2] for snap_result in [snap_to_line(latlng, a_nearby_lineseg_) for latlng in target_gridsquare_.corner_latlngs()])
+		assert isinstance(a_nearby_lineseg_, geom.LineSeg) and isinstance(target_gridsquare_, GridSquare)
+		r = max(snap_result[2] for snap_result in [latlng.snap_to_lineseg(a_nearby_lineseg_) for latlng in target_gridsquare_.corner_latlngs()])
 		return int(r)
 
 	def heading(self, linesegaddr_, referencing_lineseg_aot_point_):
@@ -237,22 +224,6 @@ def steps_satisfy_searchradius(target_, searchradius_):
 	if ref_gridsquare.latlng().dist_m(GridSquare((ref_gridsquare.gridlat, ref_gridsquare.gridlng+1)).latlng()) < searchradius_:
 		return False
 	return True
-
-# returns a tuple - (snapped point, 0|1|None, dist)
-# elem 1 - 0 if the first point of the line is the snapped-to point, 1 if the second, None if neither.
-def snap_to_line(target_, lineseg_):
-	assert isinstance(target_, geom.LatLng) and isinstance(lineseg_, LineSeg)
-	ang1 = geom.angle(lineseg_.end, lineseg_.start, target_)
-	ang2 = geom.angle(lineseg_.start, lineseg_.end, target_)
-	if (ang1 < math.pi/2) and (ang2 < math.pi/2):
-		snappedpt = geom.get_pass_point(lineseg_.start, lineseg_.end, target_)
-		return (snappedpt, None, snappedpt.dist_m(target_))
-	else:
-		dist0 = target_.dist_m(lineseg_.start); dist1 = target_.dist_m(lineseg_.end)
-		if dist0 < dist1:
-			return (lineseg_.start, 0, dist0)
-		else:
-			return (lineseg_.end, 1, dist1)
 
 # A list of line segments.  Line segments points are geom.LatLng.
 def get_display_grid(southwest_latlng_, northeast_latlng_):
