@@ -47,8 +47,6 @@ def zoom_to_rsdt(zoom_):
 		return 20
 	elif zoom_ in (14, 15):
 		return 5
-	elif zoom_ == 16:
-		return 3
 	else:
 		return 1
 
