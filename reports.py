@@ -20,69 +20,70 @@ else:
 # The returned JSON is a list containing three things - [0] time string of data, [1] the data, and [2] direction returned. 
 # if the dir_ arg is 0 or 1 then [2] will be the same as the dir_  arg, 
 # but if the dir_ arg is a latlng pair then [2] wil be more informative. 
-def get_report(report_type_, froute_, dir_, time_, last_gotten_timestr_, log_=False):
+def get_report(report_type_, froute_, dir_, zoom_, time_, last_gotten_timestr_, log_=False):
 	assert report_type_ in ('traffic', 'locations')
 	assert isinstance(froute_, basestring) and (time_ == 0 or abs(str_to_em(time_) - now_em()) < 1000*60*60*24*365*10)
 	assert (dir_ in (0, 1)) or (len(dir_) == 2 and all(isinstance(e, geom.LatLng) for e in dir_))
 	assert (last_gotten_timestr_ is None) or isinstance(last_gotten_timestr_, basestring)
+	assert zoom_ in c.VALID_ZOOMS 
 	if dir_ in (0, 1):
 		direction = dir_
 	else:
 		direction = routes.routeinfo(froute_).dir_from_latlngs(dir_[0], dir_[1])
 	if time_ == 0:
-		return get_current_report(report_type_, froute_, direction, last_gotten_timestr_, log_=log_)
+		return get_current_report(report_type_, froute_, direction, zoom_, last_gotten_timestr_, log_=log_)
 	else:
-		return get_historical_report(report_type_, froute_, direction, str_to_em(time_), log_=log_)
+		return get_historical_report(report_type_, froute_, direction, zoom_, str_to_em(time_), log_=log_)
 
-def get_historical_report(report_type_, froute_, dir_, time_, log_=False):
+def get_historical_report(report_type_, froute_, dir_, zoom_, time_, log_=False):
 	assert isinstance(time_, long)
 	if DISALLOW_HISTORICAL_REPORTS:
 		raise Exception('Historical reports are disallowed.')
 	time_arg = round_down_by_minute(time_)
-	return calc_report(report_type_, froute_, dir_, time_arg)
+	return calc_report(report_type_, froute_, dir_, zoom_, time_arg)
 
-def get_current_report(report_type_, froute_, dir_, last_gotten_timestr_, log_=False):
+def get_current_report(report_type_, froute_, dir_, zoom_, last_gotten_timestr_, log_=False):
 	if GET_CURRENT_REPORTS_FROM_DB:
-		return get_current_report_from_db(report_type_, froute_, dir_, last_gotten_timestr_, log_=log_)
+		return get_current_report_from_db(report_type_, froute_, dir_, zoom_, last_gotten_timestr_, log_=log_)
 	else:
-		return calc_current_report(report_type_, froute_, dir_, last_gotten_timestr_)
+		return calc_current_report(report_type_, froute_, dir_, zoom_, last_gotten_timestr_)
 
-def calc_current_report(report_type_, froute_, dir_, last_gotten_timestr_):
+def calc_current_report(report_type_, froute_, dir_, zoom_, last_gotten_timestr_):
 	time_arg = round_down_by_minute(now_em())
 	if (last_gotten_timestr_ is not None) and (str_to_em(last_gotten_timestr_) == time_arg):
 		return util.to_json_str((em_to_str(time_arg), None, dir_))
 	else:
-		return calc_report(report_type_, froute_, dir_, time_arg)
+		return calc_report(report_type_, froute_, dir_, zoom_, time_arg)
 
-def calc_report(report_type_, froute_, dir_, time_):
+def calc_report(report_type_, froute_, dir_, zoom_, time_):
 	assert isinstance(time_, long) and (time_ != 0)
 	if report_type_ == 'traffic':
-		report_data_obj = traffic.get_traffics_impl(froute_, dir_, time_)
+		report_data_obj = traffic.get_traffics_impl(froute_, dir_, zoom_, time_)
 	elif report_type_ == 'locations':
-		report_data_obj = traffic.get_recent_vehicle_locations_impl(froute_, dir_, time_)
+		report_data_obj = traffic.get_recent_vehicle_locations_impl(froute_, dir_, zoom_, time_)
 	else:
 		assert False
 	return util.to_json_str((em_to_str(time_), report_data_obj, dir_))
 
-def get_current_report_from_db(report_type_, froute_, dir_, last_gotten_timestr_, log_=False):
+def get_current_report_from_db(report_type_, froute_, dir_, zoom_, last_gotten_timestr_, log_=False):
 	last_gotten_time = (None if last_gotten_timestr_ is None else str_to_em(last_gotten_timestr_))
 	now_epoch_millis = now_em()
 	cur_time_rounded_up = round_up_by_minute(now_epoch_millis)
 	if cur_time_rounded_up == last_gotten_time:
 		return (last_gotten_timestr_, None, dir_)
 	else:
-		latest_report_time = db.get_latest_report_time(report_type_, froute_, dir_)
+		latest_report_time = db.get_latest_report_time(report_type_, froute_, dir_, zoom_)
 		if latest_report_time == last_gotten_time:
 			return (last_gotten_timestr_, None, dir_)
 		else:
-			report_json = db.get_report(report_type_, froute_, dir_, latest_report_time)
+			report_json = db.get_report(report_type_, froute_, dir_, zoom_, latest_report_time)
 			return '[%s, %s, %d]' % (json.dumps(em_to_str(latest_report_time)), report_json, dir_)
 
-def get_traffic_report(froute_, dir_, time_, last_gotten_timestr_, log_=False):
-	return get_report('traffic', froute_, dir_, time_, last_gotten_timestr_, log_=log_)
+def get_traffic_report(froute_, dir_, zoom_, time_, last_gotten_timestr_, log_=False):
+	return get_report('traffic', froute_, dir_, zoom_, time_, last_gotten_timestr_, log_=log_)
 
-def get_locations_report(froute_, dir_, time_, last_gotten_timestr_, log_=False):
-	return get_report('locations', froute_, dir_, time_, last_gotten_timestr_, log_=log_)
+def get_locations_report(froute_, dir_, zoom_, time_, last_gotten_timestr_, log_=False):
+	return get_report('locations', froute_, dir_, zoom_, time_, last_gotten_timestr_, log_=log_)
 
 
 
@@ -129,10 +130,11 @@ def make_all_reports_and_insert_into_db_once():
 	report_time = round_up_by_minute(now_em())
 	for froute in sorted(FROUTES):
 		for direction in (0, 1):
-			traffic_data = traffic.get_traffics_impl(froute, direction, report_time)
-			db.insert_report('traffic', froute, direction, report_time, traffic_data)
-			locations_data = traffic.get_recent_vehicle_locations_impl(froute, direction, report_time)
-			db.insert_report('locations', froute, direction, report_time, locations_data)
+			for zoom in c.VALID_ZOOMS:
+				traffic_data = traffic.get_traffics_impl(froute, direction, zoom, report_time)
+				db.insert_report('traffic', froute, direction, zoom, report_time, traffic_data)
+				locations_data = traffic.get_recent_vehicle_locations_impl(froute, direction, zoom, report_time)
+				db.insert_report('locations', froute, direction, zoom, report_time, locations_data)
 
 def make_all_reports_and_insert_into_db_forever():
 	while True:

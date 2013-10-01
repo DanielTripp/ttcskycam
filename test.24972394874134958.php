@@ -20,13 +20,21 @@
 
 function initialize() {
 
-	//init_map();
+	init_map();
 
-	var l1 = [1, 2], l2 = [3, 4];
-	l1 = [];
-	var l = l1.slice(10, 100);
-	alert(l);
-	alert(l.length);
+
+var marker = new google.maps.Marker({
+    position: new google.maps.LatLng( 43.6507574, -79.4138221),
+		    icon: {
+				        path: google.maps.SymbolPath.CIRCLE,
+								        scale: 14, 
+												strokeWeight : 0, 
+												fillOpacity: 0.5, 
+												fillColor: 'black'
+												    },
+														    draggable: true,
+																    map: g_map
+																		});
 
 }
 

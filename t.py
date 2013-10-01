@@ -7,5 +7,14 @@ import traffic, db, vinfo, routes, geom, mc, tracks, util, predictions, paths, c
 
 if __name__ == '__main__':
 
-	pass 
+	#pprint.pprint(traffic.get_traffics_impl('dundas', 0, c.VALID_ZOOMS[-1], str_to_em('2013-09-28 17:00')))
+
+	for froute in routes.NON_SUBWAY_FUDGEROUTES:
+		for direction in (0, 1):
+			for zoom in c.VALID_ZOOMS[:5]:
+				print froute, direction, zoom 
+				reports.get_locations_report(froute, direction, zoom, '2013-09-28 17:00', None)
+				reports.get_traffic_report(froute, direction, zoom, '2013-09-28 17:00', None)
+
+
 

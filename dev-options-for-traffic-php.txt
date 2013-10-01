@@ -8,6 +8,6 @@ SHOW_PATH_GRID_SQUARES = false;
 SHOW_LOADING_URLS = false;
 DISABLE_GEOLOCATION = true;
 
-HARDCODE_DISPLAY_SET = false;
-HARDCODED_DISPLAY_SET = [['king', 0]];
+HARDCODE_DISPLAY_SET = true;
+HARDCODED_DISPLAY_SET = [['lansdowne', 0] , ['queen', 0] , ['keele', 0] , ['ossington', 0] , ['carlton', 0] , ['king', 0] , ['spadina', 0] , ['stclair', 0] , ['dupont', 0] , ['dundas', 0] , ['bathurst', 0] , ['dufferin', 0] ];
 SHOW_FRAMERATE = false;

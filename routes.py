@@ -34,10 +34,25 @@ NON_SUBWAY_FUDGEROUTES = FUDGEROUTE_TO_CONFIGROUTES.keys()
 FUDGEROUTES = NON_SUBWAY_FUDGEROUTES + SUBWAY_FUDGEROUTES
 CONFIGROUTES = set(reduce(lambda x, y: x + y, FUDGEROUTE_TO_CONFIGROUTES.values(), []))
 
-
 def is_subway(froute_):
 	assert froute_ in FUDGEROUTES
 	return froute_ in SUBWAY_FUDGEROUTES
+
+# rsdt = route-simplifying distance tolerance (and it's in metres).  
+def zoom_to_rsdt(zoom_):
+	assert zoom_ in c.VALID_ZOOMS
+	if zoom_ <= 12:
+		return 60
+	elif zoom_ == 13:
+		return 20
+	elif zoom_ in (14, 15):
+		return 5
+	elif zoom_ == 16:
+		return 3
+	else:
+		return 1
+
+RSDTS = set(zoom_to_rsdt(zoom) for zoom in c.VALID_ZOOMS)
 
 class Schedule(object):
 
@@ -282,7 +297,7 @@ class RouteInfo:
 		self.init_stops()
 
 	def init_routepts(self):
-		def read(filename_):
+		def read_pts_file(filename_):
 			with open(filename_) as fin:
 				r = []
 				for raw_routept in json.load(fin):
@@ -291,29 +306,61 @@ class RouteInfo:
 
 		routepts_both_dirs_filename = 'fudge_route_%s.json' % (self.name)
 		if os.path.exists(routepts_both_dirs_filename):
-			routepts = [read(routepts_both_dirs_filename)]
+			routepts = [read_pts_file(routepts_both_dirs_filename)]
 			self.is_split_by_dir = False
 		else:
-			routepts = [read('fudge_route_%s_dir0.json' % (self.name)), read('fudge_route_%s_dir1.json' % (self.name))]
+			routepts = [read_pts_file('fudge_route_%s_dir0.json' % (self.name)), read_pts_file('fudge_route_%s_dir1.json' % (self.name))]
 			self.is_split_by_dir = True
 		self.snaptogridcache = snaptogrid.SnapToGridCache(routepts)
-		self.routeptaddr_to_mofr = [[], []]
-		for dir in (0, 1):
-			if dir == 1 and not self.is_split_by_dir:
-				self.routeptaddr_to_mofr[1] = self.routeptaddr_to_mofr[0]
-			else:
-				for i in range(len(self.routepts(dir))):
-					if i==0:
-						self.routeptaddr_to_mofr[dir].append(0)
-					else:
-						prevpt = self.routepts(dir)[i-1]; curpt = self.routepts(dir)[i]
-						self.routeptaddr_to_mofr[dir].append(self.routeptaddr_to_mofr[dir][i-1] + prevpt.dist_m(curpt))
-			assert len(self.routeptaddr_to_mofr[dir]) == len(self.routepts(dir))
+		self.init_rsdt_to_dir_maps()
 		if self.is_split_by_dir:
 			len_dir_0 = geom.dist_m_polyline(self.routepts(0)); len_dir_1 = geom.dist_m_polyline(self.routepts(1))
 			if abs(len_dir_0 - len_dir_1) > 0.1:
 				printerr('route %s: dir 0 length: %0.2f.  dir 1 length: %0.2f.' % (self.name, len_dir_0, len_dir_1))
 				assert False
+
+	def init_rsdt_to_dir_maps(self):
+		self.rsdt_to_dir_to_routepts = {}
+		self.rsdt_to_dir_to_routeptaddr_to_mofr = {}
+
+		self.rsdt_to_dir_to_routepts[0] = {}
+		if self.is_split_by_dir:
+			self.rsdt_to_dir_to_routepts[0][0] = self.snaptogridcache.polylines[0]
+			self.rsdt_to_dir_to_routepts[0][1] = self.snaptogridcache.polylines[1]
+		else:
+			self.rsdt_to_dir_to_routepts[0][0] = self.rsdt_to_dir_to_routepts[0][1] = self.snaptogridcache.polylines[0]
+		self.rsdt_to_dir_to_routeptaddr_to_mofr[0] = self.calc_dir_to_routeptaddr_to_mofr(0)
+
+		for rsdt in RSDTS:
+			dir_to_routepts = self.rsdt_to_dir_to_routepts[rsdt] = {}
+			for direction in (0, 1):
+				if direction == 1 and not self.is_split_by_dir:
+					dir_to_routepts[1] = dir_to_routepts[0]
+				else:
+					dir_to_routepts[direction] = self.calc_simplified_routepts(direction, rsdt)
+			self.rsdt_to_dir_to_routeptaddr_to_mofr[rsdt] = self.calc_dir_to_routeptaddr_to_mofr(rsdt)
+
+	def calc_dir_to_routeptaddr_to_mofr(self, rsdt_):
+		dir_to_routeptaddr_to_mofr = [[], []]
+		for direction in (0, 1):
+			if direction == 1 and not self.is_split_by_dir:
+				dir_to_routeptaddr_to_mofr[1] = dir_to_routeptaddr_to_mofr[0]
+			else:
+				routeptaddr_to_mofr = dir_to_routeptaddr_to_mofr[direction]
+				routepts = self.routepts(direction, rsdt_)
+				if rsdt_ == 0: # got to be careful w.r.t. bootstrapping.  can't use latlon_to_mofr for this one b/c it uses this very structure. 
+					for i in range(len(routepts)):
+						if i==0:
+							routeptaddr_to_mofr.append(0)
+						else:
+							prevpt = routepts[i-1]; curpt = routepts[i]
+							routeptaddr_to_mofr.append(routeptaddr_to_mofr[i-1] + prevpt.dist_m(curpt))
+				else:
+					for routept in routepts:
+						routeptaddr_to_mofr.append(self.latlon_to_mofr(routept, tolerance_=2))
+				assert all(mofr1 < mofr2 for mofr1, mofr2 in hopscotch(routeptaddr_to_mofr))
+			assert len(routeptaddr_to_mofr) == len(routepts)
+		return dir_to_routeptaddr_to_mofr
 
 	def init_stops(self):
 		self.init_stops_dir_to_stoptag_to_stop()
@@ -391,13 +438,17 @@ class RouteInfo:
 	@lru_cache(5000)
 	def latlon_to_mofr(self, post_, tolerance_=0):
 		assert isinstance(post_, geom.LatLng) and (tolerance_ in (0, 1, 1.5, 2))
+		# Please make sure that this continues to support something greater than the greatest possible rsdt 
+		# (route-simplifying distance tolerance), 
+		# and that the code that builds the routeptidx -> mofr map for each rsdt, and presumably calls this function, 
+		# uses tolerance argument to this function that is higher than the greatest rsdt. 
 		snap_result = self.snaptogridcache.snap(post_, {0:50, 1:300, 1.5:600, 2:2000}[tolerance_])
 		if snap_result is None:
 			return -1
-		dir = snap_result[1].polylineidx; routeptidx = snap_result[1].startptidx
-		r = self.routeptaddr_to_mofr[dir][routeptidx]
+		direction = snap_result[1].polylineidx; routeptidx = snap_result[1].startptidx
+		r = self.rsdt_to_dir_to_routeptaddr_to_mofr[0][direction][routeptidx]
 		if snap_result[2]:
-			r += snap_result[0].dist_m(self.routepts(dir)[routeptidx])
+			r += snap_result[0].dist_m(self.routepts(direction, 0)[routeptidx])
 		r = int(r)
 		#g_latlon_to_mofr_mrucache[mrucache_key] = r
 		return r
@@ -411,28 +462,39 @@ class RouteInfo:
 		return (snapped_pt, mofr, resnapped_pts)
 
 	def max_mofr(self):
-		return int(math.ceil(self.routeptaddr_to_mofr[0][-1]))
+		return int(math.ceil(self.rsdt_to_dir_to_routeptaddr_to_mofr[0][0][-1]))
 
-	def mofr_to_latlon(self, mofr_, dir_):
+	def mofr_to_latlon(self, mofr_, dir_, rsdt_=0):
 		r = self.mofr_to_latlonnheading(mofr_, dir_)
 		return (r[0] if r != None else None)
 
-	def mofr_to_heading(self, mofr_, dir_):
+	def mofr_to_heading(self, mofr_, dir_, rsdt_=0):
 		r = self.mofr_to_latlonnheading(mofr_, dir_)
 		return (r[1] if r != None else None)
 
 	@lru_cache(5000)
-	def mofr_to_latlonnheading(self, mofr_, dir_):
+	def mofr_to_latlonnheading(self, mofr_, dir_, rsdt_=0):
 		assert dir_ in (0, 1)
 		if mofr_ < 0:
 			return None
-		for i in range(1, len(self.routeptaddr_to_mofr[dir_])):
-			if self.routeptaddr_to_mofr[dir_][i] >= mofr_:
-				prevpt = self.routepts(dir_)[i-1]; curpt = self.routepts(dir_)[i]
-				prevmofr = self.routeptaddr_to_mofr[dir_][i-1]; curmofr = self.routeptaddr_to_mofr[dir_][i]
+		routeptaddr_to_mofr = self.rsdt_to_dir_to_routeptaddr_to_mofr[rsdt_][dir_]
+		for i in range(1, len(routeptaddr_to_mofr)):
+			if routeptaddr_to_mofr[i] >= mofr_:
+				prevpt = self.routepts(dir_, rsdt_)[i-1]; curpt = self.routepts(dir_, rsdt_)[i]
+				prevmofr = routeptaddr_to_mofr[i-1]; curmofr = routeptaddr_to_mofr[i]
 				pt = curpt.subtract(prevpt).scale((mofr_-prevmofr)/float(curmofr-prevmofr)).add(prevpt)
 				return (pt, prevpt.heading(curpt) if dir_==0 else curpt.heading(prevpt))
 		return None
+
+	# For rsdt = 0 only. 
+	def mofr_to_lorouteptaddr(self, mofr_, dir_):
+		assert dir_ in (0, 1)
+		if mofr_ < 0:
+			return -1
+		for i, mofr in enumerate(self.rsdt_to_dir_to_routeptaddr_to_mofr[0][dir_]):
+			if mofr > mofr_:
+				return i-1
+		return -1
 
 	def stoptag_to_mofr(self, dir_, stoptag_):
 		return self.dir_to_stoptag_to_stop[dir_][stoptag_].mofr
@@ -444,12 +506,61 @@ class RouteInfo:
 			startpt, endpt = endpt, startpt
 		return startpt.heading(endpt)
 
-	def routepts(self, dir_):
+	def routepts(self, dir_, rsdt_=0):
 		assert dir_ in (0, 1)
-		if self.is_split_by_dir:
-			return self.snaptogridcache.polylines[dir_]
-		else:
-			return self.snaptogridcache.polylines[0]
+		return self.rsdt_to_dir_to_routepts[rsdt_][dir_]
+
+	def calc_simplified_routepts(self, dir_, rsdt_):
+		assert rsdt_ != 0 and rsdt_ in RSDTS
+		mofr_incr = 20
+		r = []
+		prev_end_mofr = 0	
+		r.append(self.mofr_to_latlon(0, dir_))
+		while prev_end_mofr < self.max_mofr():
+			start_mofr = prev_end_mofr
+			for end_mofr in range(start_mofr+mofr_incr, self.max_mofr(), mofr_incr):
+				if self.does_simplified_lineseg_deviate_too_much(dir_, start_mofr, end_mofr, mofr_incr, rsdt_):
+					while True:
+						end_mofr -= 1
+						if not self.does_simplified_lineseg_deviate_too_much(dir_, start_mofr, end_mofr, mofr_incr, rsdt_):
+							break
+					r.append(self.mofr_to_latlon(end_mofr, dir_))
+					break
+			else:
+				r.append(self.mofr_to_latlon(self.max_mofr()-1, dir_))
+				break
+			prev_end_mofr = end_mofr
+		return r
+
+	def does_simplified_lineseg_deviate_too_much(self, dir_, lineseg_start_mofr_, lineseg_end_mofr_, mofr_incr_, rsdt_):
+		r = False
+		simplified_lineseg = geom.LineSeg(self.mofr_to_latlon(lineseg_start_mofr_, dir_), self.mofr_to_latlon(lineseg_end_mofr_, dir_))
+		# These routeptaddr are for rsdt = 0 i.e. the unsimplified route: 
+		start_routeptaddr = self.mofr_to_lorouteptaddr(lineseg_start_mofr_, dir_)
+		end_routeptaddr = self.mofr_to_lorouteptaddr(lineseg_end_mofr_, dir_)
+
+		# check deviation (by distance) of simplified lineseg to unsimplified route. 
+		for routeptaddr in range(start_routeptaddr+1, end_routeptaddr+1):
+			routept = self.routepts(dir_, 0)[routeptaddr]
+			if routept.dist_to_lineseg(simplified_lineseg) > rsdt_:
+				r = True
+				break
+
+		if not r:
+			# check heading differences: 
+			heading_tolerance = 25
+			simplified_lineseg_heading = simplified_lineseg.heading()
+			# Not checking the heading of the unsimplified route segment that start point is on b/c of the common case where it is 1 meter 
+			# or less before a sharp corner.  If we checked it then we'd never get anywhere, or would need a special case in some other way.  
+			# So we let the distance deviation check above take care of things there. 
+			for routeptaddr1, routeptaddr2 in hopscotch(range(start_routeptaddr+1, end_routeptaddr+2)):
+				routept1 = self.routepts(dir_, 0)[routeptaddr1]; routept2 = self.routepts(dir_, 0)[routeptaddr2]
+				unsimplified_route_seg_heading = routept1.heading(routept2)
+				if geom.diff_headings(unsimplified_route_seg_heading, simplified_lineseg_heading) > heading_tolerance:
+					r = True
+					break
+
+		return r
 
 	def dir_from_latlngs(self, latlng1_, latlng2_):
 		mofr1 = self.latlon_to_mofr(latlng1_, tolerance_=2)
@@ -526,11 +637,11 @@ def latlon_to_mofr(route_, latlon_, tolerance_=0):
 	else:
 		return routeinfo(route_).latlon_to_mofr(latlon_, tolerance_)
 
-def mofr_to_latlon(route_, mofr_, dir_):
-	return routeinfo(route_).mofr_to_latlon(mofr_, dir_)
+def mofr_to_latlon(route_, mofr_, dir_, rsdt_=0):
+	return routeinfo(route_).mofr_to_latlon(mofr_, dir_, rsdt_)
 
-def mofr_to_latlonnheading(route_, mofr_, dir_):
-	return routeinfo(route_).mofr_to_latlonnheading(mofr_, dir_)
+def mofr_to_latlonnheading(route_, mofr_, dir_, rsdt_=0):
+	return routeinfo(route_).mofr_to_latlonnheading(mofr_, dir_, rsdt_)
 
 def fudgeroute_to_configroutes(fudgeroute_name_):
 	if fudgeroute_name_ not in FUDGEROUTE_TO_CONFIGROUTES:

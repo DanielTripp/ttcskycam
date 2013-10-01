@@ -436,7 +436,7 @@ def make_whereclause_safe(whereclause_):
 	return re.sub('(?i)insert|delete|drop|create|truncate|alter|update|;', '', whereclause_)
 
 # direction_ can be an integer direction (0 or 1) or a pair of LatLngs from which we will infer that integer direction.
-def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, time_window_end_, log_=False):
+def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, zoom_, time_window_end_, log_=False):
 	assert direction_ in (0, 1) or (len(direction_) == 2 and all(isinstance(e, geom.LatLng) for e in direction_))
 	assert (fudgeroute_ in routes.NON_SUBWAY_FUDGEROUTES) and type(num_minutes_) == int
 	if direction_ in (0, 1):
@@ -453,7 +453,7 @@ def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, time_win
 				printerr('\t%s' % vi)
 		r += vis
 	starttime = time_window_end_ - num_minutes_*60*1000
-	r = interp_by_time(r, True, True, direction, starttime, time_window_end_, log_=log_)
+	r = interp_by_time(r, True, True, direction, routes.zoom_to_rsdt(zoom_), starttime, time_window_end_, log_=log_)
 	return r
 
 # The idea here is, for each vid, to get one more vi from the db, greater in time than the pre-existing
@@ -592,7 +592,7 @@ def group_by_time(vilist_):
 # mofr=134 for 12:02, etc. (making these interpolated returned vis effectively dir=0)?  No it does not.  It's not what the user asked
 # for (they asked for dir=1 vehicles) and it looks awful too - looking at vehicles going both directions on a route is visual chaos and
 # makes it a lot harder to make sense of the dir=1 vehicles that they do want to see.
-def interp_by_time(vilist_, be_clever_, current_conditions_, dir_=None, start_time_=None, end_time_=None, log_=False):
+def interp_by_time(vilist_, be_clever_, current_conditions_, dir_=None, rsdt_=0, start_time_=None, end_time_=None, log_=False):
 	assert isinstance(vilist_, Sequence)
 	if len(vilist_) == 0:
 		return []
@@ -610,7 +610,7 @@ def interp_by_time(vilist_, be_clever_, current_conditions_, dir_=None, start_ti
 						or dirs_disagree(lo_vi.dir_tag_int, dir_) or (lo_vi.fudgeroute != hi_vi.fudgeroute):
 					continue
 				ratio = (interptime - lo_vi.time)/float(hi_vi.time - lo_vi.time)
-				i_latlon, i_heading, i_mofr = interp_latlonnheadingnmofr(lo_vi, hi_vi, ratio, be_clever_, vilist_)
+				i_latlon, i_heading, i_mofr = interp_latlonnheadingnmofr(lo_vi, hi_vi, ratio, rsdt_, be_clever_, vilist_)
 				i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, i_heading, vid, i_latlon.lat, i_latlon.lng,
 										 lo_vi.predictable and hi_vi.predictable,
 										 lo_vi.fudgeroute, lo_vi.route_tag, 0, interptime, interptime, i_mofr, None)
@@ -618,7 +618,7 @@ def interp_by_time(vilist_, be_clever_, current_conditions_, dir_=None, start_ti
 				if current_conditions_:
 					if (interptime - lo_vi.time > 3*60*1000) or dirs_disagree(dir_, lo_vi.dir_tag_int):
 						continue
-					latlng, heading = get_latlonnheadingnmofr_from_lo_sample(lolo_vi, lo_vi, be_clever_, vilist_)[:2]
+					latlng, heading = get_latlonnheadingnmofr_from_lo_sample(lolo_vi, lo_vi, rsdt_, be_clever_, vilist_)[:2]
 					i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, heading, vid, latlng.lat, latlng.lng,
 							lo_vi.predictable, lo_vi.fudgeroute, lo_vi.route_tag, 0, interptime, interptime, lo_vi.mofr, lo_vi.widemofr)
 
@@ -644,15 +644,14 @@ def dirs_disagree(dir1_, dir2_):
 
 # lolo_vi_ may seem unnecessary here because of the ratio of 1.0, but it is used to find the heading 
 # if tracks are being used - will be a choice between X and X + 180.  If we have only one sample (lo_vi_) then common sense 
-# says that there's no way that we can figure out that heading.  In that case we'll interpolate between lo_vi_ and itself, 
-# and in the tracks case, get something random for the heading - but latlng will still be correctly snapped to the track. 
-def get_latlonnheadingnmofr_from_lo_sample(lolo_vi_, lo_vi_, be_clever_, raw_vilist_for_hint_):
+# says that there's no way that we can figure out that heading.  
+def get_latlonnheadingnmofr_from_lo_sample(lolo_vi_, lo_vi_, rsdt_, be_clever_, raw_vilist_for_hint_):
 	assert lo_vi_ is not None
 	if lolo_vi_ is not None:
-		return interp_latlonnheadingnmofr(lolo_vi_, lo_vi_, 1.0, be_clever_, raw_vilist_for_hint_)
+		return interp_latlonnheadingnmofr(lolo_vi_, lo_vi_, 1.0, rsdt_, be_clever_, raw_vilist_for_hint_)
 	else:
 		# We would do something like this:
-		#return interp_latlonnheadingnmofr(lo_vi_, lo_vi_, 1.0, be_clever_)
+		#return interp_latlonnheadingnmofr(lo_vi_, lo_vi_, 1.0, rsdt_, be_clever_)
 		# ... but I don't think we'll ever encounter this scenario, because we only want to return vehicle locations
 		# if we have about 5 or 6 raw samples for that vid, right?
 		# If we hit this case, that means that we have one sample.
@@ -671,9 +670,9 @@ def get_latlonnheadingnmofr_from_lo_sample(lolo_vi_, lo_vi_, be_clever_, raw_vil
 # note [1]: For a location anywhere on a track, we have two possible headings for vehicles on that track -
 # X and X + 180 degrees.  With this code we choose which one we want by choosing the one that is closest to the tracks-ignorant
 # heading indicated by the latlng diff of the two raw samples we're interpolating between.
-def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, be_clever_, raw_vilist_for_hint_=None):
+def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, rsdt_, be_clever_, raw_vilist_for_hint_=None):
 	assert isinstance(vi1_, vinfo.VehicleInfo) and isinstance(vi2_, vinfo.VehicleInfo) and (vi1_.vehicle_id == vi2_.vehicle_id)
-	assert vi1_.time < vi2_.time
+	assert vi1_.time < vi2_.time and (rsdt_ == 0 or rsdt_ in routes.RSDTS)
 	r = None
 	can_be_clever = vi1_.dir_tag and vi2_.dir_tag and (vi1_.fudgeroute == vi2_.fudgeroute)
 	being_clever = be_clever_ and can_be_clever
@@ -685,7 +684,7 @@ def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, be_clever_, raw_vilist_for_hi
 			dir_tag_int = vi2_.dir_tag_int
 			if dir_tag_int == None:
 				raise Exception('Could not determine dir_tag_int of %s' % (str(vi2_)))
-			r = routes.mofr_to_latlonnheading(froute, interp_mofr, dir_tag_int) + (interp_mofr,)
+			r = routes.mofr_to_latlonnheading(froute, interp_mofr, dir_tag_int, rsdt_) + (interp_mofr,)
 		elif vi1_.is_a_streetcar():
 			vi1_tracks_snap_result = tracks.snap(vi1_.latlng); vi2_tracks_snap_result = tracks.snap(vi2_.latlng)
 			if vi1_tracks_snap_result is not None and vi2_tracks_snap_result is not None:
@@ -707,9 +706,9 @@ def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, be_clever_, raw_vilist_for_hi
 		vi1_latlng = vi1_.latlng; vi2_latlng = vi2_.latlng
 		if being_clever:
 			if vi1_.mofr!=-1:
-				vi1_latlng = routes.mofr_to_latlon(vi1_.fudgeroute, vi1_.mofr, vi1_.dir_tag_int)
+				vi1_latlng = routes.mofr_to_latlon(vi1_.fudgeroute, vi1_.mofr, vi1_.dir_tag_int, rsdt_)
 			if vi2_.mofr!=-1:
-				vi2_latlng = routes.mofr_to_latlon(vi2_.fudgeroute, vi2_.mofr, vi2_.dir_tag_int)
+				vi2_latlng = routes.mofr_to_latlon(vi2_.fudgeroute, vi2_.mofr, vi2_.dir_tag_int, rsdt_)
 		r = (vi1_latlng.avg(vi2_latlng, ratio_), vi1_latlng.heading(vi2_latlng), None)
 	return r
 
@@ -1000,13 +999,13 @@ class ReportNotFoundException(Exception):
 	pass
 
 
-def get_latest_report_time(report_type_, froute_, dir_):
-	r = mc.get_from_memcache('db.get_latest_report_time', [report_type_, froute_, dir_], {})
+def get_latest_report_time(report_type_, froute_, dir_, zoom_):
+	r = mc.get_from_memcache('db.get_latest_report_time', [report_type_, froute_, dir_, zoom_], {})
 	if r is not None:
 		return r
 	else:
-		r = get_latest_report_time_impl(report_type_, froute_, dir_)
-		set_latest_report_time_in_memcache(report_type_, froute_, dir_, r)
+		r = get_latest_report_time_impl(report_type_, froute_, dir_, zoom_)
+		set_latest_report_time_in_memcache(report_type_, froute_, dir_, zoom_, r)
 		return r
 
 def get_latest_report_time_impl(report_type_, froute_, dir_):
@@ -1022,16 +1021,16 @@ def get_latest_report_time_impl(report_type_, froute_, dir_):
 		curs.close()
 
 # As in - set a value in memcache for the function db.get_latest_report_time().
-def set_latest_report_time_in_memcache(report_type_, froute_, dir_, time_):
+def set_latest_report_time_in_memcache(report_type_, froute_, dir_, zoom_, time_):
 	assert report_type_ in ('traffic', 'locations') and froute_ in routes.NON_SUBWAY_FUDGEROUTES and dir_ in (0, 1)
 	assert isinstance(time_, long)
-	mc.set('db.get_latest_report_time', [report_type_, froute_, dir_], {}, time_)
+	mc.set('db.get_latest_report_time', [report_type_, froute_, dir_, zoom_], {}, time_)
 
-def set_report_in_memcache(report_type_, froute_, dir_, time_, data_):
-	mc.set('db.get_report', [report_type_, froute_, dir_, time_], {}, data_)
+def set_report_in_memcache(report_type_, froute_, dir_, zoom_, time_, data_):
+	mc.set('db.get_report', [report_type_, froute_, dir_, zoom_, time_], {}, data_)
 
 @trans
-def insert_report(report_type_, froute_, dir_, time_, report_data_obj_):
+def insert_report(report_type_, froute_, dir_, zoom_, time_, report_data_obj_):
 	assert report_type_ in ('traffic', 'locations') and froute_ in routes.NON_SUBWAY_FUDGEROUTES and dir_ in (0, 1)
 	assert abs(time_ - now_em()) < 1000*60*60 and report_data_obj_ is not None
 	curs = conn().cursor()
@@ -1039,7 +1038,7 @@ def insert_report(report_type_, froute_, dir_, time_, report_data_obj_):
 	cols = [c.VERSION, report_type_, froute_, dir_, time_, em_to_str(time_), now_str(), report_json]
 	curs.execute('insert into reports values (%s,%s,%s,%s,%s,%s,%s,%s)', cols)
 	curs.close()
-	set_report_in_memcache(report_type_, froute_, dir_, time_, report_json)
+	set_report_in_memcache(report_type_, froute_, dir_, zoom_, time_, report_json)
 	set_latest_report_time_in_memcache(report_type_, froute_, dir_, time_)
 
 @trans

@@ -7,7 +7,7 @@ from misc import *
 # We don't do streetlabels for all zoom levels.  (These are google maps zoom levels by the way.) 
 # For low zoom (i.e. zoomed out), we draw our traffic coloured lines thin enough that google maps' 
 # own street labels are still visible.   Mostly visible.  Visible enough.
-ZOOMS_WITH_STREETLABELS = range(13, 21+1)
+ZOOMS_WITH_STREETLABELS = range(max(13, c.VALID_ZOOMS[0]), min(21, c.VALID_ZOOMS[-1]) + 1)
 
 g_froute_to_dir_to_startmofr_to_text = None
 
@@ -20,11 +20,11 @@ def heading_to_svg_rotation(heading_):
 		heading -= 180
 	return get_range_val((0, -90), (180, 90), heading) 
 
-def is_route_straight_enough_here(ri_, dir_, start_mofr_, end_mofr_):
+def is_route_straight_enough_here(ri_, dir_, zoom_, start_mofr_, end_mofr_):
 	start_heading = ri_.mofr_to_heading(start_mofr_, dir_)
 	step = max(1, (end_mofr_-start_mofr_)/10)
 	for mofr in range(start_mofr_, end_mofr_, step)[1:]:
-		sample_heading = ri_.mofr_to_heading(mofr, dir_)
+		sample_heading = ri_.mofr_to_heading(mofr, dir_, routes.zoom_to_rsdt(zoom_))
 		if geom.diff_headings(start_heading, sample_heading) > 20:
 			return False
 	return True
@@ -89,11 +89,11 @@ def get_labels_for_zoom(froute_, dir_, zoom_):
 	while start_mofr < ri.max_mofr() - text_length_metres:
 		end_mofr = start_mofr + text_length_metres
 		text = get_text(froute_, dir_, start_mofr)
-		if (text != get_text(froute_, dir_, end_mofr)) or (not text) or (not is_route_straight_enough_here(ri, dir_, start_mofr, end_mofr)):
+		if (text != get_text(froute_, dir_, end_mofr)) or (not text) or (not is_route_straight_enough_here(ri, dir_, zoom_, start_mofr, end_mofr)):
 			start_mofr += max(1, mofrstep/10)
 		else:
-			start_latlng = ri.mofr_to_latlon(start_mofr, dir_)
-			end_latlng = ri.mofr_to_latlon(end_mofr, dir_)
+			start_latlng = ri.mofr_to_latlon(start_mofr, dir_, routes.zoom_to_rsdt(zoom_))
+			end_latlng = ri.mofr_to_latlon(end_mofr, dir_, routes.zoom_to_rsdt(zoom_))
 			heading = start_latlng.heading(end_latlng)
 			svg_rotation = heading_to_svg_rotation(heading)
 			if 180 <= heading < 360:

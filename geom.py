@@ -2,6 +2,7 @@
 
 import datetime, calendar, math
 from math import *
+from lru_cache import lru_cache
 import vinfo, routes
 from misc import *
 
@@ -107,6 +108,25 @@ class LatLng:
 
 	def copy(self):
 		return LatLng(self.lat, self.lng)
+
+	# returns a tuple - (snapped point, 0|1|None, dist)
+	# elem 1 - 0 if the first point of the line is the snapped-to point, 1 if the second, None if neither.
+	def snap_to_lineseg(self, lineseg_):
+		assert isinstance(lineseg_, LineSeg)
+		ang1 = angle(lineseg_.end, lineseg_.start, self)
+		ang2 = angle(lineseg_.start, lineseg_.end, self)
+		if (ang1 < math.pi/2) and (ang2 < math.pi/2):
+			snappedpt = get_pass_point(lineseg_.start, lineseg_.end, self)
+			return (snappedpt, None, self.dist_m(snappedpt))
+		else:
+			dist0 = self.dist_m(lineseg_.start); dist1 = self.dist_m(lineseg_.end)
+			if dist0 < dist1:
+				return (lineseg_.start, 0, dist0)
+			else:
+				return (lineseg_.end, 1, dist1)
+
+	def dist_to_lineseg(self, lineseg_):
+		return self.snap_to_lineseg(lineseg_)[2]
 
 def angle(arm1_, origin_, arm2_):
 	assert isinstance(arm1_, LatLng) and isinstance(origin_, LatLng) and isinstance(arm2_, LatLng)
@@ -350,6 +370,25 @@ class BoundingBox:
 
 	def __repr__(self):
 		return self.__repr__()
+
+class LineSeg(object):
+
+	def __init__(self, start_, end_):
+		assert isinstance(start_, LatLng) and isinstance(end_, LatLng)
+		self.start = start_
+		self.end = end_
+
+	def __str__(self):
+		return '[%s -> %s]' % (self.start, self.end)
+
+	def __repr__(self):
+		return self.__str__()
+
+	def __hash__(self):
+		return hash(self.start) + hash(self.end)
+
+	def heading(self):
+		return self.start.heading(self.end)
 
 if __name__ == '__main__':
 
