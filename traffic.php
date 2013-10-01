@@ -120,7 +120,7 @@ var MIN_ZOOM_INCLUSIVE = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
 	readfile('MIN_ZOOM_INCLUSIVE'); ?>;
 var MAX_ZOOM_INCLUSIVE = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
 	readfile('MAX_ZOOM_INCLUSIVE'); ?>;
-var REFRESH_INTERVAL_MS = 10*1000;
+var REFRESH_INTERVAL_MS = 10*1000; 
 var MOVING_VEHICLES_OVERTIME_FLASH_INTERVAL_MS = 500;
 var MOVING_VEHICLES_ANIM_INTERVAL_MS = 100;
 var MOFR_STEP = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
@@ -209,12 +209,18 @@ function interp_color(c1_, c2_, percent_) {
 // but they look even worse when the convex ends are pointing in the opposite direction that the vehicle location markers are 
 // moving.  I think that the direction that the convex ends are pointing tends to suggest to the typical person the direction 
 // of travel.  So here I am ensuring that the convex ends are pointing that way.  
-function refresh_traffic_from_server(fudgeroute_) {
+// 
+// force_update_due_to_zoom_change_: this is to opt out of the behaviour implemented on the server and normally used 
+// by us here, where the server function won't return anything if it doesn't have data newer than what we have.  
+// but if we're changing zoom, then we want data from the server regardless, because even if the underlying traffic numbers 
+// haven't changed since our last call, the rendering will be different between one zoom level and another.  
+function refresh_traffic_from_server(fudgeroute_, force_update_due_to_zoom_change_) {
 	var data = g_fudgeroute_data.get(fudgeroute_);
 	var dir_to_request = data.dir;
 	if(!data.traffic_request_pending) {
 		data.traffic_request_pending = true;
-		callpy('reports.get_traffic_report', fudgeroute_, dir_to_request, g_map.getZoom(), get_datetime_from_gui(), data.traffic_last_returned_timestr, 
+		callpy('reports.get_traffic_report', fudgeroute_, dir_to_request, g_map.getZoom(), get_datetime_from_gui(), 
+				(force_update_due_to_zoom_change_ ? null : data.traffic_last_returned_timestr), 
 			{success: function(r_) {
 				var data = g_fudgeroute_data.get(fudgeroute_);
 				if(data == undefined || data.dir != dir_to_request) {
@@ -222,7 +228,7 @@ function refresh_traffic_from_server(fudgeroute_) {
 				}
 				data.traffic_request_pending = false;
 				var returned_timestr = r_[0];
-				if(data.traffic_last_returned_timestr == returned_timestr) {
+				if(!force_update_due_to_zoom_change_ && (data.traffic_last_returned_timestr == returned_timestr)) {
 					return;
 				}
 				data.traffic_last_returned_timestr = returned_timestr;
@@ -482,7 +488,7 @@ function refresh_data_from_server_allroutes() {
 }
 
 function refresh_data_from_server_singleroute(fudgeroute_) {
-	refresh_traffic_from_server(fudgeroute_);
+	refresh_traffic_from_server(fudgeroute_, false);
 	refresh_vehicles_from_server(fudgeroute_);
 }
 
@@ -908,6 +914,17 @@ function remake_traffic_lines_allroutes() {
 	});
 }
 
+function deal_with_zoom_change_wrt_traffic_lines() {
+	g_fudgeroute_data.forEach(function(fudgeroute, data) {
+		if(is_subway(fudgeroute)) {
+			forget_traffic_lines(fudgeroute);
+			make_subway_lines(fudgeroute);
+		} else {
+			refresh_traffic_from_server(fudgeroute, true);
+		}
+	});
+}
+
 function remake_traffic_lines_singleroute(fudgeroute_) {
 	forget_traffic_lines(fudgeroute_);
 
@@ -1097,7 +1114,7 @@ function init_everything_that_depends_on_map() {
 		} else if(g_map.getZoom() > MAX_ZOOM_INCLUSIVE) {
 			g_map.setZoom(MAX_ZOOM_INCLUSIVE);
 		} else {
-			remake_traffic_lines_allroutes();
+			deal_with_zoom_change_wrt_traffic_lines();
 			remake_all_vehicle_markers();
 		}
 	});
