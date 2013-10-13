@@ -50,7 +50,9 @@ def make_demo_dundas():
 	mofr = 0
 	t_secs = 0
 	while mofr <= routes.routeinfo(froute).max_mofr():
-		for speed_ref_mofr in range(round_down(mofr, traffic.MOFR_STEP), -1, -10):
+		for speed_ref_mofr in range(round_down(mofr, 100), -1, -10): 
+		                                            # ^^ this is, or was, a mofrs step.  not sure if it matters much.  
+																								# was changing some things and didn't understand this code.  sorry. 
 			if speed_ref_mofr in mofr_to_kmph:
 				speed_kmph = mofr_to_kmph[speed_ref_mofr]
 				break
@@ -93,7 +95,9 @@ def mofr_to_kmph_to_locations(froute_, mofr_to_kmph_):
 	mofr = 0
 	t_secs = 0
 	while mofr <= routes.routeinfo(froute_).max_mofr() and len(locations) < 1000:
-		for speed_ref_mofr in range(round_down(mofr, traffic.MOFR_STEP), -1, -10):
+		for speed_ref_mofr in range(round_down(mofr, 100), -1, -10):
+		                                            # ^^ this is, or was, a mofrs step.  not sure if it matters much.  
+																								# was changing some things and didn't understand this code.  sorry. 
 			if speed_ref_mofr in mofr_to_kmph_:
 				speed_kmph = mofr_to_kmph_[speed_ref_mofr]
 				break

@@ -22,19 +22,10 @@ function initialize() {
 
 	init_map();
 
+	var a, b;
+	(true ? a : b) = 42;
+	alert(a);
 
-var marker = new google.maps.Marker({
-    position: new google.maps.LatLng( 43.6507574, -79.4138221),
-		    icon: {
-				        path: google.maps.SymbolPath.CIRCLE,
-								        scale: 14, 
-												strokeWeight : 0, 
-												fillOpacity: 0.5, 
-												fillColor: 'black'
-												    },
-														    draggable: true,
-																    map: g_map
-																		});
 
 }
 

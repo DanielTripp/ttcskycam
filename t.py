@@ -11,10 +11,9 @@ if __name__ == '__main__':
 
 	for froute in routes.NON_SUBWAY_FUDGEROUTES:
 		for direction in (0, 1):
-			for zoom in c.VALID_ZOOMS[:5]:
-				print froute, direction, zoom 
-				reports.get_locations_report(froute, direction, zoom, '2013-09-28 17:00', None)
-				reports.get_traffic_report(froute, direction, zoom, '2013-09-28 17:00', None)
+			for zoom in c.VALID_ZOOMS:
+				print reports.get_traffic_report(froute, direction, zoom, '2013-09-28 17:00', None)
+				print reports.get_locations_report(froute, direction, zoom, '2013-09-28 17:00', None)
 
 
 

@@ -4,10 +4,21 @@ from collections import *
 import vinfo, db, routes, geom, mc, yards, c
 from misc import *
 
-with open('MOFR_STEP') as f:
-	MOFR_STEP = int(f.read().strip())
-
 TIME_WINDOW_MINUTES = 30
+
+# It might be a good idea to make sure that this returns only even numbers.  Some arithmetic might depend on that.  (Not sure.)
+def zoom_to_mofrstep(zoom_):
+	assert zoom_ in c.VALID_ZOOMS
+	if zoom_ <= 12:
+		return 560
+	elif zoom_ == 13:
+		return 280
+	elif zoom_ in (14, 15):
+		return 140
+	else:
+		return 70
+
+MOFRSTEPS = set(zoom_to_mofrstep(zoom) for zoom in c.VALID_ZOOMS)
 
 def get_recent_vehicle_locations(fudgeroute_, dir_, zoom_, time_, last_returned_timestr_, log_=False):
 	assert (fudgeroute_ in routes.NON_SUBWAY_FUDGEROUTES)
@@ -19,7 +30,7 @@ def get_recent_vehicle_locations(fudgeroute_, dir_, zoom_, time_, last_returned_
 		r_data = None
 	return (r_timestr, r_data)
 
-# Import to mc.decorate after the massage of time arg because that will usually be 0 (meaning now) 
+# Important to do this mc.decorate here, after the massage of time arg, because that will usually be 0 (meaning now) 
 # when it comes from the client. 
 @mc.decorate
 def get_recent_vehicle_locations_impl(fudgeroute_, dir_, zoom_, time_, log_=False):
@@ -74,7 +85,7 @@ def get_traffics_impl(fudgeroute_name_, dir_, zoom_, time_, window_minutes_=TIME
 		direction = dir_
 	else:
 		direction = routes.routeinfo(fudgeroute_name_).dir_from_latlngs(dir_[0], dir_[1])
-	mofr_to_avgspeedandweight = get_traffic_avgspeedsandweights(fudgeroute_name_, direction, time_, True, window_minutes_, log_=log_)
+	mofr_to_avgspeedandweight = get_traffic_avgspeedsandweights(fudgeroute_name_, direction, zoom_, time_, True, window_minutes_, log_=log_)
 	return [get_traffics_visuals(mofr_to_avgspeedandweight, fudgeroute_name_, direction, zoom_), \
 			get_traffics__mofr2speed(mofr_to_avgspeedandweight)]
 
@@ -88,16 +99,17 @@ def get_traffics__mofr2speed(mofr_to_avgspeedandweight_):
 	return r
 
 def get_traffics_visuals(mofr_to_avgspeedandweight_, fudgeroute_name_, dir_, zoom_):
+	mofrstep = zoom_to_mofrstep(zoom_)
 	r = []
 	routept1_mofr = 0
 	for routept1, routept2 in hopscotch(routes.routeinfo(fudgeroute_name_).routepts(dir_, routes.zoom_to_rsdt(zoom_))):
 		route_seg_len = routept1.dist_m(routept2)
 		routept2_mofr = routept1_mofr + route_seg_len
-		routept1_mofr_ref = round(routept1_mofr, MOFR_STEP); routept2_mofr_ref = round(routept2_mofr, MOFR_STEP)
-		for mofr_ref in range(routept1_mofr_ref, routept2_mofr_ref+1, MOFR_STEP):
+		routept1_mofr_ref = round(routept1_mofr, mofrstep); routept2_mofr_ref = round(routept2_mofr, mofrstep)
+		for mofr_ref in range(routept1_mofr_ref, routept2_mofr_ref+1, mofrstep):
 			if mofr_ref not in mofr_to_avgspeedandweight_: continue
-			seg_start_mofr = max(mofr_ref - MOFR_STEP/2, routept1_mofr)
-			seg_end_mofr = min(mofr_ref + MOFR_STEP/2, routept2_mofr)
+			seg_start_mofr = max(mofr_ref - mofrstep/2, routept1_mofr)
+			seg_end_mofr = min(mofr_ref + mofrstep/2, routept2_mofr)
 			seg_start_latlng = routept1.add(routept2.subtract(routept1).scale((seg_start_mofr-routept1_mofr)/float(route_seg_len)))
 			seg_end_latlng   = routept1.add(routept2.subtract(routept1).scale((seg_end_mofr  -routept1_mofr)/float(route_seg_len)))
 			r.append({'start_latlon': seg_start_latlng, 'end_latlon': seg_end_latlng, 'mofr': mofr_ref, 
@@ -111,17 +123,16 @@ def get_mofr_to_kmph(froute_, dir_, current_, time_, window_minutes_=TIME_WINDOW
 
 def get_mofr_to_kmph_impl(froute_, dir_, current_, time_, window_minutes_, log_=False):
 	r = {}
-	for mofr, avgspeedandweight in get_traffic_avgspeedsandweights(froute_, dir_, time_, current_, window_minutes_, log_=log_).iteritems():
+	for mofr, avgspeedandweight in get_traffic_avgspeedsandweights(froute_, dir_, c.VALID_ZOOMS[-1], time_, current_, window_minutes_, log_=log_).iteritems():
 		if avgspeedandweight is not None:
 			r[mofr] = avgspeedandweight['kmph']
 		else:
 			r[mofr] = None
 	return r
 
-@mc.decorate
-def get_traffic_avgspeedsandweights(fudgeroute_name_, dir_, time_, current_, window_minutes_, log_=False):
+def get_traffic_avgspeedsandweights(fudgeroute_name_, dir_, zoom_, time_, current_, window_minutes_, log_=False):
 	r = {}
-	mofr_to_rawtraffics = get_traffic_rawspeeds(fudgeroute_name_, dir_, time_, window_minutes_, log_=log_)
+	mofr_to_rawtraffics = get_traffic_rawspeeds(fudgeroute_name_, dir_, zoom_, time_, window_minutes_, log_=log_)
 	for mofr, rawtraffics in sorted(mofr_to_rawtraffics.iteritems()): # Here we iterate in sorted key order only to print easier-to-read log msgs.
 		if log_: printerr('mofr=%d:' % mofr)
 		if not rawtraffics:
@@ -153,10 +164,10 @@ def time_to_weight(time_, now_, window_minutes_):
 		# I believe this is a quarter circle: 
 		return (1 - ((float(time_ - now_))/window)**2)**0.5
 
-def get_traffic_rawspeeds(fudgeroute_name_, dir_, time_, window_minutes_, usewidemofr_=False, singlemofr_=None, log_=False):
-	assert dir_ in (0, 1)
+def get_traffic_rawspeeds(fudgeroute_name_, dir_, zoom_, time_, window_minutes_, usewidemofr_=False, singlemofr_=None, log_=False):
+	assert dir_ in (0, 1) and zoom_ in c.VALID_ZOOMS
 	mofr_to_rawtraffics = {}
-	mofrs_to_get = (range(0, routes.max_mofr(fudgeroute_name_), MOFR_STEP) if singlemofr_ is None else [singlemofr_])
+	mofrs_to_get = (range(0, routes.max_mofr(fudgeroute_name_), zoom_to_mofrstep(zoom_)) if singlemofr_ is None else [singlemofr_])
 	for mofr in mofrs_to_get:
 		mofr_to_rawtraffics[mofr] = []
 	for vid, vis_all_stretches in \
@@ -172,7 +183,7 @@ def get_traffic_rawspeeds(fudgeroute_name_, dir_, time_, window_minutes_, usewid
 			assert all(mofr(vi) != -1 for vi in vis)
 			for interp_mofr in mofrs_to_get:
 				if log_: printerr('\tFor mofr %d:' % (interp_mofr))
-				vi_lo, vi_hi = get_bounding_mofr_vis(interp_mofr, vis, usewidemofr_)
+				vi_lo, vi_hi = get_bounding_mofr_vis(interp_mofr, zoom_, vis, usewidemofr_)
 				if vi_lo and vi_hi:
 					if log_: printerr('\t\tFound bounding vis at mofrs %d and %d (%s and %s).' % (mofr(vi_lo), mofr(vi_hi), vi_lo.timestr, vi_hi.timestr))
 					interp_ratio = (interp_mofr - mofr(vi_lo))/float(mofr(vi_hi) - mofr(vi_lo))
@@ -226,13 +237,16 @@ def get_observed_headway(froute_, stoptag_, time_, window_minutes_, usewidemofr_
 # between 13:05 and 13:35, and how this could result in vid 4087 single-handedly causing a
 # decent-looking traffic report for that stretch of road.  I would rather show white (or whatever
 # I'm showing to signify 'no traffic data' now) and thus encourage the user to look for the detour.
-def get_bounding_mofr_vis(mofr_, vis_, usewidemofr_):
+def get_bounding_mofr_vis(mofr_, zoom_, vis_, usewidemofr_):
+	assert zoom_ in c.VALID_ZOOMS
 	assert isinstance(mofr_, int) and isinstance(vis_, Sequence) and isinstance(usewidemofr_, bool)
 	assert all(vi1.vehicle_id == vi2.vehicle_id for vi1, vi2 in hopscotch(vis_))
 
+	mofrstep = zoom_to_mofrstep(zoom_)
+
 	get_mofr = lambda vi: (vi.widemofr if usewidemofr_ else vi.mofr)
 
-	prev_step_vis = filter(lambda vi: mofr_ - MOFR_STEP < get_mofr(vi) < mofr_, vis_)
+	prev_step_vis = filter(lambda vi: mofr_ - mofrstep < get_mofr(vi) < mofr_, vis_)
 	if prev_step_vis:
 		vi_lo = min(prev_step_vis, key=get_mofr)
 	else:
@@ -263,6 +277,7 @@ def kmph_to_mps(kmph_):
 # otherwise - return value is in seconds.
 def get_est_riding_time_secs(froute_, start_mofr_, dest_mofr_, current_, time_):
 	assert all(0 <= mofr <= routes.routeinfo(froute_).max_mofr() for mofr in (start_mofr_, dest_mofr_))
+	mofrstep = zoom_to_mofrstep(c.VALID_ZOOMS[-1])
 	if mofrs_to_dir(start_mofr_, dest_mofr_) == 0:
 		startmofr = start_mofr_
 		destmofr = dest_mofr_
@@ -271,27 +286,27 @@ def get_est_riding_time_secs(froute_, start_mofr_, dest_mofr_, current_, time_):
 		destmofr = start_mofr_
 	mofr_to_kmph = get_mofr_to_kmph(froute_, mofrs_to_dir(startmofr, destmofr), current_, time_)
 	r_secs = 0
-	if startmofr != round_up_off_step(startmofr, MOFR_STEP):
-		dist_m = round_up_off_step(startmofr, MOFR_STEP) - startmofr
-		speed_kmph = mofr_to_kmph[round(startmofr, MOFR_STEP)]
+	if startmofr != round_up_off_step(startmofr, mofrstep):
+		dist_m = round_up_off_step(startmofr, mofrstep) - startmofr
+		speed_kmph = mofr_to_kmph[round(startmofr, mofrstep)]
 		if speed_kmph is None:
 			return None
 		speed_mps = kmph_to_mps(speed_kmph)
 		#alert('adding distance '+dist_m+', speed '+speed_mps+', makes for '+(dist_m/speed_mps))
 		r_secs += dist_m/speed_mps
-	cur_offstep_mofr = round_up_off_step(startmofr, MOFR_STEP)
-	while cur_offstep_mofr < round_down_off_step(destmofr, MOFR_STEP):
-		mofr_with_ref_speed = round_up(cur_offstep_mofr, MOFR_STEP)
+	cur_offstep_mofr = round_up_off_step(startmofr, mofrstep)
+	while cur_offstep_mofr < round_down_off_step(destmofr, mofrstep):
+		mofr_with_ref_speed = round_up(cur_offstep_mofr, mofrstep)
 		speed_kmph = mofr_to_kmph[mofr_with_ref_speed]
 		if speed_kmph is None:
 			return None
 		speed_mps = kmph_to_mps(speed_kmph)
-		#alert('adding distance '+MOFR_STEP+', speed '+speed_mps+', makes for '+(MOFR_STEP/speed_mps))
-		r_secs += MOFR_STEP/speed_mps
-		cur_offstep_mofr += MOFR_STEP
-	if destmofr != round_down_off_step(destmofr, MOFR_STEP):
-		dist_m = destmofr - round_down_off_step(destmofr, MOFR_STEP)
-		speed_kmph = mofr_to_kmph[round(destmofr, MOFR_STEP)]
+		#alert('adding distance '+mofrstep+', speed '+speed_mps+', makes for '+(mofrstep/speed_mps))
+		r_secs += mofrstep/speed_mps
+		cur_offstep_mofr += mofrstep
+	if destmofr != round_down_off_step(destmofr, mofrstep):
+		dist_m = destmofr - round_down_off_step(destmofr, mofrstep)
+		speed_kmph = mofr_to_kmph[round(destmofr, mofrstep)]
 		if speed_kmph is None:
 			return None
 		speed_mps = kmph_to_mps(speed_kmph)

@@ -49,12 +49,18 @@ init_javascript_array_functions_old_browser_fallbacks();
 
 function new_fudgeroute_data() {
 	return {
-		traffic_mofr2speed: new buckets.Dictionary(), 
-		traffic_linedefs: new buckets.LinkedList(), 
+		// The key sets of datazoom_to_traffic_mofr2speed and datazoom_to_traffic_linedefs are supposed to always be the same. 
+		datazoom_to_traffic_mofr2speed: new buckets.Dictionary(), 
+		datazoom_to_traffic_linedefs: new buckets.Dictionary(), 
 		traffic_lines: new buckets.LinkedList(),  // if this is a subway, these aren't really traffic lines - rather, plain old route lines. 
-		time_to_vid_to_vi: new buckets.Dictionary(), // key: date/time string.  value: dictionary (key: vid string, value: VehicleInfo object) 
+		traffic_datazoom: 0, // 0 implies no such data has been received yet and hence rendering is impossible.  Once it's non-zero, 
+				// will never be zero again. 
+
+		datazoom_to_time_to_vid_to_vi: new buckets.Dictionary(), // key: date/time string.  value: dictionary (key: vid string, value: VehicleInfo object) 
 		vid_to_static_vehicle_marker: new buckets.Dictionary(), 
 		vid_to_heading_to_moving_vehicle_marker: new buckets.Dictionary(), 
+		vehicles_datazoom: 0, // Works the same as traffic_datazoom above.
+
 		dir: null, // will be 0 or 1 or a pair a latlngs (orig and dest). 
 		traffic_request_pending: false, 
 		vehicles_request_pending: false,
@@ -70,7 +76,7 @@ var g_show_static_vehicles = true, g_show_moving_vehicles = true, g_show_traffic
 var g_froute_zindexes = ['ossington', 'lansdowne', 'spadina', 'bathurst', 'dufferin', 'dupont', 'carlton', 'dundas', 'king', 'queen'];
 
  // complete list of all froutes, whether they are shown or not.  
-// This will be filled in later, then after that will remain unchanged.  
+// This will be filled in later (but soon, on page load), then after that will remain unchanged.  
 var g_all_froutes = [];
 
 var g_subway_froutes = to_buckets_set(['bloor_danforth', 'yonge_university_spadina']);
@@ -81,6 +87,8 @@ for(var i=0; i<15; i++) {
 	g_framerate_period_times.add(0);
 }
 var g_framerate_last_epochtime = (new Date()).getTime();
+
+var LOG = false;
 
 var g_fudgeroute_data = new buckets.Dictionary();
 var g_play_timer = null;
@@ -120,11 +128,9 @@ var MIN_ZOOM_INCLUSIVE = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
 	readfile('MIN_ZOOM_INCLUSIVE'); ?>;
 var MAX_ZOOM_INCLUSIVE = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
 	readfile('MAX_ZOOM_INCLUSIVE'); ?>;
-var REFRESH_INTERVAL_MS = 10*1000; 
+var REFRESH_INTERVAL_MS = 10*1000;
 var MOVING_VEHICLES_OVERTIME_FLASH_INTERVAL_MS = 500;
 var MOVING_VEHICLES_ANIM_INTERVAL_MS = 100;
-var MOFR_STEP = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
-	readfile('MOFR_STEP'); ?>;
 var FROUTE_TO_INTDIR_TO_ENGLISHDESC = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
 	passthru('python -c "import routes; print routes.get_fudgeroute_to_intdir_to_englishdesc()"'); ?>;
 var FROUTE_TO_ENGLISH = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
@@ -155,6 +161,8 @@ function init_dev_option_values() {
 	}
 	?>
 }
+
+<?php echo "\n"; /* fudging number of lines so that line numbers are the same pre- and post-PHP. */ ?>  
 
 function get_vehicle_size_by_zoom(zoom_) {
 	var arr = (g_use_rendered_aot_arrow_vehicle_icons ? g_zoom_to_vehicle_rendered_img_size : g_zoom_to_vehicle_arrow_img_size);
@@ -209,18 +217,14 @@ function interp_color(c1_, c2_, percent_) {
 // but they look even worse when the convex ends are pointing in the opposite direction that the vehicle location markers are 
 // moving.  I think that the direction that the convex ends are pointing tends to suggest to the typical person the direction 
 // of travel.  So here I am ensuring that the convex ends are pointing that way.  
-// 
-// force_update_due_to_zoom_change_: this is to opt out of the behaviour implemented on the server and normally used 
-// by us here, where the server function won't return anything if it doesn't have data newer than what we have.  
-// but if we're changing zoom, then we want data from the server regardless, because even if the underlying traffic numbers 
-// haven't changed since our last call, the rendering will be different between one zoom level and another.  
-function refresh_traffic_from_server(fudgeroute_, force_update_due_to_zoom_change_) {
+function refresh_traffic_from_server(fudgeroute_) {
 	var data = g_fudgeroute_data.get(fudgeroute_);
 	var dir_to_request = data.dir;
+	var zoom = g_map.getZoom();
 	if(!data.traffic_request_pending) {
 		data.traffic_request_pending = true;
-		callpy('reports.get_traffic_report', fudgeroute_, dir_to_request, g_map.getZoom(), get_datetime_from_gui(), 
-				(force_update_due_to_zoom_change_ ? null : data.traffic_last_returned_timestr), 
+		callpy('reports.get_traffic_report', fudgeroute_, dir_to_request, zoom, get_datetime_from_gui(), 
+				(data.datazoom_to_traffic_mofr2speed.containsKey(zoom) ? data.traffic_last_returned_timestr : null), 
 			{success: function(r_) {
 				var data = g_fudgeroute_data.get(fudgeroute_);
 				if(data == undefined || data.dir != dir_to_request) {
@@ -228,15 +232,22 @@ function refresh_traffic_from_server(fudgeroute_, force_update_due_to_zoom_chang
 				}
 				data.traffic_request_pending = false;
 				var returned_timestr = r_[0];
-				if(!force_update_due_to_zoom_change_ && (data.traffic_last_returned_timestr == returned_timestr)) {
+				if((returned_timestr == data.traffic_last_returned_timestr) && data.datazoom_to_traffic_mofr2speed.containsKey(zoom)) {
 					return;
 				}
-				data.traffic_last_returned_timestr = returned_timestr;
-				assert(r_[1] != null, "traffic data is null even though timestamp has been updated.");
+				var time_was_updated = (returned_timestr != data.traffic_last_returned_timestr);
+				if(time_was_updated) {
+					data.datazoom_to_traffic_mofr2speed.clear();
+					data.datazoom_to_traffic_linedefs.clear();
+					data.traffic_last_returned_timestr = returned_timestr;
+					assert(r_[1] != null, "traffic data is null even though timestamp has been updated.");
+				}
 				var dir_returned = r_[2];
-				data.traffic_linedefs = to_buckets_list(r_[1][0], (dir_returned==0)); // see note [1] above. 
-				data.traffic_mofr2speed = to_buckets_dict(r_[1][1]);
-				remake_traffic_lines_singleroute(fudgeroute_);
+				data.datazoom_to_traffic_linedefs.set(zoom, to_buckets_list(r_[1][0], (dir_returned==0))); // see note [1] above. 
+				data.datazoom_to_traffic_mofr2speed.set(zoom, to_buckets_dict(r_[1][1]));
+				if(update_traffic_datazoom(fudgeroute_) || time_was_updated) {
+					remake_traffic_lines_singleroute(fudgeroute_); 
+				}
 			}, 
 			error: function() {
 				var data = g_fudgeroute_data.get(fudgeroute_);
@@ -249,43 +260,90 @@ function refresh_traffic_from_server(fudgeroute_, force_update_due_to_zoom_chang
 	}
 }
 
-// note [1]: We need to remake _all_ routes b/c we may have (in the appropriate_vehicle_locations() 
-// call above) updated g_times like so: eg. 12:30 used to be the last time visible for some other route X, but now 12:31 is, 
-// (i.e. we had data up to 12:31 for route X all along, but this route had only up to 12:30 -- until this present call returned.) 
+function update_traffic_datazoom(froute_) {
+	return update_datazoom(froute_, true);
+}
+
+function update_vehicles_datazoom(froute_) {
+	return update_datazoom(froute_, false);
+}
+
+// true iff the datazoom field for the route in question was updated.
+function update_datazoom(froute_, traffic_aot_vehicles_) {
+	var data = g_fudgeroute_data.get(froute_);
+	var old_datazoom = (traffic_aot_vehicles_ ? data.traffic_datazoom : data.vehicles_datazoom);
+	var datazooms_map = (traffic_aot_vehicles_ ? data.datazoom_to_traffic_mofr2speed : data.datazoom_to_time_to_vid_to_vi);
+	var guizoom = g_map.getZoom(), new_datazoom = old_datazoom;
+	if(datazooms_map.containsKey(guizoom)) {
+		new_datazoom = guizoom;
+	} else {
+		for(var offset=0; offset<MAX_ZOOM_INCLUSIVE-MIN_ZOOM_INCLUSIVE; offset++) {
+			if(datazooms_map.containsKey(guizoom-offset)) {
+				new_datazoom = guizoom-offset;
+				break;
+			}
+			if(datazooms_map.containsKey(guizoom+offset)) {
+				new_datazoom = guizoom+offset;
+				break;
+			}
+		}
+	}
+	if(traffic_aot_vehicles_) {
+		data.traffic_datazoom = new_datazoom;
+	} else {
+		data.vehicles_datazoom = new_datazoom;
+	}
+	return (new_datazoom != old_datazoom);
+}
+
+// note 237896: We need to remake static vehicles for _all_ routes here b/c we may have just 
+// updated g_times like so: eg. 12:30 used to be the last time visible for this route (route X), but now 12:31 is, 
+// (i.e. we had data up to 12:31 for route Y all along, but route X had only up to 12:30 -- until this present call returned.) 
 // So starting now, without us doing anything, the animation is going to go to 12:31 with the moving vehicles, because all 
 // of those markers exist already.  But for static vehicles, here we need to make sure that they are in compliance. 
 function refresh_vehicles_from_server(fudgeroute_) {
 	var data = g_fudgeroute_data.get(fudgeroute_);
 	var dir_to_request = data.dir;
+	var zoom = g_map.getZoom();
 	if(!data.vehicles_request_pending) {
 		data.vehicles_request_pending = true;
-		callpy('reports.get_locations_report', fudgeroute_, dir_to_request, g_map.getZoom(), get_datetime_from_gui(), data.locations_last_returned_timestr, 
+		callpy('reports.get_locations_report', fudgeroute_, dir_to_request, zoom, get_datetime_from_gui(), 
+				(data.datazoom_to_time_to_vid_to_vi.containsKey(zoom) ? data.locations_last_returned_timestr : null), 
 			{success: function(r_) {
 				var data = g_fudgeroute_data.get(fudgeroute_);
 				if(data == undefined || data.dir != dir_to_request) {
 					return;
 				}
 				data.vehicles_request_pending = false;
-
 				var returned_timestr = r_[0];
-				if(data.locations_last_returned_timestr == returned_timestr) {
+				var time_was_updated = (returned_timestr != data.locations_last_returned_timestr);
+				if(!time_was_updated && data.datazoom_to_time_to_vid_to_vi.containsKey(zoom)) {
 					return;
 				}
-				data.locations_last_returned_timestr = returned_timestr;
-				assert(r_[1] != null, "location data is null even though timestamp has been updated.");
-
-				appropriate_vehicle_locations(fudgeroute_, r_[1]);
-				$('#playpause_button').prop('disabled', false);
-				remake_static_vehicles_allroutes();  // see note [1] above. 
-				remake_moving_vehicles_singleroute(fudgeroute_);
-				refresh_vid_checkboxes_html();
-				if(g_cur_minute_idx >= g_times.size()) { // want to keep animation going smoothly if possible - but if for some reason 
-						// (what reason I don't know) the server returned fewer timeslices on this refresh and thus g_times shrunk, 
-						// then here we handle that.  Not worth it to fuss about overtime here. 
-					g_cur_minute_idx = 0;
+				if(time_was_updated) {
+					data.datazoom_to_time_to_vid_to_vi.clear();
+					data.locations_last_returned_timestr = returned_timestr;
+					assert(r_[1] != null, "locations data is null even though timestamp has been updated.");
 				}
-				update_clock_show_cur_minute();
-				show_cur_minute_vehicles_singleroute(fudgeroute_);
+				appropriate_vehicle_locations(fudgeroute_, zoom, r_[1]);
+				var datazoom_was_updated = update_vehicles_datazoom(fudgeroute_);
+				if(time_was_updated) {
+					update_g_times(); 
+				}
+				if(time_was_updated || datazoom_was_updated) {
+					remake_static_vehicles_allroutes();  // see note 237896.
+					remake_moving_vehicles_singleroute(fudgeroute_);
+				}
+				if(time_was_updated) {
+					refresh_vid_checkboxes_html();
+					if(g_cur_minute_idx >= g_times.size()) { // want to keep animation going smoothly if possible - but if for some reason 
+							// (what reason I don't know) the server returned fewer timeslices on this refresh and thus g_times shrunk, 
+							// then here we handle that.  Not worth it to fuss about overtime here. 
+						g_cur_minute_idx = 0;
+					}
+					update_clock_show_cur_minute();
+					show_cur_minute_vehicles_singleroute(fudgeroute_);
+				}
 			}, 
 			error: function() {
 				var data = g_fudgeroute_data.get(fudgeroute_);
@@ -359,51 +417,45 @@ function all_vids_allroutes() {
 
 function all_vids_singleroute(fudgeroute_) {
 	var r = new buckets.Set();
-	g_fudgeroute_data.get(fudgeroute_).time_to_vid_to_vi.forEach(function(time, vid_to_vi) {
-		vid_to_vi.forEach(function(vid, vi) {
-			r.add(vid);
+	var data = g_fudgeroute_data.get(fudgeroute_);
+	if(data.datazoom_to_time_to_vid_to_vi.containsKey(data.vehicles_datazoom)) {
+		data.datazoom_to_time_to_vid_to_vi.get(data.vehicles_datazoom).forEach(function(time, vid_to_vi) {
+			vid_to_vi.forEach(function(vid, vi) {
+				r.add(vid);
+			});
 		});
-	});
+	} // else: that'll happen if it's a subway or if the route was just added to our list and we don't have any vehicle data for it yet. 
 	return r;
 }
 
-function get_moving_vehicle_marker_for_cur_minute(vid_) {
-	var real_cur_minute = Math.min(g_cur_minute_idx, g_times.size()-1); // 'real' as in 'ignoring overtime' 
-	var vi = g_minute_to_vid_to_vi[real_cur_minute].get(vid_);
-	if(vi!=undefined) {
-		return g_vid_to_heading_to_moving_vehicle_marker.get(vid_).get(round_heading(vi.heading));
-	} else {
-		return null;
-	}
-}
-
-function appropriate_vehicle_locations(fudgeroute_, raw_) {
+function appropriate_vehicle_locations(fudgeroute_, zoom_, raw_) {
 	var data = g_fudgeroute_data.get(fudgeroute_);
-	data.time_to_vid_to_vi.clear();
+	data.datazoom_to_time_to_vid_to_vi.set(zoom_, new buckets.Dictionary()); // will discard old data for this zoom, if there is any. 
+	var time_to_vid_to_vi = data.datazoom_to_time_to_vid_to_vi.get(zoom_);
+	time_to_vid_to_vi.clear();
 	raw_.forEach(function(timeslice) {
 		var timestr = timeslice.shift();
 		var vid_to_vi = new buckets.Dictionary();
-		data.time_to_vid_to_vi.set(timestr, vid_to_vi);
+		time_to_vid_to_vi.set(timestr, vid_to_vi);
 		timeslice.forEach(function(vi) {
 			vid_to_vi.set(vi.vehicle_id, vi);
 		});
 	});
-
-	update_g_times();
 }
 
 // make g_times the intersection of all times present in all routes. 
 function update_g_times() {
 	var new_times_set = null;
 	g_fudgeroute_data.forEach(function(fudgeroute, data) {
-		if(data.time_to_vid_to_vi.size() > 0) {
+		var time_to_vid_to_vi = data.datazoom_to_time_to_vid_to_vi.get(data.vehicles_datazoom);
+		if(time_to_vid_to_vi != undefined && time_to_vid_to_vi.size() > 0) {
 			if(new_times_set==null) {
-				new_times_set = array_to_set(data.time_to_vid_to_vi.keys());
+				new_times_set = array_to_set(time_to_vid_to_vi.keys());
 			} else {
 				var oldsize = new_times_set.size();
-				if(data.time_to_vid_to_vi.size() > 0) { // don't let empty ones influence this.  presumably we haven't 
+				if(time_to_vid_to_vi.size() > 0) { // don't let empty ones influence this.  presumably we haven't 
 						// received any data from the server yet for routes with an empty one of these. 
-					new_times_set.intersection(array_to_set(data.time_to_vid_to_vi.keys()));
+					new_times_set.intersection(array_to_set(time_to_vid_to_vi.keys()));
 				}
 			}
 		}
@@ -449,7 +501,10 @@ function remake_moving_vehicles_singleroute(fudgeroute_) {
 	forget_moving_vehicles(fudgeroute_);
 	var data = g_fudgeroute_data.get(fudgeroute_);
 	var new_vid_to_heading_to_moving_vehicle_marker = new buckets.Dictionary();
-	data.time_to_vid_to_vi.forEach(function(timestr, vid_to_vi) {
+	if(data.vehicles_datazoom == 0) {
+		return;
+	}
+	data.datazoom_to_time_to_vid_to_vi.get(data.vehicles_datazoom).forEach(function(timestr, vid_to_vi) {
 		vid_to_vi.forEach(function(vid, vi) {
 			var heading_to_moving_vehicle_marker = new_vid_to_heading_to_moving_vehicle_marker.get(vid);
 			if(heading_to_moving_vehicle_marker == undefined) {
@@ -488,7 +543,7 @@ function refresh_data_from_server_allroutes() {
 }
 
 function refresh_data_from_server_singleroute(fudgeroute_) {
-	refresh_traffic_from_server(fudgeroute_, false);
+	refresh_traffic_from_server(fudgeroute_);
 	refresh_vehicles_from_server(fudgeroute_);
 }
 
@@ -502,13 +557,18 @@ function remake_static_vehicles_singleroute(fudgeroute_) {
 	forget_static_vehicles(fudgeroute_);
 	if(g_times.size() > 0) {
 		var data = g_fudgeroute_data.get(fudgeroute_);
-		var last_time = g_times.elementAtIndex(g_times.size()-1);
-		var time_to_vid_to_vi = data.time_to_vid_to_vi.get(last_time);
-		if(time_to_vid_to_vi != undefined) {
-			time_to_vid_to_vi.forEach(function(vid, vi) {
-				var marker = make_vehicle_marker(vid, round_heading(vi.heading), vi.lat, vi.lon, true);
-				data.vid_to_static_vehicle_marker.set(vid, marker);
-			});
+		if(data.vehicles_datazoom != 0) {
+			var last_time = g_times.elementAtIndex(g_times.size()-1);
+			var time_to_vid_to_vi = data.datazoom_to_time_to_vid_to_vi.get(data.vehicles_datazoom);
+			if(time_to_vid_to_vi != undefined) {
+				var vid_to_vi = time_to_vid_to_vi.get(last_time);
+				if(vid_to_vi != undefined) {
+					vid_to_vi.forEach(function(vid, vi) {
+						var marker = make_vehicle_marker(vid, round_heading(vi.heading), vi.lat, vi.lon, true);
+						data.vid_to_static_vehicle_marker.set(vid, marker);
+					});
+				}
+			}
 		}
 	}
 }
@@ -594,8 +654,9 @@ function move_vehicles_forward_one_minute_overtime() {
 	}
 	if(g_cur_minute_idx == g_times.size()-1) { // special case, going into overtime: 
 		g_fudgeroute_data.forEach(function(fudgeroute, data) {
-			if(data.time_to_vid_to_vi.size() > 0) {
-				var prev_minute_vid_to_vi = data.time_to_vid_to_vi.get(g_times.elementAtIndex(g_times.size()-2));
+			var time_to_vid_to_vi = data.datazoom_to_time_to_vid_to_vi.get(data.vehicles_datazoom);
+			if(time_to_vid_to_vi != undefined && time_to_vid_to_vi.size() > 0) {
+				var prev_minute_vid_to_vi = time_to_vid_to_vi.get(g_times.elementAtIndex(g_times.size()-2));
 				prev_minute_vid_to_vi.forEach(function(vid, prev_minute_vi) {
 					var prev_heading = round_heading(prev_minute_vi.heading);
 					if(!TEST_INVISIBLE) data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(prev_heading).setVisible(false);
@@ -604,9 +665,10 @@ function move_vehicles_forward_one_minute_overtime() {
 		});
 	} else { // somewhere in overtime, either flash on or flash off: 
 		g_fudgeroute_data.forEach(function(fudgeroute, data) {
-			if(data.time_to_vid_to_vi.size() > 0) {
+			var time_to_vid_to_vi = data.datazoom_to_time_to_vid_to_vi.get(data.vehicles_datazoom);
+			if(time_to_vid_to_vi != undefined && time_to_vid_to_vi.size() > 0) {
 				var last_time = g_times.elementAtIndex(g_times.size()-1);
-				data.time_to_vid_to_vi.get(last_time).forEach(function(vid, vi) {
+				time_to_vid_to_vi.get(last_time).forEach(function(vid, vi) {
 					var heading = round_heading(vi.heading);
 					var marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(heading);
 					if(g_cur_minute_idx == g_times.size()) {
@@ -631,9 +693,10 @@ function move_vehicles_forward_one_minute_normal() {
 		prev_minute_idx = g_times.size()-1;
 	}
 	g_fudgeroute_data.forEach(function(fudgeroute, data) {
-		if(data.time_to_vid_to_vi.size() > 0) {
-			var prev_minute_vid_to_vi = data.time_to_vid_to_vi.get(g_times.elementAtIndex(prev_minute_idx));
-			var cur_minute_vid_to_vi = data.time_to_vid_to_vi.get(g_times.elementAtIndex(g_cur_minute_idx));
+		var time_to_vid_to_vi = data.datazoom_to_time_to_vid_to_vi.get(data.vehicles_datazoom);
+		if(time_to_vid_to_vi != undefined && time_to_vid_to_vi.size() > 0) {
+			var prev_minute_vid_to_vi = time_to_vid_to_vi.get(g_times.elementAtIndex(prev_minute_idx));
+			var cur_minute_vid_to_vi = time_to_vid_to_vi.get(g_times.elementAtIndex(g_cur_minute_idx));
 			cur_minute_vid_to_vi.forEach(function(vid, cur_minute_vi) {
 				if(g_hidden_vids.contains(vid)) {
 					return;
@@ -914,17 +977,6 @@ function remake_traffic_lines_allroutes() {
 	});
 }
 
-function deal_with_zoom_change_wrt_traffic_lines() {
-	g_fudgeroute_data.forEach(function(fudgeroute, data) {
-		if(is_subway(fudgeroute)) {
-			forget_traffic_lines(fudgeroute);
-			make_subway_lines(fudgeroute);
-		} else {
-			refresh_traffic_from_server(fudgeroute, true);
-		}
-	});
-}
-
 function remake_traffic_lines_singleroute(fudgeroute_) {
 	forget_traffic_lines(fudgeroute_);
 
@@ -932,9 +984,9 @@ function remake_traffic_lines_singleroute(fudgeroute_) {
 	if(data != undefined) {
 		if(is_subway(fudgeroute_)) {
 			make_subway_lines(fudgeroute_);
-		} else {
-			data.traffic_linedefs.forEach(function(linedef) {
-				var traf = data.traffic_mofr2speed.get(linedef.mofr);
+		} else if(data.traffic_datazoom != 0) {
+			data.datazoom_to_traffic_linedefs.get(data.traffic_datazoom).forEach(function(linedef) {
+				var traf = data.datazoom_to_traffic_mofr2speed.get(data.traffic_datazoom).get(linedef.mofr);
 				var new_lines = make_traffic_line(fudgeroute_, linedef.start_latlon, linedef.end_latlon, (traf!=null ? traf.kmph : null), 
 						linedef.mofr);
 				add_all(data.traffic_lines, new_lines);
@@ -1107,17 +1159,7 @@ function init_javascript_array_functions_old_browser_fallbacks() {
 }
 
 function init_everything_that_depends_on_map() {
-	google.maps.event.addListener(g_map, 'zoom_changed', function() {
-		set_contents('p_zoom', ""+(g_map.getZoom())); // TDR comment again 
-		if(g_map.getZoom() < MIN_ZOOM_INCLUSIVE) {
-			g_map.setZoom(MIN_ZOOM_INCLUSIVE);
-		} else if(g_map.getZoom() > MAX_ZOOM_INCLUSIVE) {
-			g_map.setZoom(MAX_ZOOM_INCLUSIVE);
-		} else {
-			deal_with_zoom_change_wrt_traffic_lines();
-			remake_all_vehicle_markers();
-		}
-	});
+	google.maps.event.addListener(g_map, 'zoom_changed', on_zoom_changed);
 
 	g_play_timer = setTimeout('moving_vehicles_timer_func()', 0);
 
@@ -1151,6 +1193,32 @@ function init_everything_that_depends_on_map() {
 		alert('You clicked in a place where we don\'t know of any routes.  Either we haven\'t yet gotten around to supporting the route you want, or there is no TTC route here.');
 	});
 
+}
+
+function on_zoom_changed() {
+	//set_contents('p_zoom', ""+(g_map.getZoom())); 
+	if(g_map.getZoom() < MIN_ZOOM_INCLUSIVE) {
+		g_map.setZoom(MIN_ZOOM_INCLUSIVE);
+	} else if(g_map.getZoom() > MAX_ZOOM_INCLUSIVE) {
+		g_map.setZoom(MAX_ZOOM_INCLUSIVE);
+	} else {
+		var guizoom = g_map.getZoom();
+		g_fudgeroute_data.forEach(function(froute, data) {
+			if(!is_subway(froute)) {
+				update_traffic_datazoom(froute);
+				if(data.traffic_datazoom != guizoom) {
+					refresh_traffic_from_server(froute);
+				}
+
+				update_vehicles_datazoom(froute);
+				if(data.vehicles_datazoom != guizoom) {
+					refresh_vehicles_from_server(froute);
+				}
+			}
+		});
+		remake_traffic_lines_allroutes();
+		remake_all_vehicle_markers();
+	}
 }
 
 function show_hardcoded_display_set() {
@@ -1520,19 +1588,6 @@ function get_visible_fudgeroutendirs() {
 	return r;
 }
 
-// returns -1 if we have no traffic data for that mofr step. 
-function get_traffic_kmph(fudgeroute_, mofr_) {
-	if(mofr_ % MOFR_STEP != 0 || mofr_ < 0) {
-		throw sprintf('Got %d.  We expect a multiple of %d.', mofr_, MOFR_STEP);
-	}
-	var traf = g_fudgeroute_data.get(fudgeroute_).traffic_mofr2speed.get(mofr_);
-	if(traf == undefined) {
-		return -1;
-	} else {
-		return traf.kmph;
-	}
-}
-
 function kmph_to_mps(kmph_) {
 	return kmph_*1000.0/(60*60);
 }
@@ -1752,19 +1807,22 @@ function show_cur_minute_vehicles_singleroute(fudgeroute_) {
 			}
 		});
 	});
-	var vid_to_vi = data.time_to_vid_to_vi.get(g_times.elementAtIndex(g_cur_minute_idx));
-	if(vid_to_vi != undefined) {
-		vid_to_vi.forEach(function(vid, vi) {
-			if(!g_hidden_vids.contains(vid)) {
-				var marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(round_heading(vi.heading));
-				marker.setPosition(google_LatLng([vi.lat, vi.lon]));
-				if(!TEST_INVISIBLE) {
-					if(g_show_moving_vehicles) {
-						marker.setVisible(true);
+	var time_to_vid_to_vi = data.datazoom_to_time_to_vid_to_vi.get(data.vehicles_datazoom);
+	if(time_to_vid_to_vi != undefined) {
+		var vid_to_vi = time_to_vid_to_vi.get(g_times.elementAtIndex(g_cur_minute_idx));
+		if(vid_to_vi != undefined) {
+			vid_to_vi.forEach(function(vid, vi) {
+				if(!g_hidden_vids.contains(vid)) {
+					var marker = data.vid_to_heading_to_moving_vehicle_marker.get(vid).get(round_heading(vi.heading));
+					marker.setPosition(google_LatLng([vi.lat, vi.lon]));
+					if(!TEST_INVISIBLE) {
+						if(g_show_moving_vehicles) {
+							marker.setVisible(true);
+						}
 					}
 				}
-			}
-		});
+			});
+		}
 	}
 }
 
@@ -2072,7 +2130,7 @@ $(document).ready(initialize);
 			</div>
 		</div>
 		<div>
-			 <p id="p_zoom"/>   <!-- TDR  comment again -->
+			<!-- <p id="p_zoom"/> -->
 			<p id="p_paths_text"/>
 			<p id="p_loading_urls"/>
 			<div id="div_framerate">
