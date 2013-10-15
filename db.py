@@ -436,9 +436,13 @@ def make_whereclause_safe(whereclause_):
 	return re.sub('(?i)insert|delete|drop|create|truncate|alter|update|;', '', whereclause_)
 
 # direction_ can be an integer direction (0 or 1) or a pair of LatLngs from which we will infer that integer direction.
-def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, zoom_, time_window_end_, log_=False):
+# Important to do this mc.decorate here, when the time arg is a definite integer, because that will usually be 0 (meaning now) 
+# when it comes from the client. 
+@mc.decorate
+def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, rsdt_, time_window_end_, log_=False):
 	assert direction_ in (0, 1) or (len(direction_) == 2 and all(isinstance(e, geom.LatLng) for e in direction_))
-	assert (fudgeroute_ in routes.NON_SUBWAY_FUDGEROUTES) and type(num_minutes_) == int
+	assert (fudgeroute_ in routes.NON_SUBWAY_FUDGEROUTES) and type(num_minutes_) == int and rsdt_ in routes.RSDTS
+	assert abs(now_em() - time_window_end_) < 1000*60*60*24*365*20
 	if direction_ in (0, 1):
 		direction = direction_
 	else:
@@ -453,7 +457,7 @@ def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, zoom_, t
 				printerr('\t%s' % vi)
 		r += vis
 	starttime = time_window_end_ - num_minutes_*60*1000
-	r = interp_by_time(r, True, True, direction, routes.zoom_to_rsdt(zoom_), starttime, time_window_end_, log_=log_)
+	r = interp_by_time(r, True, True, direction, rsdt_, starttime, time_window_end_, log_=log_)
 	return r
 
 # The idea here is, for each vid, to get one more vi from the db, greater in time than the pre-existing
@@ -1039,7 +1043,7 @@ def insert_report(report_type_, froute_, dir_, zoom_, time_, report_data_obj_):
 	curs.execute('insert into reports values (%s,%s,%s,%s,%s,%s,%s,%s)', cols)
 	curs.close()
 	set_report_in_memcache(report_type_, froute_, dir_, zoom_, time_, report_json)
-	set_latest_report_time_in_memcache(report_type_, froute_, dir_, time_)
+	set_latest_report_time_in_memcache(report_type_, froute_, dir_, zoom_, time_)
 
 @trans
 def insert_demo_locations(froute_, demo_report_timestr_, vid_, locations_):
