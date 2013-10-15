@@ -345,6 +345,10 @@ function refresh_vehicles_from_server(fudgeroute_) {
 				}
 				if(time_was_updated || datazoom_was_updated) {
 					show_cur_minute_vehicles_singleroute(fudgeroute_);
+					// This will deal with hidden VIDs: 
+					all_froutes().forEach(function(froute) {
+						set_all_static_vehicle_markers_visible_singleroute(froute, g_show_static_vehicles);
+					});
 				}
 			}, 
 			error: function() {
@@ -356,6 +360,10 @@ function refresh_vehicles_from_server(fudgeroute_) {
 			}}
 		);
 	}
+}
+
+function all_froutes() {
+	return g_fudgeroute_data.keys();
 }
 
 function refresh_vid_checkboxes_html() {
