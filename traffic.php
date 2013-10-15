@@ -217,6 +217,10 @@ function interp_color(c1_, c2_, percent_) {
 // but they look even worse when the convex ends are pointing in the opposite direction that the vehicle location markers are 
 // moving.  I think that the direction that the convex ends are pointing tends to suggest to the typical person the direction 
 // of travel.  So here I am ensuring that the convex ends are pointing that way.  
+// 
+// Another note: Some code in here somewhere might assume that once data for a certain time is gotten for a certain froute and zoom, 
+// that we will never get data (traffic?  vehicles?  both?) for an earlier time.  I'm not sure about this, but since I have been 
+// making that assumption, and I wrote the code, I think there's a strong chance that I put my assumption into the code. 
 function refresh_traffic_from_server(fudgeroute_) {
 	var data = g_fudgeroute_data.get(fudgeroute_);
 	var dir_to_request = data.dir;
@@ -342,6 +346,8 @@ function refresh_vehicles_from_server(fudgeroute_) {
 						g_cur_minute_idx = 0;
 					}
 					update_clock_show_cur_minute();
+				}
+				if(time_was_updated || datazoom_was_updated) {
 					show_cur_minute_vehicles_singleroute(fudgeroute_);
 				}
 			}, 
@@ -849,38 +855,30 @@ function add_solo_vid_click_listener(vehicle_marker_, vid_) {
 }
 
 function set_solo_vid(vid_) {
-	if(is_solo_already()) {
-		g_fudgeroute_data.forEach(function(fudgeroute, data) {
-			data.time_to_vid_to_vi.forEach(function(time, vid_to_vi) {
-				vid_to_vi.forEach(function(vid, vi) {
-					var checkbox = document.getElementById(vid_checkbox_id(fudgeroute, vid));
+	var was_solo = is_solo_already();
+	g_fudgeroute_data.forEach(function(froute, data) {
+		all_vids_singleroute(froute).forEach(function(vid) {
+			var checkbox = document.getElementById(vid_checkbox_id(froute, vid));
+			if(was_solo) {
+				if(!checkbox.checked) {
+					checkbox.checked = true;
+					on_vid_checkbox_clicked(vid);
+				}
+			} else {
+				if(vid == vid_) {
 					if(!checkbox.checked) {
 						checkbox.checked = true;
 						on_vid_checkbox_clicked(vid);
 					}
-				});
-			});
-		});
-	} else {
-		g_fudgeroute_data.forEach(function(fudgeroute, data) {
-			data.time_to_vid_to_vi.forEach(function(time, vid_to_vi) {
-				vid_to_vi.forEach(function(vid, vi) {
-					var checkbox = document.getElementById(vid_checkbox_id(fudgeroute, vid));
-					if(vid == vid_) {
-						if(!checkbox.checked) {
-							checkbox.checked = true;
-							on_vid_checkbox_clicked(vid);
-						}
-					} else {
-						if(checkbox.checked) {
-							checkbox.checked = false;
-							on_vid_checkbox_clicked(vid);
-						}
+				} else {
+					if(checkbox.checked) {
+						checkbox.checked = false;
+						on_vid_checkbox_clicked(vid);
 					}
-				});
-			});
+				}
+			}
 		});
-	}
+	});
 }
 
 function is_solo_already() {
