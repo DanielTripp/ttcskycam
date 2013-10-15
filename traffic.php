@@ -217,10 +217,6 @@ function interp_color(c1_, c2_, percent_) {
 // but they look even worse when the convex ends are pointing in the opposite direction that the vehicle location markers are 
 // moving.  I think that the direction that the convex ends are pointing tends to suggest to the typical person the direction 
 // of travel.  So here I am ensuring that the convex ends are pointing that way.  
-// 
-// Another note: Some code in here somewhere might assume that once data for a certain time is gotten for a certain froute and zoom, 
-// that we will never get data (traffic?  vehicles?  both?) for an earlier time.  I'm not sure about this, but since I have been 
-// making that assumption, and I wrote the code, I think there's a strong chance that I put my assumption into the code. 
 function refresh_traffic_from_server(fudgeroute_) {
 	var data = g_fudgeroute_data.get(fudgeroute_);
 	var dir_to_request = data.dir;
