@@ -1,8 +1,8 @@
 #!/usr/bin/python2.6
 
-# Tables involved: 
-# 
 '''
+Tables involved: 
+ 
 
 create table ttc_vehicle_locations (vehicle_id varchar(100), fudgeroute varchar(20), route_tag varchar(10), dir_tag varchar(100), 
      lat double precision, lon double precision, secs_since_report integer, time_retrieved bigint, 
@@ -22,7 +22,7 @@ create table reports (app_version varchar(20), report_type varchar(20), froute v
      time bigint, timestr varchar(30), time_inserted_str varchar(30), report_json text);
 create index reports_idx on reports (app_version, report_type, froute, direction, time desc) ;
 create index reports_idx_3 on reports ( time desc, time_inserted_str desc ) ;
-# The last index above is for my personal browsing of the database - not for the code's needs: 
+# The last index above is for my personal browsing of the database, not for the code's needs. 
 
 '''
 
@@ -697,7 +697,9 @@ def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, rsdt_, be_clever_, raw_vilist
 				if interped_loc_snap_result is not None:
 					tracks_based_heading = tracks.heading(interped_loc_snap_result[1], interped_loc_snap_result[2])
 					ref_heading = vi1_.latlng.heading(vi2_.latlng)
-					if vi1_.latlng.dist_m(vi2_.latlng) < 50 and (raw_vilist_for_hint_ is not None): # that 50 could probably be a lot less.
+					# We've got to find the general direction this vehicle is going, and I don't trust a location difference of < 50 metres, 
+					# so let's keep looking back in time until we have a difference greater than 50 metres: 
+					if vi1_.latlng.dist_m(vi2_.latlng) < 50 and (raw_vilist_for_hint_ is not None): 
 						for vi in [vi for vi in raw_vilist_for_hint_ if vi.vehicle_id == vi2_.vehicle_id and vi.time < vi2_.time]:
 							if vi.latlng.dist_m(vi2_.latlng) > 50:
 								ref_heading = vi.latlng.heading(vi2_.latlng)
