@@ -15,9 +15,16 @@ function hashCode(str_) {
 eval(get_sync("sprintf.js"));
 eval(get_sync("js/buckets-minified.js"));
 
-var g_loading_urls = new buckets.LinkedList();
+var g_loading_urls = null;
 
 function add_to_loading_urls(url_) {
+	if(g_loading_urls == null) {
+		g_loading_urls = new buckets.LinkedList();
+		// Caching this error image in advance so that if the user, on their phone, loads the page while they have reception 
+		// (which will usually be the case) then they lose reception, our error icon will appear.  Otherwise a browser-specific 
+		// broken image icon would probably appear. 
+		(new Image(25, 25)).src = 'error.png';
+	}
 	g_loading_urls.add(url_)
 	if(g_loading_urls.size() == 1) {
 		var img = document.getElementById('loading_img');
@@ -33,9 +40,11 @@ function update_p_loading_urls() {
 	var p_loading_urls = document.getElementById('p_loading_urls');
 	if(p_loading_urls != null) {
 		var html = "";
-		g_loading_urls.forEach(function(url) {
-			html += url+"<br>";
-		});
+		if(g_loading_urls != null) {
+			g_loading_urls.forEach(function(url) {
+				html += url+"<br>";
+			});
+		}
 		p_loading_urls.innerHTML = html;
 	}
 }
