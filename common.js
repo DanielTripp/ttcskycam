@@ -554,6 +554,10 @@ function dist_m_polyline(pts_) {
 	return r;
 }
 
+function fdiv(x_, y_) {
+	return Math.floor(x_/y_);
+}
+
 eval(get_sync("js/json2.js"));
 
 
