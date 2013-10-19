@@ -141,7 +141,7 @@ def implies(a_, b_):
 	return not (a_ and not b_)
 
 def fdiv(x_, y_):
-	return int((x_ - (x_ % y_))/y_)
+	return int(math.floor(x_/y_))
 
 # 'i' is for 'inclusive'
 def intervalii(a_, b_):
