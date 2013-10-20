@@ -797,7 +797,9 @@ def heading_to_englishdesc(heading_):
 
 @mc.decorate
 def get_froute_to_english():
-	r = {'yonge_university_spadina': 'Yonge/University/Spadina', 'bloor_danforth': 'Bloor/Danforth'}
+	# These need to fit in a dialog so we make them short.  
+	r = {'yonge_university_spadina': 'Yonge/Uni Subway', 'bloor_danforth': 'Bloor Subway'}
+	# Hoping that the other ones aren't too long. 
 	for froute in NON_SUBWAY_FUDGEROUTES:
 		if froute == 'stclair':
 			english = 'St. Clair'
@@ -943,17 +945,33 @@ def routepts(froute_, dir_):
 	return routeinfo(froute_).routepts(dir_)
 
 @mc.decorate
-def get_all_froute_latlngs_json_str():
-	return util.to_json_str(get_all_froute_latlngs())
+def get_froute_to_routepts_max_rsdt_json_str():
+	return util.to_json_str(get_froute_to_routepts_max_rsdt())
 
-def get_all_froute_latlngs():
+def get_froute_to_routepts_max_rsdt():
 	r = {}
+	max_rsdt = max(RSDTS)
 	for froute in FUDGEROUTES:
-		r[froute] = routeinfo(froute).routepts(0)
+		ri = routeinfo(froute)
+		r[froute] = []
+		r[froute].append(routeinfo(froute).routepts(0, max_rsdt))
+		if ri.is_split_by_dir:
+			r[froute].append(routeinfo(froute).routepts(1, max_rsdt))
 	return r
 	
 def dir_from_latlngs(froute_, latlng1_, latlng2_):
 	return routeinfo(froute_).dir_from_latlngs(latlng1_, latlng2_)
+
+@mc.decorate
+def get_subway_froute_to_zoom_to_routepts():
+	r = {}
+	for froute in SUBWAY_FUDGEROUTES:
+		r[froute] = {}
+		for zoom in c.VALID_ZOOMS:
+			ri = routeinfo(froute)
+			assert not ri.is_split_by_dir
+			r[froute][zoom] = ri.routepts(0, zoom_to_rsdt(zoom))
+	return util.to_json_str(r)
 
 if __name__ == '__main__':
 

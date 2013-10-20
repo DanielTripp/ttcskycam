@@ -210,10 +210,10 @@ LineSegAddr.prototype.toString = function() {
 	return sprintf('LineSegAddr(%d,%d)', this.polylineidx, this.startptidx);
 }
 
+// arg polylines_: a list of a list of LatLng objects OR a list of a list of 2-element arrays (lat and lng). 
 function SnapToGridCache(polylines_) {
-	assert(polylines_.length == 0 || isLatLng(polylines_[0][0]));
 	this.latstep = LATSTEP; this.lngstep = LNGSTEP;
-	this.polylines = polylines_;
+	this.polylines = massage_polylines_to_LatLngs(polylines_);
 	this.gridsquare_to_linesegaddrs = new buckets.Dictionary(); // key : GridSquare.  value : set of LineSegAddr.
 	var polylineidx = 0;
 	var thiss = this;
@@ -236,6 +236,24 @@ function SnapToGridCache(polylines_) {
 		}
 		polylineidx+=1;
 	});
+}
+
+function massage_polylines_to_LatLngs(in_polylines_) {
+	var out_polylines = [];
+	in_polylines_.forEach(function(in_polyline) {
+		var out_polyline = [];
+		in_polyline.forEach(function(in_pt) {
+			if(isLatLng(in_pt)) {
+				out_polyline.push(in_pt);
+			} else if(in_pt.length == 2 && typeof(in_pt[0]) == 'number' && typeof(in_pt[1]) == 'number') {
+				out_polyline.push(new LatLng(in_pt[0], in_pt[1]));
+			} else {
+				throw "Don't understand polyline point.";
+			}
+		});
+		out_polylines.push(out_polyline);
+	});
+	return out_polylines;
 }
 
 SnapToGridCache.prototype.get_lineseg = function(linesegaddr_) {
@@ -425,7 +443,6 @@ function get_gridsquare_spiral_by_grid_vals(center_gridsquare_, latreach_, lngre
 	});
 	return r;
 }
-
 
 function get_gridsquare_spiral_by_geom_vals(center_gridsquare_, searchradius_) {
 	var reach = get_reach(center_gridsquare_, searchradius_);

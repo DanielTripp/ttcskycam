@@ -21,6 +21,7 @@
 		<script type="text/javascript" src="js/jquery-ui-timepicker-addon.js"></script>
 		<script type="text/javascript" src="js/buckets-minified.js"></script>
 		<script type="text/javascript" src="common.js"></script>
+		<script type="text/javascript" src="snaptogrid.js"></script>
     <script type="text/javascript">
 
 var DONT_SHOW_INSTRUCTIONS = false;
@@ -80,7 +81,6 @@ var g_froute_zindexes = ['ossington', 'lansdowne', 'spadina', 'bathurst', 'duffe
 var g_all_froutes = [];
 
 var g_subway_froutes = to_buckets_set(['bloor_danforth', 'yonge_university_spadina']);
-var g_subway_froute_to_route_latlngs = {};
 
 var g_framerate_period_times = new buckets.LinkedList();
 for(var i=0; i<15; i++) {
@@ -121,6 +121,7 @@ var g_force_show_froutes = new buckets.Set(), g_force_hide_froutes = new buckets
 var g_force_dir0_froutes = new buckets.Set(), g_force_dir1_froutes = new buckets.Set();
 var g_main_path = [], g_extra_path_froutendirs = [];
 var g_use_rendered_aot_arrow_vehicle_icons = g_browser_is_desktop;
+var g_froute_to_snaptogridcache = null;
 
 var HEADING_ROUNDING_DEGREES = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
 	readfile('HEADING_ROUNDING'); ?>;
@@ -135,7 +136,12 @@ var FROUTE_TO_INTDIR_TO_ENGLISHDESC = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PR
 	passthru('python -c "import routes; print routes.get_fudgeroute_to_intdir_to_englishdesc()"'); ?>;
 var FROUTE_TO_ENGLISH = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
 	passthru('python -c "import routes; print routes.get_froute_to_english()"'); ?>;
-
+// Arrived at by visual trial and error.  Not very accurate.  Specific to Toronto. 
+var ZOOM_TO_METERSPERPIXEL = {10: 102.4, 11: 51.2, 12: 25.6, 13: 12.8, 14: 6.4, 15: 3.2, 16: 1.6, 17: 0.8, 18: 0.4, 19: 0.2};
+var MAX_RSDT = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
+	passthru('python -c "import routes; print max(routes.RSDTS)"'); ?>;
+var SUBWAY_FROUTE_TO_ZOOM_TO_ROUTEPTS = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
+	passthru('python -c "import routes; print routes.get_subway_froute_to_zoom_to_routepts()"'); ?>;
 
 var g_zoom_to_vehicle_rendered_img_size = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
 	readfile('zoom_to_vehicle_rendered_img_size.json'); ?>;
@@ -1040,6 +1046,7 @@ function init_everything_that_doesnt_depend_on_map() {
 	init_num_extra_routes_controls();
 
 	init_route_options_dialog();
+	init_route_select_dialog();
 
 	init_rendered_aot_arrow_vehicle_icons_buttons();
 
@@ -1172,7 +1179,7 @@ function init_everything_that_depends_on_map() {
 	schedule_refresh_data_from_server(); // But this call here will cause a periodic refresh of all routes.  The first refresh 
 			// caused by this will happen not right away, but in a few seconds. 
 
-	add_invisible_route_lines();
+	create_invisible_clickable_route_grid();
 
 	if(SHOW_PATH_GRID_SQUARES) {
 		show_pathgridsquares();
@@ -1191,14 +1198,71 @@ function init_everything_that_depends_on_map() {
 		show_hardcoded_display_set();
 	}
 
-	google.maps.event.addListener(g_map, 'click', function() {
-		alert('You clicked in a place where we don\'t know of any routes.  Either we haven\'t yet gotten around to supporting the route you want, or there is no TTC route here.');
-	});
+	google.maps.event.addListener(g_map, 'click', on_map_click);
+}
 
+function on_map_click(mouseevent_) {
+	var latlng = new LatLng(mouseevent_.latLng.lat(), mouseevent_.latLng.lng());
+	var nearby_froutes = [];
+	var search_radius = get_map_click_route_search_radius_for_cur_zoom();
+	g_froute_to_snaptogridcache.forEach(function(froute, snaptogridcache) {
+		if(snaptogridcache.snap(latlng, search_radius) != null) {
+			nearby_froutes.push(froute);
+		}
+	});
+	if(nearby_froutes.length == 0) {
+		alert('You clicked in a place where we don\'t know of any routes.  Either we haven\'t yet gotten around to supporting the route you want, or there is no TTC route here.');
+	} else if(nearby_froutes.length == 1) {
+		show_route_options_dialog(nearby_froutes[0]);
+	} else {
+		nearby_froutes.sort();
+		show_route_select_dialog(nearby_froutes);
+	}
+}
+
+function get_map_click_route_search_radius_for_cur_zoom() {
+	var meters_per_pixel = get_meters_per_pixel_for_cur_zoom();
+	var pixels = 30; // Seems like a clickable area. 
+	var r = Math.round(meters_per_pixel*pixels);
+
+	// Doing this because we are using route pts at max rsdt (AKA min zoom) for the invisble clickable grid, 
+	// so when the user is at a high zoom, that invisible route polyline could be quite far (in pixels) from 
+	// where the street is on the map.  By our definition of what an RSDT is, the farthest distance from a real route to 
+	// a simplified version is the RSDT.  (For the purposes of this comment, assume that the street as it appears on the 
+	// google map coincides exactly with the real route AKA the unsimplified route AKA the route at RSDT of 0.)  
+	// So eg. our east-west route could, in a certain area, be such that the the max-rsdt simplified version of it 
+	// runs MAX_RSDT meters below or above it.  So that means that our search radius should always be at least RSDT, 
+	// or else the user could click right on the street and we would not count that as a hit.  Going further - in that case 
+	// it would not be very useful if we made the clickable area end eg. one pixel north of the street on the map. 
+	// So that is why we use MAX_RSDT*2. 
+	r = Math.max(r, MAX_RSDT*2);
+
+	return r;
+}
+
+function get_meters_per_pixel_for_cur_zoom() {
+	var zoom = g_map.getZoom();
+	if(!(zoom in ZOOM_TO_METERSPERPIXEL)) {
+		// Top answer in http://stackoverflow.com/questions/4946287/finding-out-if-console-is-available/4946373#4946373 
+		// for testing for the existence of 'console.log'.  I feel like there is a better way.  Oh well. 
+		if(typeof console == "object") { 
+			console.log(sprintf("zoom %d not present in map.", zoom));
+		}
+		var zoom_keys = sorted_keys(ZOOM_TO_METERSPERPIXEL);
+		var min_zoom_key = arrayMin(zoom_keys), max_zoom_key = arrayMax(zoom_keys);
+		if(zoom < min_zoom_key) { 
+			zoom = min_zoom_key;
+		} else if(zoom > max_zoom_key) {
+			zoom = max_zoom_key;
+		} else {
+			throw sprintf("Don't know what to do for route search radius in zoom %d.", zoom);
+		}
+	}
+	return ZOOM_TO_METERSPERPIXEL[zoom];
 }
 
 function on_zoom_changed() {
-	//set_contents('p_zoom', ""+(g_map.getZoom())); 
+	set_contents('p_zoom', ""+(g_map.getZoom())); 
 	if(g_map.getZoom() < MIN_ZOOM_INCLUSIVE) {
 		g_map.setZoom(MIN_ZOOM_INCLUSIVE);
 	} else if(g_map.getZoom() > MAX_ZOOM_INCLUSIVE) {
@@ -1328,7 +1392,7 @@ function forget_streetlabels_singleroute(froute_) {
 
 function init_route_options_dialog() {
 	$("#route-options-dialog").dialog({
-	 resizable: false,
+		resizable: false,
 		autoOpen: false,
 		//height:340,
 		modal: true,
@@ -1336,6 +1400,14 @@ function init_route_options_dialog() {
 			'Ok': function() { on_route_options_dialog_ok_clicked(); $(this).dialog('close'); },
 			'Cancel': function() { $(this).dialog('close'); }
 		}
+	});
+}
+
+function init_route_select_dialog() {
+	$("#route-select-dialog").dialog({
+		resizable: false,
+		autoOpen: false,
+		modal: true,
 	});
 }
 
@@ -1393,25 +1465,15 @@ function is_subway(froute_) {
 	return g_subway_froutes.contains(froute_);
 }
 
-function add_invisible_route_lines() {
-	var froute_to_latlngs = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
-				passthru('python -c "import routes; print routes.get_all_froute_latlngs_json_str()"'); ?>;
-	for(var froute in froute_to_latlngs) {
-		var latlngs = froute_to_latlngs[froute];
-		add_invisible_route_line(froute, latlngs);
-		if(is_subway(froute)) { // then save these for later. 
-			g_subway_froute_to_route_latlngs[froute] = latlngs;
-		}
-
+function create_invisible_clickable_route_grid() {
+	var froute_to_routepts = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
+				passthru('python -c "import routes; print routes.get_froute_to_routepts_max_rsdt_json_str()"'); ?>;
+	g_froute_to_snaptogridcache = new buckets.Dictionary();
+	for(var froute in froute_to_routepts) {
+		var routepts = froute_to_routepts[froute];
 		g_all_froutes.push(froute); // using this opportunity to build a complete list of froute names on the client side here. 
+		g_froute_to_snaptogridcache.set(froute, new SnapToGridCache(routepts));
 	}
-}
-
-function add_invisible_route_line(froute_, latlngs_) {
-	var line = new google.maps.Polyline({map: g_map, path: google_LatLngs(latlngs_), strokeWeight: 20, strokeOpacity: 0, zIndex: 10});
-	google.maps.event.addListener(line, 'click', function(mouse_event_) {
-			on_route_clicked(froute_, mouse_event_.latLng);
-		});
 }
 
 function assert_force_sets_consistent() {
@@ -1423,7 +1485,7 @@ function assert_force_sets_consistent() {
 	}
 }
 
-function on_route_clicked(froute_, latlng_) {
+function show_route_options_dialog(froute_) {
 	g_route_options_dialog_froute = froute_;
 	assert_force_sets_consistent();
 	function s(bool_) {
@@ -1437,7 +1499,7 @@ function on_route_clicked(froute_, latlng_) {
 	} else if(g_force_hide_froutes.contains(froute_)) {
 		show = 'hide';
 	}
-	html = sprintf(
+	var html = sprintf(
 		  'Show this route?<br>'
 		+ '<input id="showshowbutton" type="radio" name="show" value="show" onclick="" %(showchecked)s />'
 		+ '<label for="showshowbutton" onclick="">Show it</label><br>'
@@ -1477,6 +1539,23 @@ function showing_route_solo(froute_) {
 	assert(g_all_froutes.indexOf(froute_) != -1, "unknown froute '"+froute_+"'");
 	return (g_force_show_froutes.size() == 1 && g_force_show_froutes.contains(froute_) 
 			&& g_force_hide_froutes.size() == g_all_froutes.length-1);
+}
+
+function show_route_select_dialog(froutes_) {
+	assert(froutes_.length > 0);
+	var html = '';
+	froutes_.forEach(function(froute) {
+		html += sprintf('<input type="button" id="%(fr)s_button" onclick="on_route_select_button_clicked(\'%(fr)s\')" value="%(eng)s" /><br>', 
+			{fr: froute, eng: FROUTE_TO_ENGLISH[froute]});
+	});
+	$('#route-select-dialog').dialog('option', 'title', 'Did you mean...');
+	$('#route-select-dialog').html(html);
+	$('#route-select-dialog').dialog('open');
+}
+
+function on_route_select_button_clicked(froute_) {
+	$("#route-select-dialog").dialog('close');
+	show_route_options_dialog(froute_);
 }
 
 function show_pathgridsquares() {
@@ -1762,10 +1841,10 @@ function make_subway_lines(froute_) {
 	assert(is_subway(froute_), ""+froute_+" is not a subway");
 
 	var data = g_fudgeroute_data.get(froute_);
-	var latlngs = g_subway_froute_to_route_latlngs[froute_];
+	var latlngs = SUBWAY_FROUTE_TO_ZOOM_TO_ROUTEPTS[froute_][g_map.getZoom()];
 	var width = get_traffic_line_width()*1.5;
 	var line = new google.maps.Polyline({map: g_map, path: google_LatLngs(latlngs), strokeWeight: width, strokeOpacity: 0.5, 
-			strokeColor: 'rgb(0,0,255)', zIndex: -30, visible: g_show_traffic_lines}); 
+			strokeColor: 'rgb(0,0,255)', zIndex: -30, visible: g_show_traffic_lines, clickable: false}); 
 	data.traffic_lines.add(line);
 }
 
@@ -1967,7 +2046,8 @@ function make_traffic_line(froute_, start_latlon_, end_latlon_, kmph_, mofr_) {
 		strokeColor: kmph_to_color(kmph_), 
 		strokeWeight: (draw_outline ? get_traffic_line_width()-1 : get_traffic_line_width()),  
 		zIndex: get_traffic_line_zindex(froute_, false), 
-		visible: g_show_traffic_lines 
+		visible: g_show_traffic_lines, 
+		clickable: false
 	});
 	r.add(line);
 	if(draw_outline) {
@@ -1977,7 +2057,8 @@ function make_traffic_line(froute_, start_latlon_, end_latlon_, kmph_, mofr_) {
 			strokeColor: get_outline_color(kmph_), 
 			strokeWeight: get_traffic_line_width(), 
 			zIndex: get_traffic_line_zindex(froute_, true),
-			visible: g_show_traffic_lines 
+			visible: g_show_traffic_lines, 
+			clickable: false
 		});
 		r.add(line_behind);
 	}
@@ -2132,7 +2213,7 @@ $(document).ready(initialize);
 			</div>
 		</div>
 		<div>
-			<!-- <p id="p_zoom"/> -->
+			<p id="p_zoom"/>
 			<p id="p_paths_text"/>
 			<p id="p_loading_urls"/>
 			<div id="div_framerate">
@@ -2206,5 +2287,6 @@ $(document).ready(initialize);
 			<p></p>
 		</div>
 		<div id="route-options-dialog"><div>
+		<div id="route-select-dialog"><div>
   </body>
 </html>
