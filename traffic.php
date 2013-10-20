@@ -1045,6 +1045,7 @@ function init_everything_that_doesnt_depend_on_map() {
 
 	init_num_extra_routes_controls();
 
+	init_message_dialog();
 	init_route_options_dialog();
 	init_route_select_dialog();
 
@@ -1211,7 +1212,7 @@ function on_map_click(mouseevent_) {
 		}
 	});
 	if(nearby_froutes.length == 0) {
-		alert('You clicked in a place where we don\'t know of any routes.  Either we haven\'t yet gotten around to supporting the route you want, or there is no TTC route here.');
+		show_message_dialog('', 'You clicked in a place where we don\'t know of any routes.  Either there is no TTC route here, or we haven\'t gotten around to supporting that route yet.');
 	} else if(nearby_froutes.length == 1) {
 		show_route_options_dialog(nearby_froutes[0]);
 	} else {
@@ -1390,6 +1391,15 @@ function forget_streetlabels_singleroute(froute_) {
 	g_fudgeroute_data.get(froute_).streetlabel_markers.clear();
 }
 
+function init_message_dialog() {
+	$("#message-dialog").dialog({
+		resizable: false,
+		autoOpen: false,
+		modal: true,
+		buttons: { 'Ok': function() { $(this).dialog('close'); } }
+	});
+}
+
 function init_route_options_dialog() {
 	$("#route-options-dialog").dialog({
 		resizable: false,
@@ -1483,6 +1493,12 @@ function assert_force_sets_consistent() {
 				buckets_set_to_string(g_force_show_froutes), buckets_set_to_string(g_force_hide_froutes), 
 				buckets_set_to_string(g_force_dir0_froutes), buckets_set_to_string(g_force_dir1_froutes));
 	}
+}
+
+function show_message_dialog(title_, message_) {
+	$('#message-dialog').dialog('option', 'title', title_);
+	$('#message-dialog').html(message_);
+	$('#message-dialog').dialog('open');
 }
 
 function show_route_options_dialog(froute_) {
@@ -2288,5 +2304,6 @@ $(document).ready(initialize);
 		</div>
 		<div id="route-options-dialog"><div>
 		<div id="route-select-dialog"><div>
+		<div id="message-dialog"><div>
   </body>
 </html>
