@@ -283,7 +283,11 @@ function cgi_url(cgi_path_, func_args_) {
 
 function AssertException(message) { this.message = message; }
 AssertException.prototype.toString = function () {
-  return 'AssertException: ' + this.message;
+	if(this.message != undefined) {
+  	return 'AssertException: ' + this.message;
+	} else {
+  	return 'AssertException';
+	}
 }
 
 function assert(exp, message) {
@@ -535,11 +539,20 @@ function radians(degrees_) {
 	return degrees_*Math.PI/180.0;
 }
 
+// Both arguments need to be a google.maps.LatLng, or anything with 'lat' and 'lng' members (either callable or not). 
 function dist_m(pt1_, pt2_) {
 	var RADIUS_OF_EARTH = 6367.44465;
+	var pt1, pt2;
+	if(typeof(pt1_.lat) === 'function') {
+		pt1 = [pt1_.lat(), pt1_.lng()];
+		pt2 = [pt2_.lat(), pt2_.lng()];
+	} else {
+		pt1 = [pt1_.lat, pt1_.lng];
+		pt2 = [pt2_.lat, pt2_.lng];
+	}
+	var lat1 = radians(pt1[0]), lng1 = radians(pt1[1]);
+	var lat2 = radians(pt2[0]), lng2 = radians(pt2[1]);
 	// 'Haversine formula' from http://en.wikipedia.org/wiki/Great-circle_distance
-	var lat1 = radians(pt1_.lat()), lng1 = radians(pt1_.lng());
-	var lat2 = radians(pt2_.lat()), lng2 = radians(pt2_.lng());
 	var dlat = lat2 - lat1;
 	var dlng = lng2 - lng1;
 	var central_angle = 2*Math.asin(Math.sqrt(Math.pow(Math.sin(dlat/2), 2) + Math.cos(lat1)*Math.cos(lat2)*(Math.pow(Math.sin(dlng/2), 2))));
@@ -556,6 +569,42 @@ function dist_m_polyline(pts_) {
 
 function fdiv(x_, y_) {
 	return Math.floor(x_/y_);
+}
+
+// Thanks to http://stackoverflow.com/questions/3885817/how-to-check-if-a-number-is-float-or-integer 
+function isInt(n) {
+	return typeof n === 'number' && n % 1 == 0;
+}
+
+function inii(lower_, x_, upper_) {
+	return (lower_ <= x_ && x_ <= upper_);
+}
+
+function inie(lower_, x_, upper_) {
+	return (lower_ <= x_ && x_ < upper_);
+}
+
+// Returns a list like python's 'range' except this will return something regardless of the order the arguments are in. 
+function intervalii(a_, b_) {
+	var r = [];
+  if(a_ < b_) {
+		for(var i=a_; i<=b_; i++) {
+			r.push(i);
+		}
+  } else {
+		for(var i=a_; i>=b_; i--) {
+			r.push(i);
+		}
+	}
+	return r;
+}
+
+function arrayMin(array_) {
+	return Math.min.apply(Math, array_);
+}
+
+function arrayMax(array_) {
+	return Math.max.apply(Math, array_);
 }
 
 eval(get_sync("js/json2.js"));
