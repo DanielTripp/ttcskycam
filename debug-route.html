@@ -16,13 +16,16 @@
 		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
 		<script type="text/javascript" src="js/jquery-ui-1.8.17.custom.min.js"></script>
 		<script type="text/javascript" src="common.js"></script>
+		<script type="text/javascript" src="snaptogrid.js"></script>
     <script type="text/javascript">
 
 var g_map;
 var g_stop_markers = new buckets.LinkedList(), g_lines = new buckets.LinkedList();
 var g_route_markers = new buckets.LinkedList();
+var g_snapped_marker = null;
 var g_resnapped_markers = [null, null];
 var g_stops_dir_to_stoptag_to_latlng = null;
+var g_snaptogridcache = new SnapToGridCache([]);
 
 
 function add_info_win(mark_, text_) {
@@ -76,6 +79,7 @@ function initialize() {
 	init_map();
 	google.maps.event.addListener(g_map, 'click', function(e) {
 		add_route_marker(e.latLng);
+		rebuild_snaptogridcache();
 	});
 	init_snaptest_marker();
 
@@ -92,6 +96,9 @@ function initialize() {
 			}
 		});
 */
+
+	google.maps.event.addListener(g_map, 'zoom_changed', on_zoom_changed);
+	on_zoom_changed();
 
 }
 
@@ -124,36 +131,68 @@ function init_snaptest_marker() {
 		});
 	google.maps.event.addListener(marker, 'dragend', function() {
 		var pos = marker.getPosition();
-		var route = radio_val('fudgeroute');
-		var snaptest_result = snaptest(pos, route);
 		set_contents('snaptest_arg_pt', sprintf("Arg pt: ( %.6f, %.6f )", pos.lat(), pos.lng()));
-
-		if(snaptest_result[0] != null) {
-			set_contents('snaptest_result_snappedpt', sprintf("Snapped: (%.6f, %.6f)", snaptest_result[0][0], snaptest_result[0][1]));
+		forget_snapped_marker();
+		forget_resnapped_markers();
+		var snapped_pt = null;
+		if(is_selected('useclientsidesnap_checkbox')) {
+			var snap_result = g_snaptogridcache.snap(new LatLng(pos.lat(), pos.lng()), 1000);
+			if(snap_result != null) {
+				snapped_pt = [snap_result[0].lat, snap_result[0].lng];
+				set_contents('snaptest_result_snappedpt', sprintf("Snapped (client-side): (%.6f, %.6f)", snap_result[0].lat, snap_result[0].lng));
+				set_contents('snaptest_result_mofr', '');
+				set_contents('snaptest_result_resnappedpts', '');
+			}
 		} else {
-			set_contents('snaptest_result_snappedpt', 'no snapped point');
-		}
+			var route = radio_val('fudgeroute');
+			var snaptest_result = snaptest(pos, route);
+			snapped_pt = snaptest_result[0];
 
-		set_contents('snaptest_result_mofr', sprintf("mofr = %d", snaptest_result[1]));
+			if(snaptest_result[0] != null) {
+				set_contents('snaptest_result_snappedpt', sprintf("Snapped (server-side): (%.6f, %.6f)", snaptest_result[0][0], snaptest_result[0][1]));
+			} else {
+				set_contents('snaptest_result_snappedpt', 'no snapped point');
+			}
 
-		for(var i=0; i<2; i++) {
-			if(g_resnapped_markers[i] != null) {
-				g_resnapped_markers[i].setMap(null);
-				delete g_resnapped_markers[i];
-				g_resnapped_markers[i] = null;
+			set_contents('snaptest_result_mofr', sprintf("mofr = %d", snaptest_result[1]));
+
+			forget_resnapped_markers();
+			for(var i=0; i<2; i++) {
+				if(snaptest_result[2][i] != null) {
+					//alert(snaptest_result[2][0] + 1);
+					var newmarker = new google.maps.Marker({
+						position: new google.maps.LatLng(snaptest_result[2][i][0], snaptest_result[2][i][1]), map: g_map, draggable: false, 
+						icon: 'http://www.google.com/mapfiles/markerB.png', zIndex: 5
+						});
+					g_resnapped_markers[i] = newmarker;
+				}
 			}
-			if(snaptest_result[2][i] != null) {
-				//alert(snaptest_result[2][0] + 1);
-				var newmarker = new google.maps.Marker({
-					position: new google.maps.LatLng(snaptest_result[2][i][0], snaptest_result[2][i][1]),
-					map: g_map,
-					draggable: false
-					});
-				g_resnapped_markers[i] = newmarker;
-			}
+			set_contents('snaptest_result_resnappedpts', snaptest_result[2]);
 		}
-		set_contents('snaptest_result_resnappedpts', snaptest_result[2]);
+		if(snapped_pt != null) {
+			g_snapped_marker = new google.maps.Marker({
+				position: new google.maps.LatLng(snapped_pt[0], snapped_pt[1]), map: g_map, draggable: false, 
+				icon: 'http://www.google.com/mapfiles/markerA.png', zIndex: 10 
+				});
+		}
 	});
+}
+
+function forget_snapped_marker() {
+	if(g_snapped_marker != null) {
+		g_snapped_marker.setMap(null);
+		g_snapped_marker = null;
+	}
+}
+
+function forget_resnapped_markers() {
+	for(var i=0; i<2; i++) {
+		if(g_resnapped_markers[i] != null) {
+			g_resnapped_markers[i].setMap(null);
+			delete g_resnapped_markers[i];
+			g_resnapped_markers[i] = null;
+		}
+	}
 }
 
 function snaptest(glatlon_, fudgeroutename_) {
@@ -294,6 +333,7 @@ function set_fudge_route_routepts(route_, dir_) {
 	for(var i=0; i<glatlons.length; i++) {
 		add_route_marker(glatlons[i]);
 	}
+	rebuild_snaptogridcache();
 }
 
 function latlonfloatarrays_to_googlemaps(l_) {
@@ -383,6 +423,7 @@ function split_line(lo_marker_ptaddr_, new_latlng_) {
 	marker_latlngs.forEach(function(latlng) {
 		add_route_marker(latlng);
 	});
+	rebuild_snaptogridcache();
 }
 
 function radio_val(groupname_) {
@@ -409,7 +450,8 @@ function add_route_marker(glatlon_) {
 
 	var marker_ptaddr = g_route_markers.size();
 
-	var marker = new google.maps.Marker({position: glatlon, map: g_map, title:''+(marker_ptaddr), draggable: true, zIndex: 1});
+	var marker = new google.maps.Marker({position: glatlon, map: g_map, title:''+(marker_ptaddr), draggable: true, zIndex: -10, 
+		icon: 'http://www.google.com/mapfiles/marker.png'});
 
 	g_route_markers.add(marker);
 
@@ -441,6 +483,17 @@ function delete_marker(marker_ptaddr_) {
 		add_route_marker(latlng);
 	});
 
+	rebuild_snaptogridcache();
+}
+
+function rebuild_snaptogridcache() {
+	var marker_latlngs = [];
+	g_route_markers.forEach(function(marker) {
+		var google_latlng = marker.getPosition();
+		marker_latlngs.push(new LatLng(google_latlng.lat(), google_latlng.lng()));
+	});
+
+	g_snaptogridcache = new SnapToGridCache([marker_latlngs]);
 }
 
 function constrain_latlng_by_map_bounds(latlng_) {
@@ -492,6 +545,15 @@ function show_route_dist_m() {
 		pts.push(marker.getPosition());
 	});
 	set_contents('dist', dist_m_polyline(pts));
+}
+
+function on_zoom_changed() {
+	set_contents('p_zoom', "Zoom: "+(g_map.getZoom()));
+}
+
+function on_add_marker_button_clicked() {
+	add_route_marker(null);
+	rebuild_snaptogridcache();
 }
 
     </script>
@@ -570,21 +632,25 @@ function show_route_dist_m() {
       <table border="1">
 				<tr>
 					<td>
-						Build fudge route:  <input id="add_marker_button" type="button" onclick="add_route_marker(null)" value="Add marker" /><br/>
+						Build fudge route:  <input id="add_marker_button" type="button" onclick="on_add_marker_button_clicked" value="Add marker" /><br/>
 						(Or press the spacebar.)
+					</td>
+				</tr>
+				<tr>
+					<td>
+						<label for="useclientsidesnap_checkbox">Use client-side snap:</label>
+						<input type="checkbox" id="useclientsidesnap_checkbox" name="useclientsidesnap_checkbox" checked="checked"/>
 					</td>
 				</tr>
       </table>
 			</form>
     </div>
-		<br/>
-		<br/>
 		<div>
+			<p id="p_zoom">zoom...</p>
 			<form name="form1">
 				stoptag:<input type="text" size="15" name="stoptag_field" id="stoptag_field" /> 
 				<input type="button" onclick="show_stoptag(this.form.stoptag_field.value)" value="Submit" id="stoptag_submit_button" /><br/>
 			</form>
-			<p id="over">over???</p>
 			<p id="dist">...</p>
 			<p id="snaptest_arg_pt">...</p>
 			<p id="snaptest_result_snappedpt">...</p>
