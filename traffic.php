@@ -1302,7 +1302,7 @@ function show_hardcoded_display_set() {
 		g_force_show_froutes.add(froute);
 		(dir == 0 ? g_force_dir0_froutes : g_force_dir1_froutes).add(froute);
 	});
-	recalc_display_set();
+	calc_display_set_and_reget_data_for_all_routes();
 	g_trip_orig_marker.setVisible(false);
 	g_trip_dest_marker.setVisible(false);
 }
@@ -1430,7 +1430,7 @@ function init_route_select_dialog() {
 
 function on_route_options_dialog_ok_clicked() {
 	update_force_sets_from_dialog_gui();
-	recalc_display_set();
+	calc_display_set_and_reget_data_for_all_routes();
 }
 
 function update_force_sets_from_dialog_gui() {
@@ -1684,14 +1684,6 @@ function on_trip_marker_moved(orig_aot_dest_) {
 	get_paths_from_server();
 }
 
-function get_visible_fudgeroutendirs() {
-	var r = new buckets.LinkedList();
-	g_fudgeroute_data.forEach(function(fudgeroute, data) {
-		r.add([fudgeroute, data.dir]);
-	});
-	return r;
-}
-
 function kmph_to_mps(kmph_) {
 	return kmph_*1000.0/(60*60);
 }
@@ -1723,10 +1715,6 @@ function round(x_, step_) {
 	return (x_ - rd < ru - x_ ? rd : ru);
 }
 
-function get_data_for_selected_routes() {
-	recalc_display_set();
-}
-
 function get_paths_from_server() {
 	var orig = g_trip_orig_marker.getPosition(), dest = g_trip_dest_marker.getPosition();
 	callpy('paths.get_paths_by_latlngs', orig, dest, 
@@ -1737,14 +1725,15 @@ function get_paths_from_server() {
 			}
 			g_main_path = r_[0];
 			g_extra_path_froutendirs = r_[1];
-			recalc_display_set();
+			calc_display_set_and_reget_data_for_all_routes();
 		});
 }
 
-// Combines paths indicated by markers with the per-route override settings, and maxroutes/num-extra-routes-to-show. 
+// Combines the paths indicated by the trip orig and dest markers with the per-route override settings, 
+// and maxroutes/num-extra-routes-to-show. 
 // return list of (froute, dir) pairs.  dir will be 0 or 1 except for when we need the server to figure it out, 
 // then it will be a pair of latlngs representing orig and dest points (latlngs in raw 2-element array format.) 
-function get_display_set() {
+function calc_display_set() {
 	assert_force_sets_consistent();
 	var r = [];
 
@@ -1815,7 +1804,7 @@ function on_num_extra_routes_down_clicked() {
 	if(g_num_extra_routes_to_show > 0) {
 		g_num_extra_routes_to_show -= 1;
 		set_contents('span_num_extra_routes', ''+g_num_extra_routes_to_show);
-		recalc_display_set();
+		calc_display_set_and_reget_data_for_all_routes();
 	}
 }
 
@@ -1823,12 +1812,12 @@ function on_num_extra_routes_up_clicked() {
 	if(g_num_extra_routes_to_show < 99) {
 		g_num_extra_routes_to_show += 1;
 		set_contents('span_num_extra_routes', ''+g_num_extra_routes_to_show);
-		recalc_display_set();
+		calc_display_set_and_reget_data_for_all_routes();
 	}
 }
 
-function recalc_display_set() {
-	var new_froutendirs = get_display_set();
+function calc_display_set_and_reget_data_for_all_routes() {
+	var new_froutendirs = calc_display_set();
 
 	var new_routes = new buckets.LinkedList();
 	new_froutendirs.forEach(function(froutendir) {
@@ -1972,7 +1961,7 @@ function on_traffictype_changed() {
 	stop_refresh_data_from_server_timer();
 	forget_data_allroutes();
 	update_g_times();
-	get_data_for_selected_routes();
+	calc_display_set_and_reget_data_for_all_routes();
 	if(is_traffictype_current()) {
 		schedule_refresh_data_from_server();
 	}
