@@ -36,12 +36,19 @@ def _get_polylines_from_files():
 def is_on_a_track(latlng_):
 	return (snap(latlng_) is not None)
 
-# Default search radius here is the same as tolerance "0" in routes.RouteInfo.latlon_to_mofr().  This may be important.
-# Maybe we should maintain a central constant for it somewhere.
+# This uses no search radius for the snap.  That is - it is unlimited, and will keep going until a line segment is found, 
+# no matter how far away.  This is okay here for a few reasons:
+# 
+# 1) There are not that very many streetcar tracks in Toronto, therefore we know about all of them, 
+# 2) New streetcar tracks are not being built, 
+# 3) We're confident that well not be incorrectly identifying something that is not a streetcar as a streetcar. 
+# 
+# The difference in real-world results between us putting None here as the search radius and us putting 1000 meters 
+# is probably nothing. 
 @lru_cache(1000)
-def snap(latlng_, searchradius_=50):
+def snap(latlng_):
 	assert isinstance(latlng_, geom.LatLng)
-	return snaptogridcache().snap(latlng_, searchradius_)
+	return snaptogridcache().snap(latlng_, None)
 
 def heading(linesegaddr_, referencing_lineseg_aot_point_):
 	return snaptogridcache().heading(linesegaddr_, referencing_lineseg_aot_point_)
