@@ -516,12 +516,17 @@ class RouteInfo:
 		r.append(self.mofr_to_latlon(0, dir_))
 		while prev_end_mofr < self.max_mofr():
 			start_mofr = prev_end_mofr
-			for end_mofr in range(start_mofr+mofr_incr, self.max_mofr(), mofr_incr):
-				if self.does_simplified_lineseg_deviate_too_much(dir_, start_mofr, end_mofr, mofr_incr, rsdt_):
+			for end_mofr in frange(start_mofr+mofr_incr, self.max_mofr()-1, mofr_incr):
+				if self.is_candidate_simplified_lineseg_too_long(dir_, start_mofr, end_mofr, rsdt_):
 					while True:
 						end_mofr -= 1
-						if not self.does_simplified_lineseg_deviate_too_much(dir_, start_mofr, end_mofr, mofr_incr, rsdt_):
+						if not self.is_candidate_simplified_lineseg_too_long(dir_, start_mofr, end_mofr, rsdt_):
 							break
+					while True:
+						end_mofr += 0.05
+						if self.is_candidate_simplified_lineseg_too_long(dir_, start_mofr, end_mofr, rsdt_):
+							break
+					end_mofr -= 0.05
 					r.append(self.mofr_to_latlon(end_mofr, dir_))
 					break
 			else:
@@ -530,12 +535,38 @@ class RouteInfo:
 			prev_end_mofr = end_mofr
 		return r
 
-	def does_simplified_lineseg_deviate_too_much(self, dir_, lineseg_start_mofr_, lineseg_end_mofr_, mofr_incr_, rsdt_):
+	def is_candidate_simplified_lineseg_too_long(self, dir_, start_mofr_, end_mofr_, rsdt_):
+		assert end_mofr_ > start_mofr_
+		r = self.does_simplified_lineseg_deviate_too_much(dir_, start_mofr_, end_mofr_, rsdt_)
+		if not self.is_subway():
+
+			# TODO: fix this awful code 
+			# it assumes that the 'key set' for zoom_to_rsdt is the same as that for zoom_to_mofrstep.  I think. 
+			for zoom in c.VALID_ZOOMS:
+				if zoom_to_rsdt(zoom) == rsdt_:
+					break
+			else:
+				raise Exception()
+			import traffic
+			mofrstep = traffic.zoom_to_mofrstep(zoom)
+
+			# Using the same logic that is found throughout traffic.py, if the mofrstep is eg. 100, then traffic will be 
+			# calculated at mofrs 0, 100, 200, 300, etc., and if you want to know the traffic at mofr 149 you should consult 
+			# mofr 100, and if you want to know the traffic at mofr 151 you should consult 200.   This results in the lines being 
+			# drawn offset by half of mofrstep - eg. one line from 50 to 150, the next from 150 to 250 (more or less.  I'm not 
+			# bothering with off-by-ones here.) 
+			start_mofr_ref = round(start_mofr_, mofrstep); end_mofr_ref = round(end_mofr_, mofrstep)
+			start_and_end_are_not_in_adjacent_mofrstep_segments = (end_mofr_ref - start_mofr_ref > mofrstep)
+
+			r |= start_and_end_are_not_in_adjacent_mofrstep_segments
+		return r
+
+	def does_simplified_lineseg_deviate_too_much(self, dir_, start_mofr_, end_mofr_, rsdt_):
 		r = False
-		simplified_lineseg = geom.LineSeg(self.mofr_to_latlon(lineseg_start_mofr_, dir_), self.mofr_to_latlon(lineseg_end_mofr_, dir_))
+		simplified_lineseg = geom.LineSeg(self.mofr_to_latlon(start_mofr_, dir_), self.mofr_to_latlon(end_mofr_, dir_))
 		# These routeptaddr are for rsdt = 0 i.e. the unsimplified route: 
-		start_routeptaddr = self.mofr_to_lorouteptaddr(lineseg_start_mofr_, dir_)
-		end_routeptaddr = self.mofr_to_lorouteptaddr(lineseg_end_mofr_, dir_)
+		start_routeptaddr = self.mofr_to_lorouteptaddr(start_mofr_, dir_)
+		end_routeptaddr = self.mofr_to_lorouteptaddr(end_mofr_, dir_)
 
 		# check deviation (by distance) of simplified lineseg to unsimplified route. 
 		for routeptaddr in range(start_routeptaddr+1, end_routeptaddr+1):
@@ -600,6 +631,10 @@ class RouteInfo:
 			return True
 		except ValueError:
 			return False
+
+	def routeptmofrs(self, dir_, rsdt_):
+		assert dir_ in (0, 1) and rsdt_ in RSDTS
+		return self.rsdt_to_dir_to_routeptaddr_to_mofr[rsdt_][dir_][:]
 
 def max_mofr(route_):
 	return routeinfo(route_).max_mofr()

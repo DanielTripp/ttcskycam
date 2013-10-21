@@ -63,7 +63,7 @@ def between(bound1_, value_, bound2_):
 
 # arg time_ - 0 means "now" i.e. current conditions. 
 # 
-# returns elem 0: visuals list - [[timestamp, vi dict, vi dict, ...], ...] 
+# returns elem 0: visuals list - [{'start_latlon':..., 'end_latlon':..., 'mofr':..., 'start_mofr':..., 'end_mofr':...}, ...] 
 #         elem 1: speed map - {mofr1: {'kmph': kmph, 'weight': weight}, ...}
 def get_traffics(fudgeroute_name_, dir_, zoom_, time_, last_returned_timestr_, window_minutes_=TIME_WINDOW_MINUTES, log_=False):
 	assert (fudgeroute_name_ in routes.NON_SUBWAY_FUDGEROUTES) and isinstance(window_minutes_, int) and (1 <= window_minutes_ < 120)
@@ -97,23 +97,26 @@ def get_traffics__mofr2speed(mofr_to_avgspeedandweight_):
 			r[mofr] = None
 	return r
 
-def get_traffics_visuals(mofr_to_avgspeedandweight_, fudgeroute_name_, dir_, rsdt_, mofrstep_):
+def get_traffics_visuals(mofr_to_avgspeedandweight_, froute_, dir_, rsdt_, mofrstep_):
 	assert rsdt_ in routes.RSDTS and mofrstep_ in MOFRSTEPS
 	r = []
-	routept1_mofr = 0
-	for routept1, routept2 in hopscotch(routes.routeinfo(fudgeroute_name_).routepts(dir_, rsdt_)):
-		route_seg_len = routept1.dist_m(routept2)
-		routept2_mofr = routept1_mofr + route_seg_len
+	ri = routes.routeinfo(froute_)
+	for routept1_mofr, routept2_mofr in hopscotch(ri.routeptmofrs(dir_, rsdt_)):
+		route_seg_len = routept2_mofr - routept1_mofr
 		routept1_mofr_ref = round(routept1_mofr, mofrstep_); routept2_mofr_ref = round(routept2_mofr, mofrstep_)
 		for mofr_ref in range(routept1_mofr_ref, routept2_mofr_ref+1, mofrstep_):
 			if mofr_ref not in mofr_to_avgspeedandweight_: continue
 			seg_start_mofr = max(mofr_ref - mofrstep_/2, routept1_mofr)
 			seg_end_mofr = min(mofr_ref + mofrstep_/2, routept2_mofr)
+			routept1 = ri.mofr_to_latlon(routept1_mofr, dir_, rsdt_)
+			routept2 = ri.mofr_to_latlon(routept2_mofr, dir_, rsdt_)
 			seg_start_latlng = routept1.add(routept2.subtract(routept1).scale((seg_start_mofr-routept1_mofr)/float(route_seg_len)))
 			seg_end_latlng   = routept1.add(routept2.subtract(routept1).scale((seg_end_mofr  -routept1_mofr)/float(route_seg_len)))
-			r.append({'start_latlon': seg_start_latlng, 'end_latlon': seg_end_latlng, 'mofr': mofr_ref, 
-					'start_mofr': routept1_mofr, 'end_mofr': routept2_mofr})
-		routept1_mofr += route_seg_len
+			if seg_start_latlng.dist_m(seg_end_latlng) > max(2, rsdt_): # any smaller and they'll be too small to see. 
+				# Using the rsdt there for most cases because 2*rsdt is quite visible when zoomed out.  
+				# Using the 2 because the way we generate those route pts results in a lot of ~1 meter segments. 
+				r.append({'start_latlon': seg_start_latlng, 'end_latlon': seg_end_latlng, 'mofr': mofr_ref, 
+						'start_mofr': routept1_mofr, 'end_mofr': routept2_mofr})
 	return r
 
 def get_mofr_to_kmph(froute_, dir_, current_, time_, window_minutes_=TIME_WINDOW_MINUTES, log_=False):
@@ -315,3 +318,4 @@ def get_est_riding_time_secs(froute_, start_mofr_, dest_mofr_, current_, time_):
 if __name__ == '__main__':
 
 	pass 
+
