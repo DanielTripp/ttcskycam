@@ -23,6 +23,9 @@ var g_bounding_rect = null;
 var g_opacity = 0.5;
 var g_polyline = null;
 
+var g_show_dist_pt1 = null, g_show_dist_pt2 = null;
+var g_show_dist_infowindow = null, g_show_dist_polyline = null;
+
 function initialize() {
 
 	init_map();
@@ -140,11 +143,11 @@ function draw_objects() {
 
 	var draw_dots = is_selected('dots_checkbox');
 
-	var i=0;
+	var ptidx=0;
 	g_latlngs.forEach(function(glatlng) {
 
 		if(draw_dots) {
-			make_marker(glatlng, i);
+			make_marker(glatlng, ptidx);
 		}
 
 		minlat = Math.min(minlat, glatlng.lat());
@@ -152,7 +155,7 @@ function draw_objects() {
 		minlng = Math.min(minlng, glatlng.lng());
 		maxlng = Math.max(maxlng, glatlng.lng());
 
-		i += 1;
+		ptidx += 1;
 	});
 
 	var rect_bounds = new google.maps.LatLngBounds(
@@ -169,21 +172,60 @@ function draw_polyline() {
 	g_polyline = new google.maps.Polyline({path: g_latlngs.toArray(), strokeWeight: 0.75, strokeOpacity: g_opacity, map: g_map});
 }
 
-function make_marker(latlng_, i_) {
+function make_marker(latlng_, ptidx_) {
 	var marker = new google.maps.Marker({position: latlng_, map: g_map, 
 			icon: {path: google.maps.SymbolPath.CIRCLE, scale: 14, strokeWeight : 0, fillOpacity: g_opacity, fillColor: 'black'}
 		});
-	//marker = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.6494532, -79.4314174),
-	//marker = new google.maps.Marker({map: g_map, position: latlng_ });
-	var infowin = new google.maps.InfoWindow({position: latlng_, disableAutoPan: true, 
-			content: sprintf('#%d - %.8f, %.8f', i_, latlng_.lat(), latlng_.lng())});
-	google.maps.event.addListener(marker, 'mouseover', function() {
+	g_markers.add(marker);
+	add_marker_mouseover_listener_for_infowin(marker, ptidx_);
+	add_marker_click_listener_for_show_dist(marker);
+}
+
+function add_marker_mouseover_listener_for_infowin(marker_, ptidx_) {
+	var latlng = marker_.getPosition();
+	var infowin = new google.maps.InfoWindow({position: latlng, disableAutoPan: true, 
+			content: sprintf('#%d - %.8f, %.8f', ptidx_, latlng.lat(), latlng.lng())});
+	google.maps.event.addListener(marker_, 'mouseover', function() {
 		infowin.open(g_map);
 	});
-	google.maps.event.addListener(marker, 'mouseout', function() {
+	google.maps.event.addListener(marker_, 'mouseout', function() {
 		infowin.close();
 	});
-	g_markers.add(marker);
+}
+
+function add_marker_click_listener_for_show_dist(marker_, ptidx_) {
+	google.maps.event.addListener(marker_, 'click', function() {
+		if(g_show_dist_pt1 != null  && g_show_dist_pt2 != null) {
+			reset_show_dist_everything();
+		}
+
+		if(g_show_dist_pt1 == null) {
+			assert(g_show_dist_pt2 == null);
+			g_show_dist_pt1 = marker_.getPosition();
+		} else if(g_show_dist_pt2 == null) {
+			g_show_dist_pt2 = marker_.getPosition();
+			g_show_dist_infowindow = new google.maps.InfoWindow({position: g_show_dist_pt2, disableAutoPan: true, 
+					content: sprintf('distance: %.2f meters', dist_m(g_show_dist_pt1, g_show_dist_pt2))});
+			google.maps.event.addListener(g_show_dist_infowindow, 'closeclick', reset_show_dist_everything);
+			g_show_dist_infowindow.open(g_map);
+
+			g_show_dist_polyline = new google.maps.Polyline({path: [g_show_dist_pt1, g_show_dist_pt2], strokeWeight: 4, 
+					strokeColor: 'red', map: g_map});
+		}
+	});
+}
+
+function reset_show_dist_everything() {
+	if(g_show_dist_infowindow != null) {
+		g_show_dist_infowindow.close();
+		g_show_dist_infowindow = null;
+	}
+	if(g_show_dist_polyline != null) {
+		g_show_dist_polyline.setMap(null);
+		g_show_dist_polyline = null;
+	}
+	g_show_dist_pt1 = null;
+	g_show_dist_pt2 = null;
 }
 
 function on_opacity_down_clicked() {
