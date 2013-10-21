@@ -691,22 +691,22 @@ def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, rsdt_, be_clever_, raw_vilist
 			r = routes.mofr_to_latlonnheading(froute, interp_mofr, dir_tag_int, rsdt_) + (interp_mofr,)
 		elif vi1_.is_a_streetcar():
 			vi1_tracks_snap_result = tracks.snap(vi1_.latlng); vi2_tracks_snap_result = tracks.snap(vi2_.latlng)
-			if vi1_tracks_snap_result is not None and vi2_tracks_snap_result is not None:
-				simple_interped_loc = vi1_.latlng.avg(vi2_.latlng, ratio_)
-				interped_loc_snap_result = tracks.snap(simple_interped_loc, 5000)
-				if interped_loc_snap_result is not None:
-					tracks_based_heading = tracks.heading(interped_loc_snap_result[1], interped_loc_snap_result[2])
-					ref_heading = vi1_.latlng.heading(vi2_.latlng)
-					# We've got to find the general direction this vehicle is going, and I don't trust a location difference of < 50 metres, 
-					# so let's keep looking back in time until we have a difference greater than 50 metres: 
-					if vi1_.latlng.dist_m(vi2_.latlng) < 50 and (raw_vilist_for_hint_ is not None): 
-						for vi in [vi for vi in raw_vilist_for_hint_ if vi.vehicle_id == vi2_.vehicle_id and vi.time < vi2_.time]:
-							if vi.latlng.dist_m(vi2_.latlng) > 50:
-								ref_heading = vi.latlng.heading(vi2_.latlng)
-								break
-					if geom.diff_headings(tracks_based_heading, ref_heading) > 90: # see note [1] above
-						tracks_based_heading = geom.normalize_heading(tracks_based_heading+180)
-					r = (interped_loc_snap_result[0], tracks_based_heading, None)
+			assert vi1_tracks_snap_result is not None and vi2_tracks_snap_result is not None # A tracks snap always succeeds. 
+			simple_interped_loc = vi1_.latlng.avg(vi2_.latlng, ratio_)
+			interped_loc_snap_result = tracks.snap(simple_interped_loc)
+			assert interped_loc_snap_result is not None # Again, a tracks snap always succeeds. 
+			tracks_based_heading = tracks.heading(interped_loc_snap_result[1], interped_loc_snap_result[2])
+			ref_heading = vi1_.latlng.heading(vi2_.latlng)
+			# We've got to find the general direction this vehicle is going, and I don't trust a location difference of < 50 metres, 
+			# so let's keep looking back in time until we have a difference greater than 50 metres: 
+			if vi1_.latlng.dist_m(vi2_.latlng) < 50 and (raw_vilist_for_hint_ is not None): 
+				for vi in [vi for vi in raw_vilist_for_hint_ if vi.vehicle_id == vi2_.vehicle_id and vi.time < vi2_.time]:
+					if vi.latlng.dist_m(vi2_.latlng) > 50:
+						ref_heading = vi.latlng.heading(vi2_.latlng)
+						break
+			if geom.diff_headings(tracks_based_heading, ref_heading) > 90: # see note [1] above
+				tracks_based_heading = geom.normalize_heading(tracks_based_heading+180)
+			r = (interped_loc_snap_result[0], tracks_based_heading, None)
 
 	if r is None:
 		vi1_latlng = vi1_.latlng; vi2_latlng = vi2_.latlng

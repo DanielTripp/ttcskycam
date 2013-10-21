@@ -1,6 +1,7 @@
 #!/usr/bin/python2.6
 
 from collections import defaultdict
+from itertools import *
 import pprint
 import math
 import geom
@@ -113,7 +114,9 @@ class SnapToGridCache(object):
 	def get_point(self, linesegaddr_):
 		return self.polylines[linesegaddr_.polylineidx][linesegaddr_.startptidx]
 
-	# arg searchradius_ is in metres.
+	# arg searchradius_ is in metres.  None means unlimited i.e. keep looking forever.  
+	# As long as this object contains some lines, something will be found and returned.  Probably quickly, too. 
+	# The word 'forever' is misleading. 
 	#
 	# returns None, or a tuple - (geom.LatLng, LineSegAddr, bool)
 	# if None: no line was found within the search radius.
@@ -126,7 +129,7 @@ class SnapToGridCache(object):
 	# 			if False: then intepret elem 1 as the address of a point (not a line) - and the snapped-to point (elem 0)
 	# 				is exactly the point referenced by elem 1.
 	def snap(self, target_, searchradius_):
-		assert isinstance(target_, geom.LatLng) and isinstance(searchradius_, int)
+		assert isinstance(target_, geom.LatLng) and (isinstance(searchradius_, int) or searchradius_ is None)
 		# Guarding against changes in LATSTEP/LNGSTEP while a SnapToGridCache object was sitting in memcached:
 		assert self.latstep == LATSTEP and self.lngstep == LNGSTEP
 		target_gridsquare = GridSquare(target_)
@@ -142,7 +145,7 @@ class SnapToGridCache(object):
 			if best_yet_snapresult==None or cur_snapresult[2]<best_yet_snapresult[2]:
 				best_yet_snapresult = cur_snapresult
 				best_yet_linesegaddr = linesegaddr
-		if best_yet_snapresult == None or best_yet_snapresult[2] > searchradius_:
+		if (best_yet_snapresult == None) or (searchradius_ is not None and best_yet_snapresult[2] > searchradius_):
 			return None
 		else:
 			if best_yet_snapresult[1] == None:
@@ -195,12 +198,16 @@ class SnapToGridCache(object):
 				for linesegaddr in self.gridsquare_to_linesegaddrs[gridsquare]:
 					yield linesegaddr
 
+# arg searchradius_ None means unlimited. 
 def get_reach(target_gridsquare_, searchradius_):
-	assert isinstance(target_gridsquare_, GridSquare) and isinstance(searchradius_, int)
-	lat_reach = get_reach_single(target_gridsquare_, searchradius_, True)
-	lon_reach_top = get_reach_single(GridSquare((target_gridsquare_.gridlat+lat_reach+1, target_gridsquare_.gridlng)), searchradius_, False)
-	lon_reach_bottom = get_reach_single(GridSquare((target_gridsquare_.gridlat-lat_reach, target_gridsquare_.gridlng)), searchradius_, False)
-	return (lat_reach, max(lon_reach_top, lon_reach_bottom))
+	assert isinstance(target_gridsquare_, GridSquare)
+	if searchradius_ is None:
+		return (None, None)
+	else:
+		lat_reach = get_reach_single(target_gridsquare_, searchradius_, True)
+		lon_reach_top = get_reach_single(GridSquare((target_gridsquare_.gridlat+lat_reach+1, target_gridsquare_.gridlng)), searchradius_, False)
+		lon_reach_bottom = get_reach_single(GridSquare((target_gridsquare_.gridlat-lat_reach, target_gridsquare_.gridlng)), searchradius_, False)
+		return (lat_reach, max(lon_reach_top, lon_reach_bottom))
 
 def get_reach_single(reference_gridsquare_, searchradius_, lat_aot_lng_):
 	assert isinstance(reference_gridsquare_, GridSquare) and isinstance(searchradius_, int) and isinstance(lat_aot_lng_, bool)
@@ -240,12 +247,14 @@ def get_display_grid(southwest_latlng_, northeast_latlng_):
 
 # yields a 2-tuple of integer offsets - that is, lat/lng offsets eg. (0,0), (1,0), (1,1), (-1, 1), etc.
 def gridsquare_offset_spiral_gen(latreach_, lngreach_):
-	assert isinstance(latreach_, int) and isinstance(lngreach_, int)
+	assert (isinstance(latreach_, int) and isinstance(lngreach_, int)) or (latreach_ is None and lngreach_ is None)
+
+	unlimited = (latreach_ is None)
 
 	def offsets_for_square_spiral_gen(square_reach_):
 		r = [0, 0]
 		yield r
-		for spiralidx in range(square_reach_+2):
+		for spiralidx in (count() if unlimited else range(square_reach_+2)):
 			for i in range(spiralidx*2 + 1): # north 
 				r[0] += 1
 				yield r
@@ -259,16 +268,20 @@ def gridsquare_offset_spiral_gen(latreach_, lngreach_):
 				r[1] -= 1
 				yield r
 
+	# Note that max(None,None) == None
 	for offsetlat, offsetlng in offsets_for_square_spiral_gen(max(latreach_, lngreach_)):
-		if abs(offsetlat) <= latreach_ and abs(offsetlng) <= lngreach_:
+		if unlimited or (abs(offsetlat) <= latreach_ and abs(offsetlng) <= lngreach_):
 			yield (offsetlat, offsetlng)
 
 
+# reach args - None means unlimited.
 def gridsquare_spiral_gen_by_grid_vals(center_gridsquare_, latreach_, lngreach_):
 	assert isinstance(center_gridsquare_, GridSquare)
+	assert (latreach_ is None) == (lngreach_ is None)
 	for offsetlat, offsetlng in gridsquare_offset_spiral_gen(latreach_, lngreach_):
 		yield GridSquare((center_gridsquare_.gridlat + offsetlat, center_gridsquare_.gridlng + offsetlng))
 
+# arg searchradius_ meters or None for unlimited. 
 def gridsquare_spiral_gen_by_geom_vals(center_gridsquare_, searchradius_):
 	latreach, lngreach = get_reach(center_gridsquare_, searchradius_)
 	for gridsquare in gridsquare_spiral_gen_by_grid_vals(center_gridsquare_, latreach, lngreach):
