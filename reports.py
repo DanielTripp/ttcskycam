@@ -79,6 +79,7 @@ def get_current_report_from_db(report_type_, froute_, dir_, zoom_, last_gotten_t
 			report_json = db.get_report(report_type_, froute_, dir_, zoom_, latest_report_time)
 			return '[%s, %s, %d]' % (json.dumps(em_to_str(latest_report_time)), report_json, dir_)
 
+# return: JSON string.  array.  elements of it: [time, data, direction].  data = [visuals, speeds]. 
 def get_traffic_report(froute_, dir_, zoom_, time_, last_gotten_timestr_, log_=False):
 	return get_report('traffic', froute_, dir_, zoom_, time_, last_gotten_timestr_, log_=log_)
 
