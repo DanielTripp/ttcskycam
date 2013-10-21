@@ -338,6 +338,19 @@ def massage_whereclause_time_args(whereclause_):
 		useoldtimecol = bool(re.search(r'\buseoldtimecol\b', r))
 		r = re.sub(r'\buseoldtimecol\b', '', r)
 
+		mo = re.search(r'\bdev\b', r)
+		if mo:
+			printerr('trying.')
+			dev_time = None
+			with open('dev-options-for-traffic-php.txt') as fin:
+				for line in fin:
+					if 'HISTORICAL_TIME_DEFAULT' in line:
+						dev_time = re.search(r'\d{4}-\d{2}-\d{2} \d{2}:\d{2}', line).group(0)
+						break
+			if dev_time is None:
+				raise Exception('time not found in dev options file.')
+			r = re.sub(r'\bdev\b', "'%s'" % dev_time, r)
+
 		def repl1(mo_):
 			return str(str_to_em(mo_.group(0).strip('\'"')))
 		r = re.sub(r'[\'"]\d{4}-\d{2}-\d{2} \d{2}:\d{2}(?::\d{2})?[\'"]', repl1, r)
