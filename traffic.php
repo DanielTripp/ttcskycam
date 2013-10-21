@@ -63,7 +63,7 @@ function new_fudgeroute_data() {
 		vid_to_heading_to_moving_vehicle_marker: new buckets.Dictionary(), 
 		vehicles_datazoom: 0, // Works the same as traffic_datazoom above.
 
-		dir: null, // will be 0 or 1 or a pair a latlngs (orig and dest). 
+		dir: null, // will be 0 or 1 or a pair a latlngs (orig and dest).   latlngs will be in a plain format: [float, float] array. 
 		traffic_request_pending: false, 
 		vehicles_request_pending: false,
 		streetlabel_markers: new buckets.LinkedList(),
@@ -234,7 +234,7 @@ function refresh_traffic_from_server(fudgeroute_) {
 				(data.datazoom_to_traffic_mofr2speed.containsKey(zoom) ? data.traffic_last_returned_timestr : null), 
 			{success: function(r_) {
 				var data = g_fudgeroute_data.get(fudgeroute_);
-				if(data == undefined || data.dir != dir_to_request) {
+				if(data == undefined || !dir_equals(data.dir, dir_to_request)) {
 					return;
 				}
 				data.traffic_request_pending = false;
@@ -258,12 +258,26 @@ function refresh_traffic_from_server(fudgeroute_) {
 			}, 
 			error: function() {
 				var data = g_fudgeroute_data.get(fudgeroute_);
-				if(data == undefined || data.dir != dir_to_request) {
+				if(data == undefined || !dir_equals(data.dir, dir_to_request)) {
 					return;
 				}
 				data.traffic_request_pending = false;
 			}}
 		);
+	}
+}
+
+// Both arguments can be 0, 1, or a pair of latlngs (i.e. orig and dest).  Here we are simple. 
+function dir_equals(dir1_, dir2_) {
+	if(dir1_ == 0 || dir1_ == 1) {
+		return (dir1_ == dir2_);
+	} else if(dir2_ == 0 || dir2_ == 1) {
+		return false;
+	} else {
+		assert(dir1_.length == 2 && dir2_.length == 2);
+		assert(dir1_[0].length == 2 && dir1_[1].length == 2);
+		assert(dir2_[0].length == 2 && dir2_[1].length == 2);
+		return (dir1_[0][0] == dir2_[0][0] && dir1_[0][1] == dir2_[0][1] && dir1_[1][0] == dir2_[1][0] && dir1_[1][1] == dir2_[1][1]);
 	}
 }
 
@@ -318,7 +332,7 @@ function refresh_vehicles_from_server(fudgeroute_) {
 				(data.datazoom_to_time_to_vid_to_vi.containsKey(zoom) ? data.locations_last_returned_timestr : null), 
 			{success: function(r_) {
 				var data = g_fudgeroute_data.get(fudgeroute_);
-				if(data == undefined || data.dir != dir_to_request) {
+				if(data == undefined || !dir_equals(data.dir, dir_to_request)) {
 					return;
 				}
 				data.vehicles_request_pending = false;
@@ -360,7 +374,7 @@ function refresh_vehicles_from_server(fudgeroute_) {
 			}, 
 			error: function() {
 				var data = g_fudgeroute_data.get(fudgeroute_);
-				if(data == undefined || data.dir != dir_to_request) {
+				if(data == undefined || !dir_equals(data.dir, dir_to_request)) {
 					return;
 				}
 				data.vehicles_request_pending = false;
@@ -1348,11 +1362,11 @@ function refresh_streetlabels_singleroute(froute_) {
 	} else {
 		callpy('streetlabels.get_labels', froute_, direction, zoom, g_map.getBounds().getSouthWest(), g_map.getBounds().getNorthEast(), 
 			function(labels) {
-				// This is a callback so since we started the call, this route could have been hidden or the zoom could have been changed, 
+				// This is a callback, so since we started the call, this route could have been hidden or the zoom could have been changed, 
 				// or all traffic lines hidden.  
 				// The map bounds could have changed too but I don't care as much about them right now for some reason. 
 				if(!g_fudgeroute_data.containsKey(froute_) || (g_map.getZoom() != zoom) || !g_show_traffic_lines 
-						|| (direction != g_fudgeroute_data.get(froute_).dir)) {
+						|| !dir_equals(g_fudgeroute_data.get(froute_).dir, direction)) {
 					return;
 				}
 				forget_streetlabels_singleroute(froute_);
@@ -1832,7 +1846,7 @@ function calc_display_set_and_deal_with_it() {
 
 	new_froutendirs.forEach(function(froutendir) {
 		var froute = froutendir[0], dir = froutendir[1];
-		if(g_fudgeroute_data.get(froute) == undefined || g_fudgeroute_data.get(froute).dir != dir) {
+		if(g_fudgeroute_data.get(froute) == undefined || !dir_equals(g_fudgeroute_data.get(froute).dir, dir)) {
 			forget_data_singleroute(froute);
 			var data = new_fudgeroute_data();
 			data.dir = dir;
