@@ -32,6 +32,7 @@ var SHOW_FRAMERATE = false;
 var SHOW_DEV_CONTROLS = false;
 var SHOW_HISTORICAL_ON_LOAD = false;
 var HISTORICAL_TIME_DEFAULT = '2013-02-17 12:35';
+var SHOW_ZOOM = false;
 
 var SHOW_PATHS_TEXT = false;
 var SHOW_PATH_GRID_SQUARES = false;
@@ -1036,6 +1037,9 @@ function init_everything_that_doesnt_depend_on_map() {
 	if(!SHOW_LOADING_URLS) {
 		$('#p_loading_urls').remove();
 	}
+	if(!SHOW_ZOOM) {
+		$('#p_zoom').remove();
+	}
 
 	set_play_buttons_appropriately();
 
@@ -1263,7 +1267,10 @@ function get_meters_per_pixel_for_cur_zoom() {
 }
 
 function on_zoom_changed() {
-	set_contents('p_zoom', ""+(g_map.getZoom())); 
+	if(SHOW_ZOOM) {
+		set_contents('p_zoom', "Zoom: "+(g_map.getZoom())); 
+	}
+
 	if(g_map.getZoom() < MIN_ZOOM_INCLUSIVE) {
 		g_map.setZoom(MIN_ZOOM_INCLUSIVE);
 	} else if(g_map.getZoom() > MAX_ZOOM_INCLUSIVE) {
