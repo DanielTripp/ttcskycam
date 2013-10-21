@@ -1302,7 +1302,7 @@ function show_hardcoded_display_set() {
 		g_force_show_froutes.add(froute);
 		(dir == 0 ? g_force_dir0_froutes : g_force_dir1_froutes).add(froute);
 	});
-	calc_display_set_and_reget_data_for_all_routes();
+	calc_display_set_and_deal_with_it();
 	g_trip_orig_marker.setVisible(false);
 	g_trip_dest_marker.setVisible(false);
 }
@@ -1430,7 +1430,7 @@ function init_route_select_dialog() {
 
 function on_route_options_dialog_ok_clicked() {
 	update_force_sets_from_dialog_gui();
-	calc_display_set_and_reget_data_for_all_routes();
+	calc_display_set_and_deal_with_it();
 }
 
 function update_force_sets_from_dialog_gui() {
@@ -1725,7 +1725,7 @@ function get_paths_from_server() {
 			}
 			g_main_path = r_[0];
 			g_extra_path_froutendirs = r_[1];
-			calc_display_set_and_reget_data_for_all_routes();
+			calc_display_set_and_deal_with_it();
 		});
 }
 
@@ -1804,7 +1804,7 @@ function on_num_extra_routes_down_clicked() {
 	if(g_num_extra_routes_to_show > 0) {
 		g_num_extra_routes_to_show -= 1;
 		set_contents('span_num_extra_routes', ''+g_num_extra_routes_to_show);
-		calc_display_set_and_reget_data_for_all_routes();
+		calc_display_set_and_deal_with_it();
 	}
 }
 
@@ -1812,11 +1812,11 @@ function on_num_extra_routes_up_clicked() {
 	if(g_num_extra_routes_to_show < 99) {
 		g_num_extra_routes_to_show += 1;
 		set_contents('span_num_extra_routes', ''+g_num_extra_routes_to_show);
-		calc_display_set_and_reget_data_for_all_routes();
+		calc_display_set_and_deal_with_it();
 	}
 }
 
-function calc_display_set_and_reget_data_for_all_routes() {
+function calc_display_set_and_deal_with_it() {
 	var new_froutendirs = calc_display_set();
 
 	var new_routes = new buckets.LinkedList();
@@ -1961,7 +1961,7 @@ function on_traffictype_changed() {
 	stop_refresh_data_from_server_timer();
 	forget_data_allroutes();
 	update_g_times();
-	calc_display_set_and_reget_data_for_all_routes();
+	calc_display_set_and_deal_with_it();
 	if(is_traffictype_current()) {
 		schedule_refresh_data_from_server();
 	}
