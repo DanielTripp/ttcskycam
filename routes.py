@@ -38,20 +38,6 @@ def is_subway(froute_):
 	assert froute_ in FUDGEROUTES
 	return froute_ in SUBWAY_FUDGEROUTES
 
-# rsdt = route-simplifying distance tolerance (and it's in metres).  
-def zoom_to_rsdt(zoom_):
-	assert zoom_ in c.VALID_ZOOMS
-	if zoom_ <= 12:
-		return 60
-	elif zoom_ == 13:
-		return 20
-	elif zoom_ in (14, 15):
-		return 5
-	else:
-		return 1
-
-RSDTS = set(zoom_to_rsdt(zoom) for zoom in c.VALID_ZOOMS)
-
 class Schedule(object):
 
 	def __init__(self, froute_, schedule_nextbus_xml_filename_):
@@ -310,43 +296,44 @@ class RouteInfo:
 			routepts = [read_pts_file('fudge_route_%s_dir0.json' % (self.name)), read_pts_file('fudge_route_%s_dir1.json' % (self.name))]
 			self.is_split_by_dir = True
 		self.snaptogridcache = snaptogrid.SnapToGridCache(routepts)
-		self.init_rsdt_to_dir_maps()
+		self.init_datazoom_to_dir_maps()
 		if self.is_split_by_dir:
 			len_dir_0 = geom.dist_m_polyline(self.routepts(0)); len_dir_1 = geom.dist_m_polyline(self.routepts(1))
 			if abs(len_dir_0 - len_dir_1) > 0.1:
 				printerr('route %s: dir 0 length: %0.2f.  dir 1 length: %0.2f.' % (self.name, len_dir_0, len_dir_1))
 				assert False
 
-	def init_rsdt_to_dir_maps(self):
-		self.rsdt_to_dir_to_routepts = {}
-		self.rsdt_to_dir_to_routeptaddr_to_mofr = {}
+	def init_datazoom_to_dir_maps(self):
+		# The key sets for both of these will be [None] + c.VALID_DATAZOOMS.  None is for the source routepts, unsimplified. 
+		self.datazoom_to_dir_to_routepts = {}
+		self.datazoom_to_dir_to_routeptaddr_to_mofr = {}
 
-		self.rsdt_to_dir_to_routepts[0] = {}
+		self.datazoom_to_dir_to_routepts[None] = {}
 		if self.is_split_by_dir:
-			self.rsdt_to_dir_to_routepts[0][0] = self.snaptogridcache.polylines[0]
-			self.rsdt_to_dir_to_routepts[0][1] = self.snaptogridcache.polylines[1]
+			self.datazoom_to_dir_to_routepts[None][0] = self.snaptogridcache.polylines[0]
+			self.datazoom_to_dir_to_routepts[None][1] = self.snaptogridcache.polylines[1]
 		else:
-			self.rsdt_to_dir_to_routepts[0][0] = self.rsdt_to_dir_to_routepts[0][1] = self.snaptogridcache.polylines[0]
-		self.rsdt_to_dir_to_routeptaddr_to_mofr[0] = self.calc_dir_to_routeptaddr_to_mofr(0)
+			self.datazoom_to_dir_to_routepts[None][0] = self.datazoom_to_dir_to_routepts[None][1] = self.snaptogridcache.polylines[0]
+		self.datazoom_to_dir_to_routeptaddr_to_mofr[None] = self.calc_dir_to_routeptaddr_to_mofr(None)
 
-		for rsdt in RSDTS:
-			dir_to_routepts = self.rsdt_to_dir_to_routepts[rsdt] = {}
+		for datazoom in c.VALID_DATAZOOMS:
+			dir_to_routepts = self.datazoom_to_dir_to_routepts[datazoom] = {}
 			for direction in (0, 1):
 				if direction == 1 and not self.is_split_by_dir:
 					dir_to_routepts[1] = dir_to_routepts[0]
 				else:
-					dir_to_routepts[direction] = self.calc_simplified_routepts(direction, rsdt)
-			self.rsdt_to_dir_to_routeptaddr_to_mofr[rsdt] = self.calc_dir_to_routeptaddr_to_mofr(rsdt)
+					dir_to_routepts[direction] = self.calc_simplified_routepts(direction, datazoom)
+			self.datazoom_to_dir_to_routeptaddr_to_mofr[datazoom] = self.calc_dir_to_routeptaddr_to_mofr(datazoom)
 
-	def calc_dir_to_routeptaddr_to_mofr(self, rsdt_):
+	def calc_dir_to_routeptaddr_to_mofr(self, datazoom_):
 		dir_to_routeptaddr_to_mofr = [[], []]
 		for direction in (0, 1):
 			if direction == 1 and not self.is_split_by_dir:
 				dir_to_routeptaddr_to_mofr[1] = dir_to_routeptaddr_to_mofr[0]
 			else:
 				routeptaddr_to_mofr = dir_to_routeptaddr_to_mofr[direction]
-				routepts = self.routepts(direction, rsdt_)
-				if rsdt_ == 0: # got to be careful w.r.t. bootstrapping.  can't use latlon_to_mofr for this one b/c it uses this very structure. 
+				routepts = self.routepts(direction, datazoom_)
+				if datazoom_ is None: # got to be careful w.r.t. bootstrapping.  can't use latlon_to_mofr for this one b/c it uses this very structure. 
 					for i in range(len(routepts)):
 						if i==0:
 							routeptaddr_to_mofr.append(0)
@@ -439,14 +426,15 @@ class RouteInfo:
 		# Please make sure that this continues to support something greater than the greatest possible rsdt 
 		# (route-simplifying distance tolerance), 
 		# and that the code that builds the routeptidx -> mofr map for each rsdt, and presumably calls this function, 
-		# uses tolerance argument to this function that is higher than the greatest rsdt. 
+		# uses a tolerance argument to this function that is higher than the greatest rsdt. 
+		# Otherwise a lot of things will be broken. 
 		snap_result = self.snaptogridcache.snap(post_, {0:50, 1:300, 1.5:600, 2:2000}[tolerance_])
 		if snap_result is None:
 			return -1
 		direction = snap_result[1].polylineidx; routeptidx = snap_result[1].startptidx
-		r = self.rsdt_to_dir_to_routeptaddr_to_mofr[0][direction][routeptidx]
+		r = self.datazoom_to_dir_to_routeptaddr_to_mofr[None][direction][routeptidx]
 		if snap_result[2]:
-			r += snap_result[0].dist_m(self.routepts(direction, 0)[routeptidx])
+			r += snap_result[0].dist_m(self.routepts(direction, None)[routeptidx])
 		r = int(r)
 		#g_latlon_to_mofr_mrucache[mrucache_key] = r
 		return r
@@ -460,36 +448,36 @@ class RouteInfo:
 		return (snapped_pt, mofr, resnapped_pts)
 
 	def max_mofr(self):
-		return int(math.ceil(self.rsdt_to_dir_to_routeptaddr_to_mofr[0][0][-1]))
+		return int(math.ceil(self.datazoom_to_dir_to_routeptaddr_to_mofr[None][0][-1]))
 
-	def mofr_to_latlon(self, mofr_, dir_, rsdt_=0):
+	def mofr_to_latlon(self, mofr_, dir_, datazoom_=None):
 		r = self.mofr_to_latlonnheading(mofr_, dir_)
 		return (r[0] if r != None else None)
 
-	def mofr_to_heading(self, mofr_, dir_, rsdt_=0):
+	def mofr_to_heading(self, mofr_, dir_, datazoom_=None):
 		r = self.mofr_to_latlonnheading(mofr_, dir_)
 		return (r[1] if r != None else None)
 
 	@lru_cache(5000)
-	def mofr_to_latlonnheading(self, mofr_, dir_, rsdt_=0):
+	def mofr_to_latlonnheading(self, mofr_, dir_, datazoom_=None):
 		assert dir_ in (0, 1)
 		if mofr_ < 0:
 			return None
-		routeptaddr_to_mofr = self.rsdt_to_dir_to_routeptaddr_to_mofr[rsdt_][dir_]
+		routeptaddr_to_mofr = self.datazoom_to_dir_to_routeptaddr_to_mofr[datazoom_][dir_]
 		for i in range(1, len(routeptaddr_to_mofr)):
 			if routeptaddr_to_mofr[i] >= mofr_:
-				prevpt = self.routepts(dir_, rsdt_)[i-1]; curpt = self.routepts(dir_, rsdt_)[i]
+				prevpt = self.routepts(dir_, datazoom_)[i-1]; curpt = self.routepts(dir_, datazoom_)[i]
 				prevmofr = routeptaddr_to_mofr[i-1]; curmofr = routeptaddr_to_mofr[i]
 				pt = curpt.subtract(prevpt).scale((mofr_-prevmofr)/float(curmofr-prevmofr)).add(prevpt)
 				return (pt, prevpt.heading(curpt) if dir_==0 else curpt.heading(prevpt))
 		return None
 
-	# For rsdt = 0 only. 
+	# For datazoom of None only. 
 	def mofr_to_lorouteptaddr(self, mofr_, dir_):
 		assert dir_ in (0, 1)
 		if mofr_ < 0:
 			return -1
-		for i, mofr in enumerate(self.rsdt_to_dir_to_routeptaddr_to_mofr[0][dir_]):
+		for i, mofr in enumerate(self.datazoom_to_dir_to_routeptaddr_to_mofr[None][dir_]):
 			if mofr > mofr_:
 				return i-1
 		return -1
@@ -504,12 +492,12 @@ class RouteInfo:
 			startpt, endpt = endpt, startpt
 		return startpt.heading(endpt)
 
-	def routepts(self, dir_, rsdt_=0):
+	def routepts(self, dir_, datazoom_=None):
 		assert dir_ in (0, 1)
-		return self.rsdt_to_dir_to_routepts[rsdt_][dir_]
+		return self.datazoom_to_dir_to_routepts[datazoom_][dir_]
 
-	def calc_simplified_routepts(self, dir_, rsdt_):
-		assert rsdt_ != 0 and rsdt_ in RSDTS
+	def calc_simplified_routepts(self, dir_, datazoom_):
+		assert datazoom_ is not None and datazoom_ in c.VALID_DATAZOOMS
 		mofr_incr = 20
 		r = []
 		prev_end_mofr = 0	
@@ -517,14 +505,14 @@ class RouteInfo:
 		while prev_end_mofr < self.max_mofr():
 			start_mofr = prev_end_mofr
 			for end_mofr in frange(start_mofr+mofr_incr, self.max_mofr()-1, mofr_incr):
-				if self.is_candidate_simplified_lineseg_too_long(dir_, start_mofr, end_mofr, rsdt_):
+				if self.is_candidate_simplified_lineseg_too_long(dir_, start_mofr, end_mofr, datazoom_):
 					while True:
 						end_mofr -= 1
-						if not self.is_candidate_simplified_lineseg_too_long(dir_, start_mofr, end_mofr, rsdt_):
+						if not self.is_candidate_simplified_lineseg_too_long(dir_, start_mofr, end_mofr, datazoom_):
 							break
 					while True:
 						end_mofr += 0.05
-						if self.is_candidate_simplified_lineseg_too_long(dir_, start_mofr, end_mofr, rsdt_):
+						if self.is_candidate_simplified_lineseg_too_long(dir_, start_mofr, end_mofr, datazoom_):
 							break
 					end_mofr -= 0.05
 					r.append(self.mofr_to_latlon(end_mofr, dir_))
@@ -535,20 +523,11 @@ class RouteInfo:
 			prev_end_mofr = end_mofr
 		return r
 
-	def is_candidate_simplified_lineseg_too_long(self, dir_, start_mofr_, end_mofr_, rsdt_):
+	def is_candidate_simplified_lineseg_too_long(self, dir_, start_mofr_, end_mofr_, datazoom_):
 		assert end_mofr_ > start_mofr_
-		r = self.does_simplified_lineseg_deviate_too_much(dir_, start_mofr_, end_mofr_, rsdt_)
+		r = self.does_simplified_lineseg_deviate_too_much(dir_, start_mofr_, end_mofr_, datazoom_)
 		if not self.is_subway():
-
-			# TODO: fix this awful code 
-			# it assumes that the 'key set' for zoom_to_rsdt is the same as that for zoom_to_mofrstep.  I think. 
-			for zoom in c.VALID_ZOOMS:
-				if zoom_to_rsdt(zoom) == rsdt_:
-					break
-			else:
-				raise Exception()
-			import traffic
-			mofrstep = traffic.zoom_to_mofrstep(zoom)
+			mofrstep = c.DATAZOOM_TO_MOFRSTEP[datazoom_]
 
 			# Using the same logic that is found throughout traffic.py, if the mofrstep is eg. 100, then traffic will be 
 			# calculated at mofrs 0, 100, 200, 300, etc., and if you want to know the traffic at mofr 149 you should consult 
@@ -561,17 +540,17 @@ class RouteInfo:
 			r |= start_and_end_are_not_in_adjacent_mofrstep_segments
 		return r
 
-	def does_simplified_lineseg_deviate_too_much(self, dir_, start_mofr_, end_mofr_, rsdt_):
+	def does_simplified_lineseg_deviate_too_much(self, dir_, start_mofr_, end_mofr_, datazoom_):
 		r = False
 		simplified_lineseg = geom.LineSeg(self.mofr_to_latlon(start_mofr_, dir_), self.mofr_to_latlon(end_mofr_, dir_))
-		# These routeptaddr are for rsdt = 0 i.e. the unsimplified route: 
+		# These routeptaddr are for datazoom == None i.e. the unsimplified route: 
 		start_routeptaddr = self.mofr_to_lorouteptaddr(start_mofr_, dir_)
 		end_routeptaddr = self.mofr_to_lorouteptaddr(end_mofr_, dir_)
 
 		# check deviation (by distance) of simplified lineseg to unsimplified route. 
 		for routeptaddr in range(start_routeptaddr+1, end_routeptaddr+1):
-			routept = self.routepts(dir_, 0)[routeptaddr]
-			if routept.dist_to_lineseg(simplified_lineseg) > rsdt_:
+			routept = self.routepts(dir_, None)[routeptaddr]
+			if routept.dist_to_lineseg(simplified_lineseg) > c.DATAZOOM_TO_RSDT[datazoom_]:
 				r = True
 				break
 
@@ -583,7 +562,7 @@ class RouteInfo:
 			# or less before a sharp corner.  If we checked it then we'd never get anywhere, or would need a special case in some other way.  
 			# So we let the distance deviation check above take care of things there. 
 			for routeptaddr1, routeptaddr2 in hopscotch(range(start_routeptaddr+1, end_routeptaddr+2)):
-				routept1 = self.routepts(dir_, 0)[routeptaddr1]; routept2 = self.routepts(dir_, 0)[routeptaddr2]
+				routept1 = self.routepts(dir_, None)[routeptaddr1]; routept2 = self.routepts(dir_, None)[routeptaddr2]
 				unsimplified_route_seg_heading = routept1.heading(routept2)
 				if geom.diff_headings(unsimplified_route_seg_heading, simplified_lineseg_heading) > heading_tolerance:
 					r = True
@@ -632,9 +611,9 @@ class RouteInfo:
 		except ValueError:
 			return False
 
-	def routeptmofrs(self, dir_, rsdt_):
-		assert dir_ in (0, 1) and rsdt_ in RSDTS
-		return self.rsdt_to_dir_to_routeptaddr_to_mofr[rsdt_][dir_][:]
+	def routeptmofrs(self, dir_, datazoom_):
+		assert dir_ in (0, 1) and datazoom_ in c.VALID_DATAZOOMS 
+		return self.datazoom_to_dir_to_routeptaddr_to_mofr[datazoom_][dir_][:]
 
 def max_mofr(route_):
 	return routeinfo(route_).max_mofr()
@@ -670,11 +649,11 @@ def latlon_to_mofr(route_, latlon_, tolerance_=0):
 	else:
 		return routeinfo(route_).latlon_to_mofr(latlon_, tolerance_)
 
-def mofr_to_latlon(route_, mofr_, dir_, rsdt_=0):
-	return routeinfo(route_).mofr_to_latlon(mofr_, dir_, rsdt_)
+def mofr_to_latlon(route_, mofr_, dir_, datazoom_=None):
+	return routeinfo(route_).mofr_to_latlon(mofr_, dir_, datazoom_)
 
-def mofr_to_latlonnheading(route_, mofr_, dir_, rsdt_=0):
-	return routeinfo(route_).mofr_to_latlonnheading(mofr_, dir_, rsdt_)
+def mofr_to_latlonnheading(route_, mofr_, dir_, datazoom_=None):
+	return routeinfo(route_).mofr_to_latlonnheading(mofr_, dir_, datazoom_)
 
 def fudgeroute_to_configroutes(fudgeroute_name_):
 	if fudgeroute_name_ not in FUDGEROUTE_TO_CONFIGROUTES:
@@ -980,32 +959,31 @@ def routepts(froute_, dir_):
 	return routeinfo(froute_).routepts(dir_)
 
 @mc.decorate
-def get_froute_to_routepts_max_rsdt_json_str():
-	return util.to_json_str(get_froute_to_routepts_max_rsdt())
+def get_froute_to_routepts_min_datazoom_json_str():
+	return util.to_json_str(get_froute_to_routepts_min_datazoom())
 
-def get_froute_to_routepts_max_rsdt():
+def get_froute_to_routepts_min_datazoom():
 	r = {}
-	max_rsdt = max(RSDTS)
 	for froute in FUDGEROUTES:
 		ri = routeinfo(froute)
 		r[froute] = []
-		r[froute].append(routeinfo(froute).routepts(0, max_rsdt))
+		r[froute].append(routeinfo(froute).routepts(0, c.MIN_DATAZOOM))
 		if ri.is_split_by_dir:
-			r[froute].append(routeinfo(froute).routepts(1, max_rsdt))
+			r[froute].append(routeinfo(froute).routepts(1, c.MIN_DATAZOOM))
 	return r
 	
 def dir_from_latlngs(froute_, latlng1_, latlng2_):
 	return routeinfo(froute_).dir_from_latlngs(latlng1_, latlng2_)
 
 @mc.decorate
-def get_subway_froute_to_zoom_to_routepts():
+def get_subway_froute_to_datazoom_to_routepts():
 	r = {}
 	for froute in SUBWAY_FUDGEROUTES:
 		r[froute] = {}
-		for zoom in c.VALID_ZOOMS:
+		for datazoom in c.VALID_DATAZOOMS:
 			ri = routeinfo(froute)
 			assert not ri.is_split_by_dir
-			r[froute][zoom] = ri.routepts(0, zoom_to_rsdt(zoom))
+			r[froute][datazoom] = ri.routepts(0, datazoom)
 	return util.to_json_str(r)
 
 if __name__ == '__main__':

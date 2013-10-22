@@ -22,10 +22,8 @@ function initialize() {
 
 	init_map();
 
-	var a, b;
-	(true ? a : b) = 42;
-	alert(a);
-
+	var d = {"19": 3, "18": 560, 17: 3, "16": 3, 15: 2, 14: 2, "13": 1, 12: 0, 11: 0, 10: 0};
+	alert(d[18]);
 
 }
 

@@ -4,10 +4,15 @@ import sys, json, os.path, bisect, xml.dom, xml.dom.minidom, yaml
 import geom, mc, c, routes 
 from misc import *
 
+# Streetlabels are done by guizoom not by datazoom.  
+# The datazoom for a guizoom will need to be consulted, but two guizoom with same datazoom will have different 
+# street labels results.  That is, if you zoom in one level, you will usually find that you will see more 
+# street labels, even if the datazoom hasn't increased. 
+
 # We don't do streetlabels for all zoom levels.  (These are google maps zoom levels by the way.) 
 # For low zoom (i.e. zoomed out), we draw our traffic coloured lines thin enough that google maps' 
 # own street labels are still visible.   Mostly visible.  Visible enough.
-ZOOMS_WITH_STREETLABELS = range(max(13, c.VALID_ZOOMS[0]), min(21, c.VALID_ZOOMS[-1]) + 1)
+GUIZOOMS_WITH_STREETLABELS = range(max(13, c.VALID_GUIZOOMS[0]), min(21, c.VALID_GUIZOOMS[-1]) + 1)
 
 g_froute_to_dir_to_startmofr_to_text = None
 
@@ -20,11 +25,11 @@ def heading_to_svg_rotation(heading_):
 		heading -= 180
 	return get_range_val((0, -90), (180, 90), heading) 
 
-def is_route_straight_enough_here(ri_, dir_, zoom_, start_mofr_, end_mofr_):
+def is_route_straight_enough_here(ri_, dir_, guizoom_, start_mofr_, end_mofr_):
 	start_heading = ri_.mofr_to_heading(start_mofr_, dir_)
 	step = max(1, (end_mofr_-start_mofr_)/10)
 	for mofr in range(start_mofr_, end_mofr_, step)[1:]:
-		sample_heading = ri_.mofr_to_heading(mofr, dir_, routes.zoom_to_rsdt(zoom_))
+		sample_heading = ri_.mofr_to_heading(mofr, dir_, c.GUIZOOM_TO_DATAZOOM[guizoom_])
 		if geom.diff_headings(start_heading, sample_heading) > 20:
 			return False
 	return True
@@ -57,8 +62,8 @@ def get_text(froute_, dir_, mofr_):
 	return get_froute_to_dir_to_startmofr_to_text()[froute_][dir_].flooritem(mofr_)[1]
 
 # arg dir_ could be (0, 1) or a latlng pair. 
-def get_labels(froute_, dir_, zoom_, box_sw_, box_ne_):
-	assert isinstance(zoom_, int) and isinstance(box_sw_, geom.LatLng) and isinstance(box_ne_, geom.LatLng)
+def get_labels(froute_, dir_, guizoom_, box_sw_, box_ne_):
+	assert isinstance(guizoom_, int) and isinstance(box_sw_, geom.LatLng) and isinstance(box_ne_, geom.LatLng)
 	assert box_sw_.lat < box_ne_.lat and box_sw_.lng < box_ne_.lng
 	if dir_ in (0, 1):
 		direction = dir_
@@ -67,21 +72,22 @@ def get_labels(froute_, dir_, zoom_, box_sw_, box_ne_):
 	def is_within_box(label__):
 		start_latlng = label__['latlng']; end_latlng = label__['end_latlng']
 		return start_latlng.is_within_box(box_sw_, box_ne_) or end_latlng.is_within_box(box_sw_, box_ne_)
-	return [label for label in get_labels_for_zoom(froute_, direction, zoom_) if is_within_box(label)]
+	return [label for label in get_labels_for_zoom(froute_, direction, guizoom_) if is_within_box(label)]
 
 # return eg. [{'text': 'College St', 'latlng': geom.LatLng(43.0,-79.0), 'end_latlng': geom.LatLng(43.1,-79.1), 'rotation': 10}, ...]
 @mc.decorate
-def get_labels_for_zoom(froute_, dir_, zoom_):
-	assert (dir_ in (0, 1)) and isinstance(zoom_, int)
+def get_labels_for_zoom(froute_, dir_, guizoom_):
+	assert (dir_ in (0, 1)) and isinstance(guizoom_, int)
 
-	if zoom_ not in ZOOMS_WITH_STREETLABELS: 
+	if guizoom_ not in GUIZOOMS_WITH_STREETLABELS: 
 		return []
 	ri = routes.routeinfo(froute_)
-	MOFRSTEP_AT_ZOOM_21 = 12
+	MOFRSTEP_AT_ZOOM_21 = 12 # this is a mofr step for spacing out street labels appropriately.  
+			# It is not the same as traffic's idea of mofrstep. 
 	TEXT_LEN_METRES_AT_ZOOM_21 = 4
 	mofrstep = MOFRSTEP_AT_ZOOM_21
 	text_length_metres = TEXT_LEN_METRES_AT_ZOOM_21
-	for i in range(21-zoom_):
+	for i in range(21-guizoom_):
 		mofrstep *= 2
 		text_length_metres *= 2
 	r = []
@@ -89,11 +95,12 @@ def get_labels_for_zoom(froute_, dir_, zoom_):
 	while start_mofr < ri.max_mofr() - text_length_metres:
 		end_mofr = start_mofr + text_length_metres
 		text = get_text(froute_, dir_, start_mofr)
-		if (text != get_text(froute_, dir_, end_mofr)) or (not text) or (not is_route_straight_enough_here(ri, dir_, zoom_, start_mofr, end_mofr)):
+		if (text != get_text(froute_, dir_, end_mofr)) or (not text) or (not is_route_straight_enough_here(ri, dir_, guizoom_, start_mofr, end_mofr)):
 			start_mofr += max(1, mofrstep/10)
 		else:
-			start_latlng = ri.mofr_to_latlon(start_mofr, dir_, routes.zoom_to_rsdt(zoom_))
-			end_latlng = ri.mofr_to_latlon(end_mofr, dir_, routes.zoom_to_rsdt(zoom_))
+			datazoom = c.GUIZOOM_TO_DATAZOOM[guizoom_]
+			start_latlng = ri.mofr_to_latlon(start_mofr, dir_, datazoom)
+			end_latlng = ri.mofr_to_latlon(end_mofr, dir_, datazoom)
 			heading = start_latlng.heading(end_latlng)
 			svg_rotation = heading_to_svg_rotation(heading)
 			if 180 <= heading < 360:
@@ -102,9 +109,9 @@ def get_labels_for_zoom(froute_, dir_, zoom_):
 			start_mofr += mofrstep
 	return r
 
-def get_streetlabel_svg(text_, rotation_, zoom_):
-	assert zoom_ in ZOOMS_WITH_STREETLABELS
-	fontsize = {13:3.5, 14:4, 15:4, 16:4.5, 17:5, 18:5, 19:5, 20:5, 21:5}[zoom_]
+def get_streetlabel_svg(text_, rotation_, guizoom_):
+	assert guizoom_ in GUIZOOMS_WITH_STREETLABELS
+	fontsize = {13:3.5, 14:4, 15:4, 16:4.5, 17:5, 18:5, 19:5, 20:5, 21:5}[guizoom_]
 	# In SVG the y location of text seems to be the baseline i.e. bottom of upper-case letters.  So if we set that baseline 
 	# to be the vertical middle of the graphic, and also use that vertical middle to coincide with the middle of the 
 	# google maps polyline (which we do) then to get the text to sit in the middle of the polyline, we'll have to shift the 
@@ -122,14 +129,14 @@ def get_streetlabel_svg(text_, rotation_, zoom_):
 # Calculating all street labels for all routes and zoom levels takes about 30 seconds.  
 # Some of the routes take about 1 second each on max zoom.  
 # We might as well try to do that in advance, like when updating the live sandbox.  
-# (That's where this is intended to be called from.  From the script that updates.) 
+# (That's where this is intended to be called from.  From the script that updates the live sandbox.) 
 # - rather than make various first users wait a second here and a second there 
 # for their street labels. 
 def prime_memcache():
 	for froute in routes.NON_SUBWAY_FUDGEROUTES:
 		for direction in (0, 1):
-			for zoom in ZOOMS_WITH_STREETLABELS:
-				get_labels_for_zoom(froute, direction, zoom)
+			for guizoom in GUIZOOMS_WITH_STREETLABELS:
+				get_labels_for_zoom(froute, direction, guizoom)
 
 if __name__ == '__main__':
 
