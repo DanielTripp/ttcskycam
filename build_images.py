@@ -9,7 +9,7 @@ def get_streetlabel_filename(text_, rotation_, zoom_):
 
 def build_streetlabel_images(froutes_=None):
 	texts_rotations_zooms = set()
-	for zoom in streetlabels.ZOOMS_WITH_STREETLABELS:
+	for zoom in streetlabels.GUIZOOMS_WITH_STREETLABELS:
 		for froute in (froutes_ if froutes_ is not None else routes.NON_SUBWAY_FUDGEROUTES):
 			for direction in (0, 1):
 				for label in streetlabels.get_labels_for_zoom(froute, direction, zoom):

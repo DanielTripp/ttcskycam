@@ -55,13 +55,13 @@ function new_fudgeroute_data() {
 		datazoom_to_traffic_mofr2speed: new buckets.Dictionary(), 
 		datazoom_to_traffic_linedefs: new buckets.Dictionary(), 
 		traffic_lines: new buckets.LinkedList(),  // if this is a subway, these aren't really traffic lines - rather, plain old route lines. 
-		traffic_datazoom: 0, // 0 implies no such data has been received yet and hence rendering is impossible.  Once it's non-zero, 
+		traffic_datazoom: -1, // -1 implies no such data has been received yet and hence rendering is impossible.  Once it's non-zero, 
 				// will never be zero again. 
 
 		datazoom_to_time_to_vid_to_vi: new buckets.Dictionary(), // key: date/time string.  value: dictionary (key: vid string, value: VehicleInfo object) 
 		vid_to_static_vehicle_marker: new buckets.Dictionary(), 
 		vid_to_heading_to_moving_vehicle_marker: new buckets.Dictionary(), 
-		vehicles_datazoom: 0, // Works the same as traffic_datazoom above.
+		vehicles_datazoom: -1, // Works the same as traffic_datazoom above.
 
 		dir: null, // will be 0 or 1 or a pair a latlngs (orig and dest).   latlngs will be in a plain format: [float, float] array. 
 		traffic_request_pending: false, 
@@ -126,10 +126,14 @@ var g_froute_to_snaptogridcache = null;
 
 var HEADING_ROUNDING_DEGREES = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
 	readfile('HEADING_ROUNDING'); ?>;
-var MIN_ZOOM_INCLUSIVE = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
-	readfile('MIN_ZOOM_INCLUSIVE'); ?>;
-var MAX_ZOOM_INCLUSIVE = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
-	readfile('MAX_ZOOM_INCLUSIVE'); ?>;
+var MIN_GUIZOOM = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
+	readfile('MIN_GUIZOOM'); ?>;
+var MAX_GUIZOOM = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
+	readfile('MAX_GUIZOOM'); ?>;
+var MIN_DATAZOOM = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
+	passthru('python -c "import c; print c.MIN_DATAZOOM"'); ?>;
+var MAX_DATAZOOM = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
+	passthru('python -c "import c; print c.MAX_DATAZOOM"'); ?>;
 var REFRESH_INTERVAL_MS = 10*1000;
 var MOVING_VEHICLES_OVERTIME_FLASH_INTERVAL_MS = 500;
 var MOVING_VEHICLES_ANIM_INTERVAL_MS = 100;
@@ -138,17 +142,19 @@ var FROUTE_TO_INTDIR_TO_ENGLISHDESC = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PR
 var FROUTE_TO_ENGLISH = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
 	passthru('python -c "import routes; print routes.get_froute_to_english()"'); ?>;
 // Arrived at by visual trial and error.  Not very accurate.  Specific to Toronto. 
-var ZOOM_TO_METERSPERPIXEL = {10: 102.4, 11: 51.2, 12: 25.6, 13: 12.8, 14: 6.4, 15: 3.2, 16: 1.6, 17: 0.8, 18: 0.4, 19: 0.2};
+var GUIZOOM_TO_METERSPERPIXEL = {10: 102.4, 11: 51.2, 12: 25.6, 13: 12.8, 14: 6.4, 15: 3.2, 16: 1.6, 17: 0.8, 18: 0.4, 19: 0.2};
 var MAX_RSDT = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
-	passthru('python -c "import routes; print max(routes.RSDTS)"'); ?>;
-var SUBWAY_FROUTE_TO_ZOOM_TO_ROUTEPTS = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
-	passthru('python -c "import routes; print routes.get_subway_froute_to_zoom_to_routepts()"'); ?>;
+	passthru('python -c "import c; print max(c.DATAZOOM_TO_RSDT.values())"'); ?>;
+var SUBWAY_FROUTE_TO_DATAZOOM_TO_ROUTEPTS = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
+	passthru('python -c "import routes; print routes.get_subway_froute_to_datazoom_to_routepts()"'); ?>;
+var GUIZOOM_TO_DATAZOOM = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
+	passthru('python -c "import c; print c.GUIZOOM_TO_DATAZOOM"'); ?>;
 
-var g_zoom_to_vehicle_rendered_img_size = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
+var g_guizoom_to_vehicle_rendered_img_size = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
 	readfile('zoom_to_vehicle_rendered_img_size.json'); ?>;
-var g_zoom_to_vehicle_arrow_img_size = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
+var g_guizoom_to_vehicle_arrow_img_size = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
 	readfile('zoom_to_vehicle_arrow_img_size.json'); ?>;
-var g_zoom_to_traffic_line_width = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 7, 8, 8, 10, 13, 16, 22, 42, 42];
+var g_guizoom_to_traffic_line_width = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 7, 8, 8, 10, 13, 16, 22, 42, 42];
 
 function init_dev_option_values() {
 	<?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
@@ -171,17 +177,17 @@ function init_dev_option_values() {
 
 <?php echo "\n"; /* fudging number of lines so that line numbers are the same pre- and post-PHP. */ ?>  
 
-function get_vehicle_size_by_zoom(zoom_) {
-	var arr = (g_use_rendered_aot_arrow_vehicle_icons ? g_zoom_to_vehicle_rendered_img_size : g_zoom_to_vehicle_arrow_img_size);
-	if(0 <= zoom_ && zoom_ < arr.length) {
-		return arr[zoom_];
+function get_vehicle_size_by_guizoom(guizoom_) {
+	var arr = (g_use_rendered_aot_arrow_vehicle_icons ? g_guizoom_to_vehicle_rendered_img_size : g_guizoom_to_vehicle_arrow_img_size);
+	if(0 <= guizoom_ && guizoom_ < arr.length) {
+		return arr[guizoom_];
 	} else {
 		return arr[arr.length-1];
 	}
 }
 
 function get_vehicle_size() {
-	return get_vehicle_size_by_zoom(g_map.getZoom());
+	return get_vehicle_size_by_guizoom(g_map.getZoom());
 }
 
 function kmph_to_color(kmph_) {
@@ -227,11 +233,11 @@ function interp_color(c1_, c2_, percent_) {
 function refresh_traffic_from_server(fudgeroute_) {
 	var data = g_fudgeroute_data.get(fudgeroute_);
 	var dir_to_request = data.dir;
-	var zoom = g_map.getZoom();
+	var datazoom = GUIZOOM_TO_DATAZOOM[g_map.getZoom()];
 	if(!data.traffic_request_pending) {
 		data.traffic_request_pending = true;
-		callpy('reports.get_traffic_report', fudgeroute_, dir_to_request, zoom, get_datetime_from_gui(), 
-				(data.datazoom_to_traffic_mofr2speed.containsKey(zoom) ? data.traffic_last_returned_timestr : null), 
+		callpy('reports.get_traffic_report', fudgeroute_, dir_to_request, datazoom, get_datetime_from_gui(), 
+				(data.datazoom_to_traffic_mofr2speed.containsKey(datazoom) ? data.traffic_last_returned_timestr : null), 
 			{success: function(r_) {
 				var data = g_fudgeroute_data.get(fudgeroute_);
 				if(data == undefined || !dir_equals(data.dir, dir_to_request)) {
@@ -239,7 +245,7 @@ function refresh_traffic_from_server(fudgeroute_) {
 				}
 				data.traffic_request_pending = false;
 				var returned_timestr = r_[0];
-				if((returned_timestr == data.traffic_last_returned_timestr) && data.datazoom_to_traffic_mofr2speed.containsKey(zoom)) {
+				if((returned_timestr == data.traffic_last_returned_timestr) && data.datazoom_to_traffic_mofr2speed.containsKey(datazoom)) {
 					return;
 				}
 				var time_was_updated = (returned_timestr != data.traffic_last_returned_timestr);
@@ -250,8 +256,8 @@ function refresh_traffic_from_server(fudgeroute_) {
 					assert(r_[1] != null, "traffic data is null even though timestamp has been updated.");
 				}
 				var dir_returned = r_[2];
-				data.datazoom_to_traffic_linedefs.set(zoom, to_buckets_list(r_[1][0], (dir_returned==0))); // see note [1] above. 
-				data.datazoom_to_traffic_mofr2speed.set(zoom, to_buckets_dict(r_[1][1]));
+				data.datazoom_to_traffic_linedefs.set(datazoom, to_buckets_list(r_[1][0], (dir_returned==0))); // see note [1] above. 
+				data.datazoom_to_traffic_mofr2speed.set(datazoom, to_buckets_dict(r_[1][1]));
 				if(update_traffic_datazoom(fudgeroute_) || time_was_updated) {
 					remake_traffic_lines_singleroute(fudgeroute_); 
 				}
@@ -294,17 +300,17 @@ function update_datazoom(froute_, traffic_aot_vehicles_) {
 	var data = g_fudgeroute_data.get(froute_);
 	var old_datazoom = (traffic_aot_vehicles_ ? data.traffic_datazoom : data.vehicles_datazoom);
 	var datazooms_map = (traffic_aot_vehicles_ ? data.datazoom_to_traffic_mofr2speed : data.datazoom_to_time_to_vid_to_vi);
-	var guizoom = g_map.getZoom(), new_datazoom = old_datazoom;
-	if(datazooms_map.containsKey(guizoom)) {
-		new_datazoom = guizoom;
+	var guis_datazoom = GUIZOOM_TO_DATAZOOM[g_map.getZoom()], new_datazoom = old_datazoom;
+	if(datazooms_map.containsKey(guis_datazoom)) {
+		new_datazoom = guis_datazoom;
 	} else {
-		for(var offset=0; offset<MAX_ZOOM_INCLUSIVE-MIN_ZOOM_INCLUSIVE; offset++) {
-			if(datazooms_map.containsKey(guizoom-offset)) {
-				new_datazoom = guizoom-offset;
+		for(var offset=0; offset<MAX_DATAZOOM-MIN_DATAZOOM; offset++) {
+			if(datazooms_map.containsKey(guis_datazoom-offset)) {
+				new_datazoom = guis_datazoom-offset;
 				break;
 			}
-			if(datazooms_map.containsKey(guizoom+offset)) {
-				new_datazoom = guizoom+offset;
+			if(datazooms_map.containsKey(guis_datazoom+offset)) {
+				new_datazoom = guis_datazoom+offset;
 				break;
 			}
 		}
@@ -325,11 +331,11 @@ function update_datazoom(froute_, traffic_aot_vehicles_) {
 function refresh_vehicles_from_server(fudgeroute_) {
 	var data = g_fudgeroute_data.get(fudgeroute_);
 	var dir_to_request = data.dir;
-	var zoom = g_map.getZoom();
+	var datazoom = GUIZOOM_TO_DATAZOOM[g_map.getZoom()];
 	if(!data.vehicles_request_pending) {
 		data.vehicles_request_pending = true;
-		callpy('reports.get_locations_report', fudgeroute_, dir_to_request, zoom, get_datetime_from_gui(), 
-				(data.datazoom_to_time_to_vid_to_vi.containsKey(zoom) ? data.locations_last_returned_timestr : null), 
+		callpy('reports.get_locations_report', fudgeroute_, dir_to_request, datazoom, get_datetime_from_gui(), 
+				(data.datazoom_to_time_to_vid_to_vi.containsKey(datazoom) ? data.locations_last_returned_timestr : null), 
 			{success: function(r_) {
 				var data = g_fudgeroute_data.get(fudgeroute_);
 				if(data == undefined || !dir_equals(data.dir, dir_to_request)) {
@@ -338,7 +344,7 @@ function refresh_vehicles_from_server(fudgeroute_) {
 				data.vehicles_request_pending = false;
 				var returned_timestr = r_[0];
 				var time_was_updated = (returned_timestr != data.locations_last_returned_timestr);
-				if(!time_was_updated && data.datazoom_to_time_to_vid_to_vi.containsKey(zoom)) {
+				if(!time_was_updated && data.datazoom_to_time_to_vid_to_vi.containsKey(datazoom)) {
 					return;
 				}
 				if(time_was_updated) {
@@ -346,7 +352,7 @@ function refresh_vehicles_from_server(fudgeroute_) {
 					data.locations_last_returned_timestr = returned_timestr;
 					assert(r_[1] != null, "locations data is null even though timestamp has been updated.");
 				}
-				appropriate_vehicle_locations(fudgeroute_, zoom, r_[1]);
+				appropriate_vehicle_locations(fudgeroute_, datazoom, r_[1]);
 				var datazoom_was_updated = update_vehicles_datazoom(fudgeroute_);
 				if(time_was_updated) {
 					update_g_times(); 
@@ -459,10 +465,10 @@ function all_vids_singleroute(fudgeroute_) {
 	return r;
 }
 
-function appropriate_vehicle_locations(fudgeroute_, zoom_, raw_) {
+function appropriate_vehicle_locations(fudgeroute_, datazoom_, raw_) {
 	var data = g_fudgeroute_data.get(fudgeroute_);
-	data.datazoom_to_time_to_vid_to_vi.set(zoom_, new buckets.Dictionary()); // will discard old data for this zoom, if there is any. 
-	var time_to_vid_to_vi = data.datazoom_to_time_to_vid_to_vi.get(zoom_);
+	data.datazoom_to_time_to_vid_to_vi.set(datazoom_, new buckets.Dictionary()); // will discard old data for this datazoom, if there is any. 
+	var time_to_vid_to_vi = data.datazoom_to_time_to_vid_to_vi.get(datazoom_);
 	time_to_vid_to_vi.clear();
 	raw_.forEach(function(timeslice) {
 		var timestr = timeslice.shift();
@@ -532,7 +538,7 @@ function remake_moving_vehicles_singleroute(fudgeroute_) {
 	forget_moving_vehicles(fudgeroute_);
 	var data = g_fudgeroute_data.get(fudgeroute_);
 	var new_vid_to_heading_to_moving_vehicle_marker = new buckets.Dictionary();
-	if(data.vehicles_datazoom == 0) {
+	if(data.vehicles_datazoom == -1) {
 		return;
 	}
 	data.datazoom_to_time_to_vid_to_vi.get(data.vehicles_datazoom).forEach(function(timestr, vid_to_vi) {
@@ -588,7 +594,7 @@ function remake_static_vehicles_singleroute(fudgeroute_) {
 	forget_static_vehicles(fudgeroute_);
 	if(g_times.size() > 0) {
 		var data = g_fudgeroute_data.get(fudgeroute_);
-		if(data.vehicles_datazoom != 0) {
+		if(data.vehicles_datazoom != -1) {
 			var last_time = g_times.elementAtIndex(g_times.size()-1);
 			var time_to_vid_to_vi = data.datazoom_to_time_to_vid_to_vi.get(data.vehicles_datazoom);
 			if(time_to_vid_to_vi != undefined) {
@@ -1007,7 +1013,7 @@ function remake_traffic_lines_singleroute(fudgeroute_) {
 	if(data != undefined) {
 		if(is_subway(fudgeroute_)) {
 			make_subway_lines(fudgeroute_);
-		} else if(data.traffic_datazoom != 0) {
+		} else if(data.traffic_datazoom != -1) {
 			data.datazoom_to_traffic_linedefs.get(data.traffic_datazoom).forEach(function(linedef) {
 				var traf = data.datazoom_to_traffic_mofr2speed.get(data.traffic_datazoom).get(linedef.mofr);
 				var new_lines = make_traffic_line(fudgeroute_, linedef.start_latlon, linedef.end_latlon, (traf!=null ? traf.kmph : null), 
@@ -1187,7 +1193,7 @@ function init_javascript_array_functions_old_browser_fallbacks() {
 }
 
 function init_everything_that_depends_on_map() {
-	google.maps.event.addListener(g_map, 'zoom_changed', on_zoom_changed);
+	google.maps.event.addListener(g_map, 'zoom_changed', on_guizoom_changed);
 
 	g_play_timer = setTimeout('moving_vehicles_timer_func()', 0);
 
@@ -1223,7 +1229,7 @@ function init_everything_that_depends_on_map() {
 function on_map_click(mouseevent_) {
 	var latlng = new LatLng(mouseevent_.latLng.lat(), mouseevent_.latLng.lng());
 	var nearby_froutes = [];
-	var search_radius = get_map_click_route_search_radius_for_cur_zoom();
+	var search_radius = get_map_click_route_search_radius_for_cur_guizoom();
 	g_froute_to_snaptogridcache.forEach(function(froute, snaptogridcache) {
 		if(snaptogridcache.snap(latlng, search_radius) != null) {
 			nearby_froutes.push(froute);
@@ -1239,12 +1245,12 @@ function on_map_click(mouseevent_) {
 	}
 }
 
-function get_map_click_route_search_radius_for_cur_zoom() {
-	var meters_per_pixel = get_meters_per_pixel_for_cur_zoom();
+function get_map_click_route_search_radius_for_cur_guizoom() {
+	var meters_per_pixel = get_meters_per_pixel_for_cur_guizoom();
 	var pixels = 30; // Seems like a clickable area. 
 	var r = Math.round(meters_per_pixel*pixels);
 
-	// Doing this because we are using route pts at max rsdt (AKA min zoom) for the invisble clickable grid, 
+	// Doing this because we are using route pts at min datazoom (which will have max rsdt) for the invisble clickable grid, 
 	// so when the user is at a high zoom, that invisible route polyline could be quite far (in pixels) from 
 	// where the street is on the map.  By our definition of what an RSDT is, the farthest distance from a real route to 
 	// a simplified version is the RSDT.  (For the purposes of this comment, assume that the street as it appears on the 
@@ -1259,15 +1265,15 @@ function get_map_click_route_search_radius_for_cur_zoom() {
 	return r;
 }
 
-function get_meters_per_pixel_for_cur_zoom() {
+function get_meters_per_pixel_for_cur_guizoom() {
 	var zoom = g_map.getZoom();
-	if(!(zoom in ZOOM_TO_METERSPERPIXEL)) {
+	if(!(zoom in GUIZOOM_TO_METERSPERPIXEL)) {
 		// Top answer in http://stackoverflow.com/questions/4946287/finding-out-if-console-is-available/4946373#4946373 
 		// for testing for the existence of 'console.log'.  I feel like there is a better way.  Oh well. 
 		if(typeof console == "object") { 
 			console.log(sprintf("zoom %d not present in map.", zoom));
 		}
-		var zoom_keys = sorted_keys(ZOOM_TO_METERSPERPIXEL);
+		var zoom_keys = sorted_keys(GUIZOOM_TO_METERSPERPIXEL);
 		var min_zoom_key = arrayMin(zoom_keys), max_zoom_key = arrayMax(zoom_keys);
 		if(zoom < min_zoom_key) { 
 			zoom = min_zoom_key;
@@ -1277,18 +1283,18 @@ function get_meters_per_pixel_for_cur_zoom() {
 			throw sprintf("Don't know what to do for route search radius in zoom %d.", zoom);
 		}
 	}
-	return ZOOM_TO_METERSPERPIXEL[zoom];
+	return GUIZOOM_TO_METERSPERPIXEL[zoom];
 }
 
-function on_zoom_changed() {
+function on_guizoom_changed() {
 	if(SHOW_ZOOM) {
 		set_contents('p_zoom', "Zoom: "+(g_map.getZoom())); 
 	}
 
-	if(g_map.getZoom() < MIN_ZOOM_INCLUSIVE) {
-		g_map.setZoom(MIN_ZOOM_INCLUSIVE);
-	} else if(g_map.getZoom() > MAX_ZOOM_INCLUSIVE) {
-		g_map.setZoom(MAX_ZOOM_INCLUSIVE);
+	if(g_map.getZoom() < MIN_GUIZOOM) {
+		g_map.setZoom(MIN_GUIZOOM);
+	} else if(g_map.getZoom() > MAX_GUIZOOM) {
+		g_map.setZoom(MAX_GUIZOOM);
 	} else {
 		var guizoom = g_map.getZoom();
 		g_fudgeroute_data.forEach(function(froute, data) {
@@ -1355,17 +1361,17 @@ function refresh_streetlabels_singleroute(froute_) {
 	if(is_subway(froute_)) {
 		return;
 	}
-	var zoom = g_map.getZoom();
+	var guizoom = g_map.getZoom();
 	var direction = g_fudgeroute_data.get(froute_).dir;
-	if(!do_streetlabels_for_zoom(zoom) || !g_show_traffic_lines) {
+	if(!do_streetlabels_for_guizoom(guizoom) || !g_show_traffic_lines) {
 		forget_streetlabels_singleroute(froute_);
 	} else {
-		callpy('streetlabels.get_labels', froute_, direction, zoom, g_map.getBounds().getSouthWest(), g_map.getBounds().getNorthEast(), 
+		callpy('streetlabels.get_labels', froute_, direction, guizoom, g_map.getBounds().getSouthWest(), g_map.getBounds().getNorthEast(), 
 			function(labels) {
-				// This is a callback, so since we started the call, this route could have been hidden or the zoom could have been changed, 
+				// This is a callback, so since we started the call, this route could have been hidden or the guizoom could have been changed, 
 				// or all traffic lines hidden.  
 				// The map bounds could have changed too but I don't care as much about them right now for some reason. 
-				if(!g_fudgeroute_data.containsKey(froute_) || (g_map.getZoom() != zoom) || !g_show_traffic_lines 
+				if(!g_fudgeroute_data.containsKey(froute_) || (g_map.getZoom() != guizoom) || !g_show_traffic_lines 
 						|| !dir_equals(g_fudgeroute_data.get(froute_).dir, direction)) {
 					return;
 				}
@@ -1373,7 +1379,7 @@ function refresh_streetlabels_singleroute(froute_) {
 				labels.forEach(function(label) {
 					var marker = new google.maps.Marker({position: google_LatLng(label.latlng), 
 						map: g_map, draggable: false, flat: true, clickable: false, zIndex: 4,
-						icon: new google.maps.MarkerImage(get_streetlabel_url(label.text, label.rotation, zoom), 
+						icon: new google.maps.MarkerImage(get_streetlabel_url(label.text, label.rotation, guizoom), 
 								null, null, new google.maps.Point(150, 150))
 						});
 					g_fudgeroute_data.get(froute_).streetlabel_markers.add(marker);
@@ -1382,20 +1388,20 @@ function refresh_streetlabels_singleroute(froute_) {
 	}
 }
 
-function get_streetlabel_url(text_, rotation_, zoom_) {
-	var filename = sprintf('streetlabel_%s_%d_%d.png', text_.replace(/ /g, '_'), rotation_, zoom_);
+function get_streetlabel_url(text_, rotation_, guizoom_) {
+	var filename = sprintf('streetlabel_%s_%d_%d.png', text_.replace(/ /g, '_'), rotation_, guizoom_);
 	return 'img/'+filename;
 }
 
 /* The whole reason we do our own street labels is because our traffic polylines, to show up reasonably well, have to be 
 thick enough that they obscure google map's own street labels.  I've set up the widths of our traffic polylines so 
-that for zooms 13 to 21 inclusive, our lines are thick enough that they cover the entire google maps label (most of the time) 
+that for (gui)zooms 13 to 21 inclusive, our lines are thick enough that they cover the entire google maps label (most of the time) 
 so the user won't see both ours and google map's labels.  For zooms less than 13 I've made our lines thin enough that google's 
 labels are readable, and hence ours aren't necessary.  This range 13 to 21 is also hard-coded in streetlabels.py.  Here we check 
 on the client side, to maybe save a server call that would return an empty list anyway.   
 Note that 21 is the maximum zoom of a google map. 
 */
-function do_streetlabels_for_zoom(zoom_) {
+function do_streetlabels_for_guizoom(zoom_) {
 	return (13 <= zoom_ && zoom_ <= 21);
 }
 
@@ -1498,7 +1504,7 @@ function is_subway(froute_) {
 
 function create_invisible_clickable_route_grid() {
 	var froute_to_routepts = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
-				passthru('python -c "import routes; print routes.get_froute_to_routepts_max_rsdt_json_str()"'); ?>;
+				passthru('python -c "import routes; print routes.get_froute_to_routepts_min_datazoom_json_str()"'); ?>;
 	g_froute_to_snaptogridcache = new buckets.Dictionary();
 	for(var froute in froute_to_routepts) {
 		var routepts = froute_to_routepts[froute];
@@ -1867,7 +1873,7 @@ function make_subway_lines(froute_) {
 	assert(is_subway(froute_), ""+froute_+" is not a subway");
 
 	var data = g_fudgeroute_data.get(froute_);
-	var latlngs = SUBWAY_FROUTE_TO_ZOOM_TO_ROUTEPTS[froute_][g_map.getZoom()];
+	var latlngs = SUBWAY_FROUTE_TO_DATAZOOM_TO_ROUTEPTS[froute_][GUIZOOM_TO_DATAZOOM[g_map.getZoom()]];
 	var width = get_traffic_line_width()*1.5;
 	var line = new google.maps.Polyline({map: g_map, path: google_LatLngs(latlngs), strokeWeight: width, strokeOpacity: 0.5, 
 			strokeColor: 'rgb(0,0,255)', zIndex: -30, visible: g_show_traffic_lines, clickable: false}); 
@@ -2049,14 +2055,14 @@ function on_datetime_changed() {
 }
 
 function get_traffic_line_width() {
-	return get_traffic_line_width_by_zoom(g_map.getZoom());
+	return get_traffic_line_width_by_guizoom(g_map.getZoom());
 }
 
-function get_traffic_line_width_by_zoom(zoom_) {
-	if(0 <= zoom_ && zoom_ < g_zoom_to_traffic_line_width.length) {
-		return g_zoom_to_traffic_line_width[zoom_];
+function get_traffic_line_width_by_guizoom(zoom_) {
+	if(0 <= zoom_ && zoom_ < g_guizoom_to_traffic_line_width.length) {
+		return g_guizoom_to_traffic_line_width[zoom_];
 	} else {
-		return g_zoom_to_traffic_line_width[g_zoom_to_traffic_line_width.length];
+		return g_guizoom_to_traffic_line_width[g_guizoom_to_traffic_line_width.length];
 	}
 }
 
