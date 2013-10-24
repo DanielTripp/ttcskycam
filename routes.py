@@ -1,6 +1,6 @@
 #!/usr/bin/python2.6
 
-import sys, json, os.path, bisect, xml.dom, xml.dom.minidom
+import sys, json, os.path, bisect, xml.dom, xml.dom.minidom, pickle
 import vinfo, geom, mc, c, snaptogrid, util
 from misc import *
 #from mrucache import *
@@ -33,6 +33,7 @@ SUBWAY_FUDGEROUTES = ['bloor_danforth', 'yonge_university_spadina']
 NON_SUBWAY_FUDGEROUTES = FUDGEROUTE_TO_CONFIGROUTES.keys()
 FUDGEROUTES = NON_SUBWAY_FUDGEROUTES + SUBWAY_FUDGEROUTES
 CONFIGROUTES = set(reduce(lambda x, y: x + y, FUDGEROUTE_TO_CONFIGROUTES.values(), []))
+USE_PICKLE_FILES = os.path.exists('USE_ROUTEINFO_PICKLE_FILES')
 
 def is_subway(froute_):
 	assert froute_ in FUDGEROUTES
@@ -619,13 +620,20 @@ def max_mofr(route_):
 	return routeinfo(route_).max_mofr()
 
 def routeinfo(routename_):
-	routename = massage_to_fudgeroute(routename_)
-	return mc.get(routeinfo_impl, [routename])
+	froute = massage_to_fudgeroute(routename_)
+	return mc.get(routeinfo_impl, [froute])
 
-def routeinfo_impl(routename_):
-	if routename_ not in FUDGEROUTES:
-		raise Exception('route %s is unknown' % (routename_))
-	return RouteInfo(routename_)
+def routeinfo_impl(froute_):
+	if froute_ not in FUDGEROUTES:
+		raise Exception('route %s is unknown' % (froute_))
+	if USE_PICKLE_FILES:
+		return get_routeinfo_from_pickle_file(froute_)
+	else:
+		return RouteInfo(froute_)
+
+def get_routeinfo_from_pickle_file(froute_):
+	with open(pickle_filename(froute_), 'rb') as fin:
+		return pickle.load(fin)
 
 def massage_to_fudgeroute(route_):
 	if route_ in FUDGEROUTES:
@@ -986,9 +994,27 @@ def get_subway_froute_to_datazoom_to_routepts():
 			r[froute][datazoom] = ri.routepts(0, datazoom)
 	return util.to_json_str(r)
 
+def pickle_filename(froute_):
+	assert froute_ in FUDGEROUTES
+	return 'pickled-routeinfo-%s' % froute_
+
+# Don't call this function from this module as a main.  It will write some unusable pickle files. 
+# They will refer to the RouteInfo class as '__main__.RouteInfo' and then when unpickled, when this module 
+# is likely imported from another file as "import routes" (because that's how most of the code is written right now) 
+# and knows about RouteInfo as "routes.RouteInfo", 
+# the unpickling will still try to resolve __main__.RouteInfo and will fail with a message like this: 
+# "AttributeError: 'module' object has no attribute 'RouteInfo'". 
+# You can see the difference in the generated pickle files yourself (if you call this function from this module as a main 
+# vs. from another module when imported as "import routes" and examine the pickled output.  You might try text mode 
+# i.e. protocol=0 to pickle.dump()).
+def rebuild_pickle_files():
+	for froute in FUDGEROUTES:
+		ri = RouteInfo(froute) # being careful here not to get this routeinfo object from memcache or in-process cache. 
+		with open(pickle_filename(froute), 'wb') as fout:
+			pickle.dump(ri, fout, protocol=2)
+
 if __name__ == '__main__':
 
-	import pprint 
+	pass
 
-	pprint.pprint(routeinfo('bloor_danforth').dir_to_stoptag_to_stop)
 
