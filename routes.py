@@ -452,11 +452,11 @@ class RouteInfo:
 		return int(math.ceil(self.datazoom_to_dir_to_routeptaddr_to_mofr[None][0][-1]))
 
 	def mofr_to_latlon(self, mofr_, dir_, datazoom_=None):
-		r = self.mofr_to_latlonnheading(mofr_, dir_)
+		r = self.mofr_to_latlonnheading(mofr_, dir_, datazoom_)
 		return (r[0] if r != None else None)
 
 	def mofr_to_heading(self, mofr_, dir_, datazoom_=None):
-		r = self.mofr_to_latlonnheading(mofr_, dir_)
+		r = self.mofr_to_latlonnheading(mofr_, dir_, datazoom_)
 		return (r[1] if r != None else None)
 
 	@lru_cache(5000)
