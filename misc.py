@@ -564,7 +564,7 @@ def svg_to_png(svgstr_):
 	return png_contents
 
 # Batch version.  Writes PNGs to files.  Returns nothing.  
-# We want a batch version Because starting up batik is slow.  (It takes about a 
+# We want a batch version because starting up batik is slow.  (It takes about a 
 # second to start up versus about 0.05 seconds to convert a single SVG.  Between vehicles and streetlabels, 
 # we have thousands of these to deal with.) 
 # arg: a list of 2-tuples: [(dest filename, svg string), ...]
