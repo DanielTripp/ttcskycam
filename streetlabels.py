@@ -4,14 +4,16 @@ import sys, json, os.path, bisect, xml.dom, xml.dom.minidom, yaml
 import geom, mc, c, routes 
 from misc import *
 
-# Streetlabels are done by guizoom not by datazoom.  
-# The datazoom for a guizoom will need to be consulted, but two guizoom with same datazoom will have different 
-# street labels results.  That is, if you zoom in one level, you will usually find that you will see more 
-# street labels, even if the datazoom hasn't increased. 
+# Streetlabels are done, at the highest level, by guizoom (AKA google maps 
+# zoom), not by datazoom.  For a given guizoom, the datazoomed route points for 
+# a guizoom will need to be consulted, but two guizooms with same datazoom will 
+# have different street labels results.  That is, if you zoom in one level, you 
+# will usually find that you will see more street labels, even if the datazoom 
+# hasn't increased. 
 
-# We don't do streetlabels for all zoom levels.  (These are google maps zoom levels by the way.) 
-# For low zoom (i.e. zoomed out), we draw our traffic coloured lines thin enough that google maps' 
-# own street labels are still visible.   Mostly visible.  Visible enough.
+# We don't do streetlabels for all guizooms.  For low zoom (i.e. zoomed out), 
+# we draw our traffic coloured lines thin enough that google maps' own street 
+# labels are still visible.   Mostly visible.  Visible enough.
 GUIZOOMS_WITH_STREETLABELS = range(max(13, c.VALID_GUIZOOMS[0]), min(21, c.VALID_GUIZOOMS[-1]) + 1)
 
 g_froute_to_dir_to_startmofr_to_text = None
