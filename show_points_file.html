@@ -16,12 +16,16 @@
 		<script type="text/javascript" src="js/buckets-minified.js"></script>
     <script type="text/javascript">
 
-var g_latlngs = new buckets.LinkedList();
-var g_markers = new buckets.LinkedList();
-var g_i = 0;
+var POLYLINE_STROKEWEIGHT = 2;
+
+// array of array of google LatLngs. 
+var g_polyline_latlngs = [];
+// array of google Markers. 
+var g_markers = []; 
 var g_bounding_rect = null;
 var g_opacity = 0.5;
-var g_polyline = null;
+// array of google polylines 
+var g_polylines = [];
 
 var g_show_dist_pt1 = null, g_show_dist_pt2 = null;
 var g_show_dist_infowindow = null, g_show_dist_polyline = null;
@@ -56,41 +60,48 @@ function refresh_from_file() {
 }
 
 function get_latlngs_from_file() {
-	g_latlngs.clear();
+	g_polyline_latlngs = [];
 	var contents_str = get_sync(get_value('filename_field'), {cache: false});
 	if(contents_str != null) {
-		var contents_latlng_list = [];
+		var raw_polylines = [];
 		try {
-			contents_latlng_list = $.parseJSON(contents_str);
+			raw_polylines = $.parseJSON(contents_str);
 		} catch(e) {
 			// So it wasn't JSON.    Maybe it's XML: 
 			try {
+				var polyline = [];
+				raw_polylines.push(polyline);
 				var dom = $.parseXML(contents_str);
 				$(dom).find('*').each(function() {
 					var lat = $(this).attr('lat'), lng = $(this).attr('lon');
 					if(lat != undefined && lng != undefined) {
-						contents_latlng_list.push([lat, lng]);
+						polyline.push([lat, lng]);
 					}
 				});
 			} catch(err) {
-				var lines = contents_str.split('\n');
-				for(var linei in lines) {
-					var line = lines[linei];
+				var polyline = [];
+				raw_polylines.push(polyline);
+				var filelines = contents_str.split('\n');
+				for(var filelinei in filelines) {
+					var fileline = filelines[filelinei];
 					var regex = /([-]?\d+\.\d+)[ ,]*([-]?\d+\.\d+)/g;
-					var match = regex.exec(line);
+					var match = regex.exec(fileline);
 					if(match != null) {
 					  var lat = parseFloat(match[1], 10);
 						var lng = parseFloat(match[2], 10);
-						contents_latlng_list.push([lat, lng]);
+						polylines.push([lat, lng]);
 					}
 				}
 			}
 		}
-		for(var i in contents_latlng_list) {
-			var raw_latlng = contents_latlng_list[i];
-			var glatlng = new google.maps.LatLng(raw_latlng[0], raw_latlng[1]);
-			g_latlngs.add(glatlng);
-		}
+		raw_polylines.forEach(function(raw_polyline) {
+			var latlng_polyline = [];
+			g_polyline_latlngs.push(latlng_polyline);
+			raw_polyline.forEach(function(rawpt) {
+				var latlng = new google.maps.LatLng(rawpt[0], rawpt[1]);
+				latlng_polyline.push(latlng);
+			});
+		});
 	}
 }
 
@@ -124,18 +135,17 @@ function forget_drawn_objects() {
 	g_markers.forEach(function(e) {
 		e.setMap(null);
 	});
-	g_markers.clear();
-	g_i = 0;
+	g_markers = [];
 
 	if(g_bounding_rect != null) {
 		g_bounding_rect.setMap(null);
 		g_bounding_rect = null;
 	}
 
-	if(g_polyline!=null) {
-		g_polyline.setMap(null);
-		g_polyline = null;
-	}
+	g_polylines.forEach(function(polyline) {
+		polyline.setMap(null);
+	});
+	g_polylines = [];
 }
 
 function draw_objects() {
@@ -143,19 +153,23 @@ function draw_objects() {
 
 	var draw_dots = is_selected('dots_checkbox');
 
-	var ptidx=0;
-	g_latlngs.forEach(function(glatlng) {
+	var lineidx=0, ptidx=0;
+	g_polyline_latlngs.forEach(function(line_latlngs) {
+		line_latlngs.forEach(function(latlng) {
 
-		if(draw_dots) {
-			make_marker(glatlng, ptidx);
-		}
+			if(draw_dots) {
+				make_marker(latlng, sprintf('%d/%d', lineidx, ptidx));
+			}
 
-		minlat = Math.min(minlat, glatlng.lat());
-		maxlat = Math.max(maxlat, glatlng.lat());
-		minlng = Math.min(minlng, glatlng.lng());
-		maxlng = Math.max(maxlng, glatlng.lng());
+			minlat = Math.min(minlat, latlng.lat());
+			maxlat = Math.max(maxlat, latlng.lat());
+			minlng = Math.min(minlng, latlng.lng());
+			maxlng = Math.max(maxlng, latlng.lng());
 
-		ptidx += 1;
+			ptidx += 1;
+		});
+		lineidx += 1;
+		ptidx = 0;
 	});
 
 	var rect_bounds = new google.maps.LatLngBounds(
@@ -164,27 +178,29 @@ function draw_objects() {
 			strokeOpacity: 0.5, strokeWeight: 1, fillOpacity: 0, zIndex: -10});
 
 	if(is_selected('polyline_checkbox')) {
-		draw_polyline();
+		draw_polylines();
 	}
 }
 
-function draw_polyline() {
-	g_polyline = new google.maps.Polyline({path: g_latlngs.toArray(), strokeWeight: 0.75, strokeOpacity: g_opacity, map: g_map});
+function draw_polylines() {
+	g_polyline_latlngs.forEach(function(polyline_latlngs) {
+		g_polylines.push(new google.maps.Polyline({path: polyline_latlngs, strokeWeight: POLYLINE_STROKEWEIGHT, strokeOpacity: g_opacity, map: g_map}));
+	});
 }
 
-function make_marker(latlng_, ptidx_) {
+function make_marker(latlng_, label_) {
 	var marker = new google.maps.Marker({position: latlng_, map: g_map, 
 			icon: {path: google.maps.SymbolPath.CIRCLE, scale: 14, strokeWeight : 0, fillOpacity: g_opacity, fillColor: 'black'}
 		});
-	g_markers.add(marker);
-	add_marker_mouseover_listener_for_infowin(marker, ptidx_);
+	g_markers.push(marker);
+	add_marker_mouseover_listener_for_infowin(marker, label_);
 	add_marker_click_listener_for_show_dist(marker);
 }
 
-function add_marker_mouseover_listener_for_infowin(marker_, ptidx_) {
+function add_marker_mouseover_listener_for_infowin(marker_, label_) {
 	var latlng = marker_.getPosition();
 	var infowin = new google.maps.InfoWindow({position: latlng, disableAutoPan: true, 
-			content: sprintf('#%d - %.8f, %.8f', ptidx_, latlng.lat(), latlng.lng())});
+			content: sprintf('%s - %.8f, %.8f', label_, latlng.lat(), latlng.lng())});
 	google.maps.event.addListener(marker_, 'mouseover', function() {
 		infowin.open(g_map);
 	});
@@ -193,7 +209,7 @@ function add_marker_mouseover_listener_for_infowin(marker_, ptidx_) {
 	});
 }
 
-function add_marker_click_listener_for_show_dist(marker_, ptidx_) {
+function add_marker_click_listener_for_show_dist(marker_) {
 	google.maps.event.addListener(marker_, 'click', function() {
 		if(g_show_dist_pt1 != null  && g_show_dist_pt2 != null) {
 			reset_show_dist_everything();
@@ -250,7 +266,7 @@ function on_opacity_up_clicked() {
 		<input type="button" onclick="on_opacity_down_clicked()" value="Opacity DOWN" />
 		<input type="button" onclick="on_opacity_up_clicked()" value="Opacity UP" />
 		<label for="dots_checkbox">Dots:</label><input checked="checked" type="checkbox" id="dots_checkbox" name="dots_checkbox" onclick="redraw_objects()"/>
-		<label for="polyline_checkbox">Polyline:</label><input type="checkbox" id="polyline_checkbox" name="polyline_checkbox" onclick="redraw_objects()"/>
+		<label for="polyline_checkbox">Polylines:</label><input type="checkbox" id="polyline_checkbox" name="polyline_checkbox" onclick="redraw_objects()"/>
 		<p id="p_zoom"/>
   </body>
 </html>
