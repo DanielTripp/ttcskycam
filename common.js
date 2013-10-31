@@ -607,6 +607,16 @@ function arrayMax(array_) {
 	return Math.max.apply(Math, array_);
 }
 
+function roundDown(x_, step_, ref_) {
+	var ref = (typeof ref_ === 'undefined' ? 0 : ref_);
+	return fdiv(x_-ref, step_)*step_ + ref;
+}
+
+function roundUp(x_, step_, ref_) {
+	var r = roundDown(x_, step_, ref_);
+	return (r == x_ ? r : r+step_);
+}
+
 eval(get_sync("js/json2.js"));
 
 
