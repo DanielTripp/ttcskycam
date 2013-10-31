@@ -16,7 +16,7 @@
 		<script type="text/javascript" src="js/buckets-minified.js"></script>
     <script type="text/javascript">
 
-var POLYLINE_STROKEWEIGHT = 2;
+var POLYLINE_STROKEWEIGHT = 3;
 
 // array of array of google LatLngs. 
 var g_polyline_latlngs = [];
@@ -39,7 +39,7 @@ var LNGREF = <?php
 var LATSTEP = <?php 
   passthru('python -c "import snaptogrid; print snaptogrid.LATSTEP"'); ?>;
 var LNGSTEP = <?php 
-  passthru('python -c "import snaptogrid; print snaptogrid.LATSTEP"'); ?>;
+  passthru('python -c "import snaptogrid; print snaptogrid.LNGSTEP"'); ?>;
 
 function initialize() {
 
@@ -71,7 +71,9 @@ function initialize() {
 
 function redraw_grid() {
 	erase_grid();
-	draw_grid();
+	if(is_selected('grid_checkbox')) {
+		draw_grid();
+	}
 }
 
 function lat_to_gridlat(lat_) {
@@ -121,10 +123,7 @@ function draw_grid_lats() {
 			draggable: false,
 			flat: true, 
 			anchor: RichMarkerPosition.RIGHT, 
-			content: sprintf('<svg width="20" height="20" version="1.1">' +
-					'<text x="0" y="15" font-size="15" font-weight="bold"  fill="rgb(0,0,255)">       %d</text>' +
-					'</svg>', 
-					gridlat)
+			content: get_number_label_svg(gridlat)
 			});
 		g_grid_objects.push(marker);
 	}
@@ -146,13 +145,18 @@ function draw_grid_lngs() {
 			map: g_map,
 			draggable: false,
 			flat: true, 
-			content: sprintf('<svg width="20" height="20" version="1.1">' +
-					'<text x="0" y="15" font-size="15" font-weight="bold" fill="rgb(0,0,255)">%d</text>' +
-					'</svg>', 
-					gridlng)
+			content: get_number_label_svg(gridlng)
 			});
 		g_grid_objects.push(marker);
 	}
+}
+
+function get_number_label_svg(num_) {
+	return sprintf('<svg width="20" height="20" version="1.1">' +
+			'<rect x="0" y="0" width="20" height="20" style="fill:white;stroke:blue;stroke-width:0.5;fill-opacity:1.0;stroke-opacity:1.0"/>' +
+			'<text x="0" y="15" font-size="15" font-weight="bold" fill="rgb(0,0,255)">%d</text>' +
+			'</svg>', 
+			num_);
 }
 
 function erase_grid() {
@@ -179,6 +183,9 @@ function get_latlngs_from_file() {
 		var raw_polylines = [];
 		try {
 			raw_polylines = $.parseJSON(contents_str);
+			if(typeof raw_polylines[0][0] === 'number') { // file contains a polyline, not a list of polylines? 
+				raw_polylines = [raw_polylines]; // now it's a list of polylines. 
+			}
 		} catch(e) {
 			// So it wasn't JSON.    Maybe it's XML: 
 			try {
@@ -271,7 +278,7 @@ function draw_objects() {
 		line_latlngs.forEach(function(latlng) {
 
 			if(draw_dots) {
-				make_marker(latlng, sprintf('%d/%d', lineidx, ptidx));
+				make_marker(latlng, sprintf('%d/%d - (%.8f,%.8f)', lineidx, ptidx, latlng.lat(), latlng.lng()));
 			}
 
 			minlat = Math.min(minlat, latlng.lat());
@@ -296,9 +303,32 @@ function draw_objects() {
 }
 
 function draw_polylines() {
-	g_polyline_latlngs.forEach(function(polyline_latlngs) {
-		g_polylines.push(new google.maps.Polyline({path: polyline_latlngs, strokeWeight: POLYLINE_STROKEWEIGHT, strokeOpacity: g_opacity, map: g_map}));
+	for(var i=0; i<g_polyline_latlngs.length; i++) {
+		var polyline_latlngs = g_polyline_latlngs[i];
+		var polyline = new google.maps.Polyline({path: polyline_latlngs, strokeWeight: POLYLINE_STROKEWEIGHT, strokeOpacity: 0.7, 
+				strokeColor: get_polyline_color(polyline_latlngs), map: g_map});
+		add_marker_mouseover_listener_for_infowin(polyline, sprintf('line #%d', i));
+		g_polylines.push(polyline);
+	}
+}
+
+function get_polyline_color(polyline_latlngs_) {
+	if(is_selected('colors_checkbox')) {
+		var colors = [[0, 0, 0], [150, 150, 150], [255, 0, 0], [255, 0, 255], [0, 255, 255], [0, 127, 0], 
+				[130, 127, 0], [127, 0, 0], [127, 0, 127], [0, 127, 127, ], [0, 255, 0], [0, 0, 255]];
+		var r = colors[get_polyline_color_hash(polyline_latlngs_) % colors.length];
+		return sprintf('rgb(%d,%d,%d)', r[0], r[1], r[2]);
+	} else {
+		return 'rgb(0,0,0)';
+	}
+}
+
+function get_polyline_color_hash(polyline_latlngs_) {
+	var r = 0;
+	polyline_latlngs_.forEach(function(latlng) {
+		r += latlng.lat()*100000 + latlng.lng()*100000;
 	});
+	return Math.round(Math.abs(r));
 }
 
 function make_marker(latlng_, label_) {
@@ -310,14 +340,18 @@ function make_marker(latlng_, label_) {
 	add_marker_click_listener_for_show_dist(marker);
 }
 
-function add_marker_mouseover_listener_for_infowin(marker_, label_) {
-	var latlng = marker_.getPosition();
-	var infowin = new google.maps.InfoWindow({position: latlng, disableAutoPan: true, 
-			content: sprintf('%s - %.8f, %.8f', label_, latlng.lat(), latlng.lng())});
-	google.maps.event.addListener(marker_, 'mouseover', function() {
+function add_marker_mouseover_listener_for_infowin(mapobject_, label_) {
+	var infowin = new google.maps.InfoWindow({disableAutoPan: true, 
+			content: label_});
+	google.maps.event.addListener(mapobject_, 'mouseover', function(mouseevent_) {
+		if(mapobject_.getPosition === 'function') { // marker probably. 
+			infowin.setPosition(marker_.getPosition());
+		} else {
+			infowin.setPosition(new google.maps.LatLng(mouseevent_.latLng.lat()+0.0001, mouseevent_.latLng.lng()+0.0001));
+		}
 		infowin.open(g_map);
 	});
-	google.maps.event.addListener(marker_, 'mouseout', function() {
+	google.maps.event.addListener(mapobject_, 'mouseout', function() {
 		infowin.close();
 	});
 }
@@ -367,6 +401,13 @@ function on_opacity_up_clicked() {
 	redraw_objects();
 }
 
+function on_grid_checkbox_clicked() {
+	if(is_selected('grid_checkbox')) {
+		draw_grid();
+	} else {
+		erase_grid();
+	}
+}
 
 
 
@@ -376,10 +417,13 @@ function on_opacity_up_clicked() {
   <body onload="initialize()" >
 		<div id="map_canvas" style="width:80%; height:100%"></div>
 		<input type="text" size="130" name="filename_field" id="filename_field" />
+		<br>
 		<input type="button" onclick="on_opacity_down_clicked()" value="Opacity DOWN" />
 		<input type="button" onclick="on_opacity_up_clicked()" value="Opacity UP" />
 		<label for="dots_checkbox">Dots:</label><input checked="checked" type="checkbox" id="dots_checkbox" name="dots_checkbox" onclick="redraw_objects()"/>
 		<label for="polyline_checkbox">Polylines:</label><input type="checkbox" id="polyline_checkbox" name="polyline_checkbox" onclick="redraw_objects()"/>
+		<label for="grid_checkbox">Grid:</label><input checked="checked" type="checkbox" id="grid_checkbox" name="grid_checkbox" onclick="on_grid_checkbox_clicked()"/>
+		<label for="colors_checkbox">Colors:</label><input type="checkbox" id="colors_checkbox" name="colors_checkbox" onclick="redraw_objects()"/>
 		<p id="p_zoom"/>
   </body>
 </html>
