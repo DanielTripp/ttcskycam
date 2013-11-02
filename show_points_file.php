@@ -182,11 +182,20 @@ function get_latlngs_from_file() {
 	if(contents_str != null) {
 		var raw_polylines = [];
 		try {
-			raw_polylines = $.parseJSON(contents_str);
+			try {
+				raw_polylines = $.parseJSON(contents_str);
+			} catch(e) {
+				contents_str = contents_str.trim();
+				if(contents_str.charAt(contents_str.length-1) === ',') {
+					contents_str = contents_str.substring(0, contents_str.length-1);
+				}
+				raw_polylines = $.parseJSON('['+contents_str+']');
+			}
 			if(typeof raw_polylines[0][0] === 'number') { // file contains a polyline, not a list of polylines? 
 				raw_polylines = [raw_polylines]; // now it's a list of polylines. 
 			}
 		} catch(e) {
+			console.log(e.stack);
 			// So it wasn't JSON.    Maybe it's XML: 
 			try {
 				var polyline = [];
