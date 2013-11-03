@@ -195,7 +195,6 @@ function get_latlngs_from_file() {
 				raw_polylines = [raw_polylines]; // now it's a list of polylines. 
 			}
 		} catch(e) {
-			console.log(e.stack);
 			// So it wasn't JSON.    Maybe it's XML: 
 			try {
 				var polyline = [];
@@ -218,7 +217,7 @@ function get_latlngs_from_file() {
 					if(match != null) {
 					  var lat = parseFloat(match[1], 10);
 						var lng = parseFloat(match[2], 10);
-						polylines.push([lat, lng]);
+						polyline.push([lat, lng]);
 					}
 				}
 			}
