@@ -57,6 +57,10 @@ function initialize() {
 	google.maps.event.addListener(g_map, 'zoom_changed', on_zoom_changed);
 	on_zoom_changed();
 
+	google.maps.event.addListener(g_map, 'click', function(mouseevent_) {
+		on_mouse_click_for_show_dist(mouseevent_.latLng);
+	});
+
   $('#filename_field').keydown(function (e){
       if(e.keyCode == 13) {
 				refresh_from_file();
@@ -115,7 +119,8 @@ function draw_grid_lats() {
 		var pts = new Array();
 		pts.push(new google.maps.LatLng(lat, gridbounds.getSouthWest().lng()));
 		pts.push(new google.maps.LatLng(lat, gridbounds.getNorthEast().lng()));
-		var line = new google.maps.Polyline({map: g_map, path: pts, strokeColor: 'rgb(0,0,255)', strokeWeight: (gridlat % 10 == 0 ? 1 : 0.5)});
+		var line = new google.maps.Polyline({map: g_map, path: pts, strokeColor: 'rgb(0,0,255)', strokeWeight: (gridlat % 10 == 0 ? 1 : 0.5), 
+			clickable: false});
 		g_grid_objects.push(line);
 		var marker = new RichMarker({
 			position: new google.maps.LatLng(lat, g_map.getBounds().getNorthEast().lng()), 
@@ -137,7 +142,8 @@ function draw_grid_lngs() {
 		var pts = new Array();
 		pts.push(new google.maps.LatLng(gridbounds.getSouthWest().lat(), lng));
 		pts.push(new google.maps.LatLng(gridbounds.getNorthEast().lat(), lng));
-		var line = new google.maps.Polyline({map: g_map, path: pts, strokeColor: 'rgb(0,0,255)', strokeWeight: (gridlng % 10 == 0 ? 1 : 0.5)});
+		var line = new google.maps.Polyline({map: g_map, path: pts, strokeColor: 'rgb(0,0,255)', strokeWeight: (gridlng % 10 == 0 ? 1 : 0.5), 
+			clickable: false});
 		g_grid_objects.push(line);
 		var marker = new RichMarker({
 			position: new google.maps.LatLng(g_map.getBounds().getNorthEast().lat(), lng), 
@@ -303,7 +309,7 @@ function draw_objects() {
 	var rect_bounds = new google.maps.LatLngBounds(
 			new google.maps.LatLng(minlat, minlng), new google.maps.LatLng(maxlat, maxlng));
 	g_bounding_rect = new google.maps.Rectangle({bounds: rect_bounds, map: g_map, strokeColor: 'rgb(0,0,0)', 
-			strokeOpacity: 0.5, strokeWeight: 1, fillOpacity: 0, zIndex: -10});
+			strokeOpacity: 0.5, strokeWeight: 1, fillOpacity: 0, zIndex: -10, clickable: false});
 
 	if(is_selected('polyline_checkbox')) {
 		draw_polylines();
@@ -314,7 +320,7 @@ function draw_polylines() {
 	for(var i=0; i<g_polyline_latlngs.length; i++) {
 		var polyline_latlngs = g_polyline_latlngs[i];
 		var polyline = new google.maps.Polyline({path: polyline_latlngs, strokeWeight: POLYLINE_STROKEWEIGHT, strokeOpacity: 0.7, 
-				strokeColor: get_polyline_color(polyline_latlngs), map: g_map});
+				strokeColor: get_polyline_color(polyline_latlngs), clickable: false, map: g_map});
 		add_marker_mouseover_listener_for_infowin(polyline, sprintf('line #%d', i));
 		g_polylines.push(polyline);
 	}
@@ -366,24 +372,28 @@ function add_marker_mouseover_listener_for_infowin(mapobject_, label_) {
 
 function add_marker_click_listener_for_show_dist(marker_) {
 	google.maps.event.addListener(marker_, 'click', function() {
-		if(g_show_dist_pt1 != null  && g_show_dist_pt2 != null) {
-			reset_show_dist_everything();
-		}
-
-		if(g_show_dist_pt1 == null) {
-			assert(g_show_dist_pt2 == null);
-			g_show_dist_pt1 = marker_.getPosition();
-		} else if(g_show_dist_pt2 == null) {
-			g_show_dist_pt2 = marker_.getPosition();
-			g_show_dist_infowindow = new google.maps.InfoWindow({position: g_show_dist_pt2, disableAutoPan: true, 
-					content: sprintf('distance: %.2f meters', dist_m(g_show_dist_pt1, g_show_dist_pt2))});
-			google.maps.event.addListener(g_show_dist_infowindow, 'closeclick', reset_show_dist_everything);
-			g_show_dist_infowindow.open(g_map);
-
-			g_show_dist_polyline = new google.maps.Polyline({path: [g_show_dist_pt1, g_show_dist_pt2], strokeWeight: 4, 
-					strokeColor: 'red', map: g_map});
-		}
+		on_mouse_click_for_show_dist(marker_.getPosition());
 	});
+}
+
+function on_mouse_click_for_show_dist(latlng_) {
+	if(g_show_dist_pt1 != null  && g_show_dist_pt2 != null) {
+		reset_show_dist_everything();
+	}
+
+	if(g_show_dist_pt1 == null) {
+		assert(g_show_dist_pt2 == null);
+		g_show_dist_pt1 = latlng_;
+	} else if(g_show_dist_pt2 == null) {
+		g_show_dist_pt2 = latlng_;
+		g_show_dist_infowindow = new google.maps.InfoWindow({position: g_show_dist_pt2, disableAutoPan: true, 
+				content: sprintf('distance: %.2f meters', dist_m(g_show_dist_pt1, g_show_dist_pt2))});
+		google.maps.event.addListener(g_show_dist_infowindow, 'closeclick', reset_show_dist_everything);
+		g_show_dist_infowindow.open(g_map);
+
+		g_show_dist_polyline = new google.maps.Polyline({path: [g_show_dist_pt1, g_show_dist_pt2], strokeWeight: 4, 
+				strokeColor: 'red', clickable: false, map: g_map});
+	}
 }
 
 function reset_show_dist_everything() {
