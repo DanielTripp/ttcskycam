@@ -440,7 +440,7 @@ function on_grid_checkbox_clicked() {
 		<input type="button" onclick="on_opacity_up_clicked()" value="Opacity UP" />
 		<label for="dots_checkbox">Dots:</label><input checked="checked" type="checkbox" id="dots_checkbox" name="dots_checkbox" onclick="redraw_objects()"/>
 		<label for="polyline_checkbox">Polylines:</label><input type="checkbox" id="polyline_checkbox" name="polyline_checkbox" onclick="redraw_objects()"/>
-		<label for="grid_checkbox">Grid:</label><input checked="checked" type="checkbox" id="grid_checkbox" name="grid_checkbox" onclick="on_grid_checkbox_clicked()"/>
+		<label for="grid_checkbox">Grid:</label><input type="checkbox" id="grid_checkbox" name="grid_checkbox" onclick="on_grid_checkbox_clicked()"/>
 		<label for="colors_checkbox">Colors:</label><input type="checkbox" id="colors_checkbox" name="colors_checkbox" onclick="redraw_objects()"/>
 		<p id="p_zoom"/>
   </body>
