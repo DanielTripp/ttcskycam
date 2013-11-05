@@ -292,7 +292,7 @@ function draw_objects() {
 		line_latlngs.forEach(function(latlng) {
 
 			if(draw_dots) {
-				make_marker(latlng, sprintf('%d/%d - (%.8f,%.8f)', lineidx, ptidx, latlng.lat(), latlng.lng()));
+				make_marker(latlng, sprintf('%d/%d -&nbsp;&nbsp;&nbsp;&nbsp;(%.8f,%.8f)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;', lineidx, ptidx, latlng.lat(), latlng.lng()));
 			}
 
 			minlat = Math.min(minlat, latlng.lat());
@@ -366,7 +366,9 @@ function add_marker_mouseover_listener_for_infowin(mapobject_, label_) {
 		infowin.open(g_map);
 	});
 	google.maps.event.addListener(mapobject_, 'mouseout', function() {
-		infowin.close();
+		setTimeout(function() {
+			infowin.close();
+		}, 3000);
 	});
 }
 
