@@ -231,6 +231,14 @@ function google_LatLngs(latlngs_) {
 	return r;
 }
 
+function to_google_LatLng_polylines(raw_polylines_) {
+	var r = [];
+	raw_polylines_.forEach(function(raw_polyline) {
+		r.push(google_LatLngs(raw_polyline));
+	});
+	return r;
+}
+
 function callpy(module_and_funcname_) {
 	var func_args = new Array();
 	for(var i=1; i<arguments.length-1; i++) {

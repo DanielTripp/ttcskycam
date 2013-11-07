@@ -35,13 +35,13 @@ var g_mouseovered_object_infowindow_close_timer = null;
 var g_grid_objects = new Array();
 
 var LATREF = <?php 
-  passthru('python -c "import snaptogrid; print snaptogrid.LATREF"'); ?>;
+  passthru('python -c "import snapgraph; print snapgraph.LATREF"'); ?>;
 var LNGREF = <?php 
-  passthru('python -c "import snaptogrid; print snaptogrid.LNGREF"'); ?>;
+  passthru('python -c "import snapgraph; print snapgraph.LNGREF"'); ?>;
 var LATSTEP = <?php 
-  passthru('python -c "import snaptogrid; print snaptogrid.LATSTEP"'); ?>;
+  passthru('python -c "import snapgraph; print snapgraph.LATSTEP"'); ?>;
 var LNGSTEP = <?php 
-  passthru('python -c "import snaptogrid; print snaptogrid.LNGSTEP"'); ?>;
+  passthru('python -c "import snapgraph; print snapgraph.LNGSTEP"'); ?>;
 
 function initialize() {
 

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
   <head>
-		<title>test</title>
+		<title>tracks</title>
     <meta name="viewport" content="initial-scale=1.0, user-scalable=no" />
     <style type="text/css">
       html { height: 100% }
@@ -15,6 +15,7 @@
 		<script type="text/javascript" src="common.js"></script>
     <script type="text/javascript">
 
+var DRAW_GRID = false;
 
 var g_snapgridpolylines = new Array();
 
@@ -35,10 +36,11 @@ function initialize() {
 				}
 			});
 
-	setTimeout("draw_snap_grid()", 1000);
-
-	google.maps.event.addListener(g_map, 'dragend', draw_snap_grid);
-	google.maps.event.addListener(g_map, 'zoom_changed', draw_snap_grid);
+	if(DRAW_GRID) {
+		setTimeout("draw_snap_grid()", 1000);
+		google.maps.event.addListener(g_map, 'dragend', draw_snap_grid);
+		google.maps.event.addListener(g_map, 'zoom_changed', draw_snap_grid);
+	}
 
 }
 

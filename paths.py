@@ -3,7 +3,7 @@
 import sys, json, os.path, pprint, sqlite3, multiprocessing, time, subprocess
 from collections import *
 from lru_cache import lru_cache
-import vinfo, geom, routes, predictions, mc, c, snaptogrid, traffic 
+import vinfo, geom, routes, predictions, mc, c, snapgraph, traffic 
 from misc import *
 
 PATHS_DB_FILENAME = 'paths.sqlitedb'
@@ -287,7 +287,7 @@ def find_nearby_froutenmofrs(latlng_, radius_):
 	r = []
 	for froute in routes.FUDGEROUTES:
 		ri = routes.routeinfo(froute)
-		snap_result = ri.snaptogridcache.snap(latlng_, radius_)
+		snap_result = ri.snapgraph.snap(latlng_, radius_)
 		if snap_result is not None:
 			pt_on_froute = snap_result[0]
 			r.append((froute, ri.latlon_to_mofr(pt_on_froute)))

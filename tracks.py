@@ -1,37 +1,35 @@
 #!/usr/bin/python2.6
 
 import os, json
-import geom, snaptogrid, mc
+import geom, snapgraph, mc
 from misc import *
 from collections import Sequence
 from lru_cache import lru_cache
 
-def snaptogridcache():
-	return mc.get(snaptogridcache_impl)
+@mc.decorate
+def get_snapgraph():
+	return snapgraph.SnapGraph(get_polylines_from_files(), forpaths=False, disttolerance=15)
 
-def snaptogridcache_impl():
-	return snaptogrid.SnapToGridCache(_get_polylines_from_files())
-
-def _get_polylines_from_files():
-	def get_polyline(polyline_):
-		r_e = []
-		for raw_latlng in track_file_contents:
-			assert len(raw_latlng) and isinstance(raw_latlng[0], float) and isinstance(raw_latlng[1], float)
-			r_e.append(geom.LatLng(raw_latlng[0], raw_latlng[1]))
-		return r_e
-
+def get_polylines_from_files():
 	r = []
 	for track_filename in sorted(f for f in os.listdir('.') if f.startswith('tracks_') and f.endswith('.json')):
-		with open(track_filename) as track_fin:
-			track_file_contents = json.load(track_fin)
-			assert isinstance(track_file_contents, Sequence) and isinstance(track_file_contents[0], Sequence)
-			if isinstance(track_file_contents[0][0], float):
-				r.append(get_polyline(track_file_contents))
-			else:
-				assert isinstance(track_file_contents[0][0], Sequence)
-				for polyline in track_file_contents:
-					r.append(get_polyline(polyline))
+		r.append(get_polyline_from_file(track_filename))
 	return r
+
+def get_polyline_from_file(filename_):
+	try:
+		with open(filename_) as track_fin:
+			track_file_contents = json.load(track_fin)
+			assert isinstance(track_file_contents[0][0], float)
+			r = []
+			for raw_latlng in track_file_contents:
+				assert len(raw_latlng) and isinstance(raw_latlng[0], float) and isinstance(raw_latlng[1], float)
+				r.append(geom.LatLng(raw_latlng[0], raw_latlng[1]))
+			return r
+	except:
+		printerr('error with %s' % track_filename)
+		raise
+	
 
 def is_on_a_track(latlng_):
 	return (snap(latlng_) is not None)
@@ -48,15 +46,16 @@ def is_on_a_track(latlng_):
 @lru_cache(1000)
 def snap(latlng_):
 	assert isinstance(latlng_, geom.LatLng)
-	return snaptogridcache().snap(latlng_, None)
+	return get_snapgraph().snap(latlng_, None)
 
 def heading(linesegaddr_, referencing_lineseg_aot_point_):
-	return snaptogridcache().heading(linesegaddr_, referencing_lineseg_aot_point_)
+	return get_snapgraph().heading(linesegaddr_, referencing_lineseg_aot_point_)
 
 def get_all_tracks_polylines():
-	return snaptogridcache().polylines
+	return get_snapgraph().polylines
 
 if __name__ == '__main__':
 
-	print is_on_a_track(geom.LatLng(43.66510164255672, -79.4030074616303))
+	print get_all_tracks_polylines()
+
 

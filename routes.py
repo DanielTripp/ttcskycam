@@ -1,7 +1,7 @@
 #!/usr/bin/python2.6
 
 import sys, json, os.path, bisect, xml.dom, xml.dom.minidom, pickle
-import vinfo, geom, mc, c, snaptogrid, util
+import vinfo, geom, mc, c, snapgraph, util
 from misc import *
 #from mrucache import *
 from lru_cache import lru_cache
@@ -296,7 +296,7 @@ class RouteInfo:
 		else:
 			routepts = [read_pts_file('fudge_route_%s_dir0.json' % (self.name)), read_pts_file('fudge_route_%s_dir1.json' % (self.name))]
 			self.is_split_by_dir = True
-		self.snaptogridcache = snaptogrid.SnapToGridCache(routepts)
+		self.snapgraph = snapgraph.SnapGraph(routepts, forpaths=False)
 		self.init_datazoom_to_dir_maps()
 		if self.is_split_by_dir:
 			len_dir_0 = geom.dist_m_polyline(self.routepts(0)); len_dir_1 = geom.dist_m_polyline(self.routepts(1))
@@ -311,10 +311,10 @@ class RouteInfo:
 
 		self.datazoom_to_dir_to_routepts[None] = {}
 		if self.is_split_by_dir:
-			self.datazoom_to_dir_to_routepts[None][0] = self.snaptogridcache.polylines[0]
-			self.datazoom_to_dir_to_routepts[None][1] = self.snaptogridcache.polylines[1]
+			self.datazoom_to_dir_to_routepts[None][0] = self.snapgraph.polylines[0]
+			self.datazoom_to_dir_to_routepts[None][1] = self.snapgraph.polylines[1]
 		else:
-			self.datazoom_to_dir_to_routepts[None][0] = self.datazoom_to_dir_to_routepts[None][1] = self.snaptogridcache.polylines[0]
+			self.datazoom_to_dir_to_routepts[None][0] = self.datazoom_to_dir_to_routepts[None][1] = self.snapgraph.polylines[0]
 		self.datazoom_to_dir_to_routeptaddr_to_mofr[None] = self.calc_dir_to_routeptaddr_to_mofr(None)
 
 		for datazoom in c.VALID_DATAZOOMS:
@@ -429,7 +429,7 @@ class RouteInfo:
 		# and that the code that builds the routeptidx -> mofr map for each rsdt, and presumably calls this function, 
 		# uses a tolerance argument to this function that is higher than the greatest rsdt. 
 		# Otherwise a lot of things will be broken. 
-		snap_result = self.snaptogridcache.snap(post_, {0:50, 1:300, 1.5:600, 2:2000}[tolerance_])
+		snap_result = self.snapgraph.snap(post_, {0:50, 1:300, 1.5:600, 2:2000}[tolerance_])
 		if snap_result is None:
 			return -1
 		direction = snap_result[1].polylineidx; routeptidx = snap_result[1].startptidx
@@ -442,7 +442,7 @@ class RouteInfo:
 
 	def snaptest(self, pt_, tolerance_=0):
 		assert isinstance(pt_, geom.LatLng) and (tolerance_ in (0, 1, 2))
-		snap_result = self.snaptogridcache.snap(pt_, {0:50, 1:300, 2:750}[tolerance_])
+		snap_result = self.snapgraph.snap(pt_, {0:50, 1:300, 2:750}[tolerance_])
 		snapped_pt = (snap_result[0] if snap_result is not None else None)
 		mofr = self.latlon_to_mofr(pt_, tolerance_)
 		resnapped_pts = [self.mofr_to_latlon(mofr, 0), self.mofr_to_latlon(mofr, 1)]
