@@ -1,7 +1,7 @@
 #!/usr/bin/python2.6
 
 import sys, os, os.path, time, math, datetime, calendar, bisect, tempfile, subprocess, StringIO, re
-from collections import Sequence, MutableSequence, defaultdict
+from collections import Sequence, MutableSequence, defaultdict, MutableSet
 
 def es_to_str(t_):
 	if t_ is None or t_ == 0:
@@ -625,6 +625,68 @@ def add_python_optimize_flag(file_):
 				fout.write(modified_line)
 			else:
 				fout.write(line)
+
+def choose(n_, k_):
+	return math.factorial(n_)/(math.factorial(k_)*math.factorial(n_-k_))
+
+# Thanks to http://stackoverflow.com/questions/16994307/identityset-in-python/17039643#17039643 
+class IdentitySet(MutableSet):
+	key = id  # should return a hashable object
+
+	def __init__(self, iterable=()):
+		self.map = {} # id -> object
+		self |= iterable  # add elements from iterable to the set (union)
+
+	def __len__(self):  # Sized
+		return len(self.map)
+
+	def __iter__(self):  # Iterable
+		return self.map.itervalues()
+
+	def __contains__(self, x):  # Container
+		return self.key(x) in self.map
+
+	def add(self, value):  # MutableSet
+		"""Add an element."""
+		self.map[self.key(value)] = value
+
+	def discard(self, value):  # MutableSet
+		"""Remove an element.  Do not raise an exception if absent."""
+		self.map.pop(self.key(value), None)
+
+	def __repr__(self):
+		if not self:
+			return '%s()' % (self.__class__.__name__,)
+		return '%s(%r)' % (self.__class__.__name__, list(self))
+
+# intended for sets. 
+def anyelem(iterable_):
+	for e in iterable_:
+		return e
+	raise Exception('No elements.')
+
+# iterate a dictionary according to a sort key. 
+def iteritemssorted(dict_, key=None):
+	keys = dict_.keys()
+	keys.sort(key=key)
+	for key, val in ((key, dict_[key]) for key in keys):
+		yield (key, val)
+
+def readfile(filename_):
+	with open(filename_) as fin:
+		return fin.read()
+
+def min2(seq_, key=None):
+	try:
+		return min(seq_, key=(key if key is not None else lambda x: x))
+	except ValueError: # not sure if I should depend on this behaviour. 
+		return None
+
+def max2(seq_, key=None):
+	try:
+		return max(seq_, key=(key if key is not None else lambda x: x))
+	except ValueError: # not sure if I should depend on this behaviour. 
+		return None
 
 if __name__ == '__main__':
 

@@ -544,7 +544,7 @@ function show_route_dist_m() {
 	g_route_markers.forEach(function(marker) {
 		pts.push(marker.getPosition());
 	});
-	set_contents('dist', dist_m_polyline(pts));
+	set_contents('dist', sprintf('%.3f meters', dist_m_polyline(pts)));
 }
 
 function on_zoom_changed() {

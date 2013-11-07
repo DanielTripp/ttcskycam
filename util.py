@@ -98,6 +98,8 @@ class OurJSONEncoder(json.JSONEncoder):
 	def default(self, o):
 		if isinstance(o, geom.LatLng):
 			return (o.lat, o.lng)
+		elif isinstance(o, geom.LineSeg):
+			return (o.start, o.end)
 		elif isinstance(o, vinfo.VehicleInfo):
 			return o.to_json_dict()
 		else:
@@ -107,6 +109,9 @@ class OurJSONEncoder(json.JSONEncoder):
 def to_json_str(object_):
 	return json.dumps(object_, cls=OurJSONEncoder)
 
+def to_json_file(object_, filename_):
+	with open(filename_, 'w') as fout:
+		json.dump(object_, fout, cls=OurJSONEncoder)
 
 # Find the mid-point of a loop.  
 # Pass in a completed loop i.e. last point is equal to first point. 

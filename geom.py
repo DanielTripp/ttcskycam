@@ -1,6 +1,6 @@
 #!/usr/bin/python2.6
 
-import datetime, calendar, math
+import datetime, calendar, math, time
 from math import *
 from lru_cache import lru_cache
 import vinfo, routes
@@ -20,7 +20,7 @@ class LatLng:
 		self.lat = latlng[0]
 		self.lng = latlng[1]
 
-	def clone(self):
+	def copy(self):
 		return LatLng(self.lat, self.lng)
 
 	# returns: meters. float.
@@ -32,7 +32,8 @@ class LatLng:
 		dlat = lat2 - lat1
 		dlng = lng2 - lng1
 		central_angle = 2*asin(sqrt(sin(dlat/2)**2 + cos(lat1)*cos(lat2)*(sin(dlng/2)**2)))
-		return central_angle*RADIUS_OF_EARTH*1000
+		r = central_angle*RADIUS_OF_EARTH*1000
+		return r
 
 	def add(self, other_):
 		assert isinstance(other_, LatLng)
@@ -49,8 +50,8 @@ class LatLng:
 	# Returns between -pi and +pi.
 	def abs_angle(self, fore_):
 		assert isinstance(fore_, LatLng)
-		opposite = LatLng(self.lat, fore_.lng).dist_m(LatLng(fore_.lat, fore_.lng))
-		adjacent = LatLng(self.lat, fore_.lng).dist_m(LatLng(self.lat, self.lng))
+		opposite = LatLng(self.lat, fore_.lng).dist_m(fore_)
+		adjacent = LatLng(self.lat, fore_.lng).dist_m(self)
 		r = math.atan2(opposite, adjacent)
 		latdiff = fore_.lat - self.lat; londiff = fore_.lng - self.lng
 		if londiff > 0 and latdiff > 0: # first quadrant 
@@ -85,8 +86,8 @@ class LatLng:
 		return (southwest_.lat <= self.lat <= northeast_.lat) and (southwest_.lng <= self.lng <= northeast_.lng)
 
 	def get_normalized_vector(self):
-		# Assuming that self is a vector i.e. diff of  two positions, not a real lat/lng position itself. 
-		dist_m = LatLng(0, 0).dist_m(self)
+		# We're assuming that self is a vector i.e. diff of two positions, not a real lat/lng position itself. 
+		dist_m = LatLng(0.0, 0.0).dist_m(self)
 		if dist_m < 0.00001:
 			raise Exception("Can't normalize a vector with length of zero.")
 		return self.scale(1.0/dist_m)
@@ -96,12 +97,12 @@ class LatLng:
 		return self.lat == other_.lat and self.lng == other_.lng
 
 	def __hash__(self):
-		return int(self.lat*1000 + self.lng*1000)
+		return int(self.lat*100000 + self.lng*100000)
 
 	def __str__(self):
 		return '(%.7f,%.7f)' % (self.lat, self.lng) # Avoiding spaces in case one of these ends up in a memcache key.
 			 # memcache doesn't handle spaces in keys.  We prevent memcache from seeing spaces in keys by replacing spaces with
-			 # a big ugly string.  So really we avoiding spaces here in order to minimize use of that big ugly string.
+			 # a big ugly string.  So really we're avoiding spaces here in order to minimize use of that big ugly string.
 
 	def __repr__(self):
 		return self.__str__()
@@ -110,12 +111,10 @@ class LatLng:
 		return LatLng(self.lat, self.lng)
 
 	# returns a tuple - (snapped point, 0|1|None, dist)
-	# elem 1 - 0 if the first point of the line is the snapped-to point, 1 if the second, None if neither.
+	# elem 1: 0 if the first point of the line is the snapped-to point, 1 if the second, None if neither.
 	def snap_to_lineseg(self, lineseg_):
 		assert isinstance(lineseg_, LineSeg)
-		ang1 = angle(lineseg_.end, lineseg_.start, self)
-		ang2 = angle(lineseg_.start, lineseg_.end, self)
-		if (ang1 < math.pi/2) and (ang2 < math.pi/2):
+		if (angle(lineseg_.end, lineseg_.start, self) < math.pi/2) and (angle(lineseg_.start, lineseg_.end, self) < math.pi/2):
 			snappedpt = get_pass_point(lineseg_.start, lineseg_.end, self)
 			return (snappedpt, None, self.dist_m(snappedpt))
 		else:
@@ -124,6 +123,25 @@ class LatLng:
 				return (lineseg_.start, 0, dist0)
 			else:
 				return (lineseg_.end, 1, dist1)
+
+	# returns (snapped_pt, dist_from_self_to_snapped_pt), or (None, None) if the snap fails. 
+	# Unlike snap_to_lineseg(), this only works for points that are 'inside' the 
+	# lineseg i.e. will snap to somewhere along it's length, rather than to the 
+	# start or end point.   Also, this is faster than snap_to_lineseg(). 
+	def snap_to_lineseg_opt(self, lineseg_, min_dist_from_ends_):
+		assert isinstance(lineseg_, LineSeg)
+		self_ang = angle(lineseg_.start, self, lineseg_.end)
+		if self_ang > math.pi/2:
+			start_ang = angle(self, lineseg_.start, lineseg_.end)
+			hypot_len = lineseg_.start.dist_m(self)
+			adjacent_len = hypot_len*math.cos(start_ang)
+			lineseg_len = lineseg_.length_m()
+			if min_dist_from_ends_ < adjacent_len < lineseg_len - min_dist_from_ends_:
+				scale_factor = adjacent_len/lineseg_len
+				snapped_pt = LatLng(avg(lineseg_.start.lat, lineseg_.end.lat, scale_factor), avg(lineseg_.start.lng, lineseg_.end.lng, scale_factor))
+				opposite_len = hypot_len*math.sin(start_ang)
+				return (snapped_pt, opposite_len)
+		return (None, None)
 
 	def dist_to_lineseg(self, lineseg_):
 		return self.snap_to_lineseg(lineseg_)[2]
@@ -387,8 +405,25 @@ class LineSeg(object):
 	def __hash__(self):
 		return hash(self.start) + hash(self.end)
 
+	def __eq__(self, other_):
+		return self.start == other_.start and self.end == other_.end
+
 	def heading(self):
 		return self.start.heading(self.end)
+
+	def get_intersection(self, other_):
+		return get_line_segment_intersection(self.start, self.end, other_.start, other_.end)
+
+	def length_m(self):
+		return self.start.dist_m(self.end)
+
+	def ptlist(self):
+		return [self.start, self.end]
+		
+
+def get_linesegs_in_polyline(polyline_):
+	for startpt, endpt in hopscotch(polyline_):
+		yield LineSeg(startpt, endpt)
 
 if __name__ == '__main__':
 
