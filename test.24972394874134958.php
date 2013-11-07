@@ -22,8 +22,6 @@ function initialize() {
 
 	init_map();
 
-	var d = {"19": 3, "18": 560, 17: 3, "16": 3, 15: 2, 14: 2, "13": 1, 12: 0, 11: 0, 10: 0};
-	alert(d[18]);
 
 }
 
@@ -32,14 +30,8 @@ function initialize() {
   </head>
   <body onload="initialize()" >
 		<div id="map_canvas" style="width:100%; height:100%"></div>
-		<div style="float: left;">a<br>a2<br>a3<br></div>
-		<div style="float: right;">b<br>b2<br>b3<br>b4</div>
 		<br>
 		<div style="clear: both;">
-		x
 		</div>
-		y
-		<p id="p1">p1</p>
-		<p id="p2">p2</p>
   </body>
 </html>
