@@ -9,7 +9,7 @@
     </style>
 		<link type="text/css" href="css/ui-lightness/jquery-ui-1.8.17.custom.css" rel="stylesheet" />
     <script type="text/javascript"
-      src="http://maps.googleapis.com/maps/api/js?sensor=true&v=3">
+      src="http://maps.googleapis.com/maps/api/js?sensor=true&v=3.13">
 			<!-- ^^ using v3 stable b/c at one point the unstable release had our infowindows apearing too small, 
 			and with a vertical scroll bar.  Same as http://stackoverflow.com/questions/18271220/google-maps-info-window-is-smaller-since-last-night 
 			Hope that this issue goes away and that I can then go to a newer google maps version ('visual refresh' version I guess). --> 
