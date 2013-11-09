@@ -10,7 +10,7 @@ from misc import *
 LATSTEP = 0.00175; LNGSTEP = 0.0025
 
 if 1: # TODO: deal with this. 
-	fact = 8
+	fact = 4
 	LATSTEP /= fact
 	LNGSTEP /= fact
 
@@ -100,6 +100,13 @@ class Addr(object):
 	def __repr__(self):
 		return self.__str__()
 
+	def __cmp__(self, other):
+		cmp1 = cmp(self.polylineidx, other.polylineidx)
+		if cmp1 != 0:
+			return cmp1
+		else:
+			return cmp(self.startptidx, other.startptidx)
+
 	def copy(self):
 		return Addr(self.polylineidx, self.startptidx)
 
@@ -121,17 +128,33 @@ class Vertex(object):
 
 	def get_ptaddr(self, polylineidx_):
 		ptaddrs = [ptaddr for ptaddr in self.ptaddrs if ptaddr.polylineidx == polylineidx_]
-		assert len(ptaddrs) == 1
+		if len(ptaddrs) != 1:
+			raise Exception('Problem around %s, polyline %d (%s)' \
+					% (self, polylineidx_, [self.snapgraph.get_point(ptaddr) for ptaddr in ptaddrs]))
 		return ptaddrs[0]
 
 	def get_ptidx(self, polylineidx_):
 		return self.get_ptaddr(polylineidx_).startptidx
 
+	# Returns any polylines that are mentioned more than once in this vertex. 
+	def get_looping_polylineidxes(self):
+		r = set()
+		for ptaddr1 in self.ptaddrs:
+			if len([ptaddr2 for ptaddr2 in self.ptaddrs if ptaddr2.polylineidx == ptaddr1.polylineidx]) > 1:
+				r.add(ptaddr1.polylineidx)
+		return r
+
+	def __cmp__(self, other):
+		if __debug__:
+			return cmp(self.id, other.id)
+		else:
+			return cmp(self.ptaddrs, other.ptaddrs)
+
 	def __str__(self):
 		if __debug__:
-			return 'Vertex(id:%d, %s, %s)' % (self.id, self.pos(), list(self.ptaddrs))
+			return 'Vertex(id:%d, %s, %s)' % (self.id, self.pos(), sorted(self.ptaddrs))
 		else:
-			return 'Vertex(%s, %s)' % (self.pos(), list(self.ptaddrs))
+			return 'Vertex(%s, %s)' % (self.pos(), sorted(self.ptaddrs))
 
 	def __repr__(self):
 		return self.__str__()
@@ -266,11 +289,13 @@ class SnapGraph(object):
 
 	def pprint(self):
 		print '{'
+		for polyline in self.polylines:
+			print '\t%s' % polyline
 		for gridsquare, linesegaddrs in self.gridsquare_to_linesegaddrs.iteritems():
 			print '\t%s' % gridsquare
 			for linesegaddr in linesegaddrs:
 				print '\t\t%s' % linesegaddr
-		for vert, connectedvert_n_dists in self.vertex_to_connectedvertex_n_dists.iteritems():
+		for vert, connectedvert_n_dists in iteritemssorted(self.vertex_to_connectedvertex_n_dists):
 			print '\t%s' % vert
 			for connectedvert, dist in connectedvert_n_dists:
 				print '\t\t%s' % connectedvert
@@ -323,6 +348,13 @@ class SnapGraph(object):
 				vertex.ptaddrs.add(addr1)
 				vertex.ptaddrs.add(addr2)
 				addr_to_vertex[addr2] = vertex
+
+		for addr in addr_to_vertex.keys():
+			vertex = addr_to_vertex[addr]
+			if len(vertex.get_looping_polylineidxes()) > 0:
+				del addr_to_vertex[addr]
+				#print 'loops - deleting', vertex # tdr 
+
 		return dict(addr_to_vertex)
 
 	def get_latlngid_to_addr(self, latlngid_to_ontop_latlngids_):
@@ -339,13 +371,18 @@ class SnapGraph(object):
 			assert isinstance(pt1_, geom.LatLng) and isinstance(pt2_, geom.LatLng)
 			latlngid_to_ontop_latlngids[id(pt1_)].add(id(pt2_))
 			latlngid_to_ontop_latlngids[id(pt2_)].add(id(pt1_))
+		i = 0 # tdr 
 		for ptaddr1, ptaddr2 in self.get_addr_combos_near_each_other(False, False, disttolerance_):
 			pt1 = self.get_point(ptaddr1)
 			pt2 = self.get_point(ptaddr2)
 			if pt1.dist_m(pt2) <= disttolerance_:
 				#print '-------- adding pt/pt    ', ptaddr1, ptaddr2, pt1
 				add(pt1, pt2)
+			i += 1 # tdr 
+		#print '%d combinations' % i # tdr 
+		i = 0 # tdr 
 		for ptaddr, linesegaddr in self.get_addr_combos_near_each_other(False, True, disttolerance_):
+			i += 1 # tdr 
 			pt = self.get_point(ptaddr)
 			lineseg = self.get_lineseg(linesegaddr)
 			t0 = time.time()
@@ -363,8 +400,11 @@ class SnapGraph(object):
 				self.polylines[linesegaddr.polylineidx].insert(linesegaddr.startptidx+1, snapped_pt)
 				linesegaddr.startptidx += 1
 				add(pt, snapped_pt)
+		#print '%d combinations' % i # tdr 
+		i = 0 # tdr 
 
 		for linesegaddr1, linesegaddr2 in self.get_addr_combos_near_each_other(True, True, disttolerance_):
+			i += 1 # tdr 
 			lineseg1 = self.get_lineseg(linesegaddr1)
 			lineseg2 = self.get_lineseg(linesegaddr2)
 			intersection_pt = lineseg1.get_intersection(lineseg2)
@@ -379,6 +419,7 @@ class SnapGraph(object):
 					linesegaddr1.startptidx += 1
 					linesegaddr2.startptidx += 1
 					add(intersection_pt, intersection_pt_copy_for_line2)
+		#print '%d combinations' % i # tdr 
 		self.assert_latlngid_to_ontop_latlngids_is_sane(latlngid_to_ontop_latlngids)
 		return dict(latlngid_to_ontop_latlngids)
 
@@ -545,25 +586,25 @@ class SnapGraph(object):
 						addr2s = self.get_linesegaddrs_near_point(addr1, dist_m_)
 					else:
 						addr2s = self.get_ptaddrs_near_point(addr1, dist_m_)
-				for addr2polylineidx in range(len(self.polylines)):
-					addr2ptidx = 0
-					while addr2ptidx < len(self.polylines[addr2polylineidx]) - (1 if linesforaddr2_ else 0):
-						addr2 = Addr(addr2polylineidx, addr2ptidx)
-						if not((addr1.polylineidx == addr2.polylineidx) and abs(addr1.startptidx - addr2.startptidx) < 2):
-							if not(linesforaddr2_ and addr2.startptidx == len(self.polylines[addr2.polylineidx])-1):
-								if addr2 in addr2s:
-									yield (addr1, addr2)
-									if addr1ptidx != addr1.startptidx:
-										assert addr1ptidx == addr1.startptidx-1
-										addr1ptidx = addr1.startptidx
-										addr2s = get_adjusted_addrs_from_polyline_split(addr1.polylineidx, addr1.startptidx, addr2s)
-										self.adjust_addrs_from_polyline_split(addr1.polylineidx, addr1.startptidx)
-									if addr2ptidx != addr2.startptidx:
-										assert addr2ptidx == addr2.startptidx-1
-										addr2ptidx = addr2.startptidx
-										addr2s = get_adjusted_addrs_from_polyline_split(addr2.polylineidx, addr2.startptidx, addr2s)
-										self.adjust_addrs_from_polyline_split(addr2.polylineidx, addr2.startptidx)
-						addr2ptidx += 1
+				addr2s = sorted(addr2s)
+				addr2i = 0
+				while addr2i < len(addr2s):
+					addr2 = addr2s[addr2i]
+					if not((addr1.polylineidx == addr2.polylineidx) and abs(addr1.startptidx - addr2.startptidx) < 2):
+						if not(linesforaddr2_ and addr2.startptidx == len(self.polylines[addr2.polylineidx])-1):
+							yielded_addr2 = addr2.copy()
+							yield (addr1, yielded_addr2)
+							if addr1ptidx != addr1.startptidx:
+								assert addr1polylineidx == addr1.polylineidx and addr1ptidx == addr1.startptidx-1
+								addr1ptidx = addr1.startptidx
+								addr2s = get_adjusted_addrs_from_polyline_split(addr1.polylineidx, addr1.startptidx, addr2s)
+								self.adjust_addrs_from_polyline_split(addr1.polylineidx, addr1.startptidx)
+							if addr2.startptidx != yielded_addr2.startptidx:
+								assert addr2.polylineidx == yielded_addr2.polylineidx and addr2.startptidx == yielded_addr2.startptidx-1
+								addr2s = get_adjusted_addrs_from_polyline_split(yielded_addr2.polylineidx, yielded_addr2.startptidx, addr2s)
+								self.adjust_addrs_from_polyline_split(yielded_addr2.polylineidx, yielded_addr2.startptidx)
+								addr2i += 1
+					addr2i += 1
 				addr1ptidx += 1
 
 	def adjust_addrs_from_polyline_split(self, polylineidx_, newptidx_):
@@ -616,16 +657,17 @@ class SnapGraph(object):
 		return r
 
 def get_adjusted_addrs_from_polyline_split(polylineidx_, newptidx_, addrs_):
-	assert isinstance(polylineidx_, int) and isinstance(newptidx_, int) and isinstance(addrs_, set)
-	r = set()
-	for addr in addrs_:
+	assert isinstance(polylineidx_, int) and isinstance(newptidx_, int)
+	inaddrs = (addrs_ if isinstance(addrs_, Sequence) else list(addrs_))
+	r = []
+	for addr in inaddrs:
 		if addr.polylineidx == polylineidx_ and addr.startptidx >= newptidx_:
-			r.add(Addr(addr.polylineidx, addr.startptidx+1))
+			r.append(Addr(addr.polylineidx, addr.startptidx+1))
 		else:
-			r.add(addr)
+			r.append(addr)
 	if Addr(polylineidx_, newptidx_-1) in addrs_:
-		r.add(Addr(polylineidx_, newptidx_))
-	return r
+		r.append(Addr(polylineidx_, newptidx_))
+	return (r if isinstance(addrs_, Sequence) else set(r))
 
 def get_gridsquares_touched_by_lineseg(lineseg_):
 	assert isinstance(lineseg_, geom.LineSeg)
@@ -777,7 +819,11 @@ def find_coinciding_linesegs(snapgraph_):
 
 if __name__ == '__main__':
 
-	pass
+	addrs = set()
+	for plineidx in range(3, -1, -1):
+		for startptidx in range(3, -1, -1):
+			addrs.add(Addr(plineidx, startptidx))
+	print sorted(addrs)
 
 
 
