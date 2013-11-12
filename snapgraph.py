@@ -353,7 +353,6 @@ class SnapGraph(object):
 			vertex = addr_to_vertex[addr]
 			if len(vertex.get_looping_polylineidxes()) > 0:
 				del addr_to_vertex[addr]
-				#print 'loops - deleting', vertex # tdr 
 
 		return dict(addr_to_vertex)
 
@@ -371,18 +370,13 @@ class SnapGraph(object):
 			assert isinstance(pt1_, geom.LatLng) and isinstance(pt2_, geom.LatLng)
 			latlngid_to_ontop_latlngids[id(pt1_)].add(id(pt2_))
 			latlngid_to_ontop_latlngids[id(pt2_)].add(id(pt1_))
-		i = 0 # tdr 
 		for ptaddr1, ptaddr2 in self.get_addr_combos_near_each_other(False, False, disttolerance_):
 			pt1 = self.get_point(ptaddr1)
 			pt2 = self.get_point(ptaddr2)
 			if pt1.dist_m(pt2) <= disttolerance_:
 				#print '-------- adding pt/pt    ', ptaddr1, ptaddr2, pt1
 				add(pt1, pt2)
-			i += 1 # tdr 
-		#print '%d combinations' % i # tdr 
-		i = 0 # tdr 
 		for ptaddr, linesegaddr in self.get_addr_combos_near_each_other(False, True, disttolerance_):
-			i += 1 # tdr 
 			pt = self.get_point(ptaddr)
 			lineseg = self.get_lineseg(linesegaddr)
 			t0 = time.time()
@@ -400,11 +394,8 @@ class SnapGraph(object):
 				self.polylines[linesegaddr.polylineidx].insert(linesegaddr.startptidx+1, snapped_pt)
 				linesegaddr.startptidx += 1
 				add(pt, snapped_pt)
-		#print '%d combinations' % i # tdr 
-		i = 0 # tdr 
 
 		for linesegaddr1, linesegaddr2 in self.get_addr_combos_near_each_other(True, True, disttolerance_):
-			i += 1 # tdr 
 			lineseg1 = self.get_lineseg(linesegaddr1)
 			lineseg2 = self.get_lineseg(linesegaddr2)
 			intersection_pt = lineseg1.get_intersection(lineseg2)
@@ -419,8 +410,7 @@ class SnapGraph(object):
 					linesegaddr1.startptidx += 1
 					linesegaddr2.startptidx += 1
 					add(intersection_pt, intersection_pt_copy_for_line2)
-		#print '%d combinations' % i # tdr 
-		self.assert_latlngid_to_ontop_latlngids_is_sane(latlngid_to_ontop_latlngids)
+		#self.assert_latlngid_to_ontop_latlngids_is_sane(latlngid_to_ontop_latlngids)
 		return dict(latlngid_to_ontop_latlngids)
 
 	def assert_latlngid_to_ontop_latlngids_is_sane(self, latlngid_to_ontop_latlngids_):
@@ -586,11 +576,11 @@ class SnapGraph(object):
 						addr2s = self.get_linesegaddrs_near_point(addr1, dist_m_)
 					else:
 						addr2s = self.get_ptaddrs_near_point(addr1, dist_m_)
-				addr2s = sorted(addr2s)
+				addr2s = list(addr2s)
 				addr2i = 0
 				while addr2i < len(addr2s):
 					addr2 = addr2s[addr2i]
-					if not((addr1.polylineidx == addr2.polylineidx) and abs(addr1.startptidx - addr2.startptidx) < 2):
+					if addr1.polylineidx != addr2.polylineidx:
 						if not(linesforaddr2_ and addr2.startptidx == len(self.polylines[addr2.polylineidx])-1):
 							yielded_addr2 = addr2.copy()
 							yield (addr1, yielded_addr2)
@@ -727,31 +717,31 @@ def get_display_grid(southwest_latlng_, northeast_latlng_):
 			r.append([GridSquare((gridlat, gridlng)).latlng(), GridSquare((gridlat+1, gridlng)).latlng()])
 	return r
 
+def offsets_for_square_spiral_gen(square_reach_):
+	r = [0, 0]
+	yield r
+	for spiralidx in (count() if square_reach_ is None else range(square_reach_+2)):
+		for i in range(spiralidx*2 + 1): # north 
+			r[0] += 1
+			yield r
+		for i in range(spiralidx*2 + 1): # east 
+			r[1] += 1
+			yield r
+		for i in range(spiralidx*2 + 2): # south
+			r[0] -= 1
+			yield r
+		for i in range(spiralidx*2 + 2): # west
+			r[1] -= 1
+			yield r
+
 # yields a 2-tuple of integer offsets - that is, lat/lng offsets eg. (0,0), (1,0), (1,1), (-1, 1), etc.
 def gridsquare_offset_spiral_gen(latreach_, lngreach_):
 	assert (isinstance(latreach_, int) and isinstance(lngreach_, int)) or (latreach_ is None and lngreach_ is None)
 
 	unlimited = (latreach_ is None)
 
-	def offsets_for_square_spiral_gen(square_reach_):
-		r = [0, 0]
-		yield r
-		for spiralidx in (count() if unlimited else range(square_reach_+2)):
-			for i in range(spiralidx*2 + 1): # north 
-				r[0] += 1
-				yield r
-			for i in range(spiralidx*2 + 1): # east 
-				r[1] += 1
-				yield r
-			for i in range(spiralidx*2 + 2): # south
-				r[0] -= 1
-				yield r
-			for i in range(spiralidx*2 + 2): # west
-				r[1] -= 1
-				yield r
-
 	# Note that max(None,None) == None
-	for offsetlat, offsetlng in offsets_for_square_spiral_gen(max(latreach_, lngreach_)):
+	for offsetlat, offsetlng in offsets_for_square_spiral_gen(max(latreach_, lngreach_) if not unlimited else None):
 		if unlimited or (abs(offsetlat) <= latreach_ and abs(offsetlng) <= lngreach_):
 			yield (offsetlat, offsetlng)
 
@@ -816,6 +806,84 @@ def find_coinciding_linesegs(snapgraph_):
 			coincide_count += 1
 		if lineseg1 == lineseg2:
 			same_count += 1
+
+# Thanks to http://tech-algorithm.com/articles/drawing-line-using-bresenham-algorithm/ 
+def bresenham2(gridsquare0_, gridsquare1_):
+	r = []
+	def ret(x__, y__):
+		r.append(GridSquare((y__, x__)))
+
+	x = gridsquare0_.gridlng; y = gridsquare0_.gridlat
+	x2 = gridsquare1_.gridlng; y2 = gridsquare1_.gridlat
+
+	w = x2 - x 
+	h = y2 - y 
+	dx1 = 0; dy1 = 0; dx2 = 0; dy2 = 0 
+	if (w<0):
+		dx1 = -1
+	elif (w>0):
+		dx1 = 1 
+	if (h<0):
+		dy1 = -1
+	elif (h>0):
+		dy1 = 1 
+	if (w<0):
+		dx2 = -1
+	elif (w>0):
+		dx2 = 1 
+	longest = abs(w) 
+	shortest = abs(h) 
+	if( not (longest>shortest)) :
+		longest = abs(h) 
+		shortest = abs(w) 
+		if (h<0) : 
+			dy2 = -1 
+		elif (h>0):
+			dy2 = 1 
+		dx2 = 0             
+	numerator = longest >> 1 
+	for i in range(longest+1):
+		ret(x, y)
+		numerator += shortest 
+		if ( not (numerator<longest)):
+			numerator -= longest 
+			x += dx1 
+			y += dy1 
+		else:
+			x += dx2 
+			y += dy2 
+
+	return r
+	
+
+# Thanks to http://en.wikipedia.org/wiki/Bresenham%27s_line_algorithm#Algorithm_with_Integer_Arithmetic 
+def bresenham1(gridsquare0_, gridsquare1_):
+	r = []
+
+	x0 = gridsquare0_.gridlng; y0 = gridsquare0_.gridlat
+	x1 = gridsquare1_.gridlng; y1 = gridsquare1_.gridlat
+
+	def ret(x__, y__):
+		r.append(GridSquare((y__, x__)))
+
+	dx=x1-x0
+	dy=y1-y0
+
+	D = 2*dy - dx
+	ret(x0, y0)
+	y=y0
+
+	for x in range(x0+1, x1+1):
+		if D > 0:
+			y = y+1
+			ret(x, y)
+			D = D + (2*dy-2*dx)
+		else:
+			ret(x, y)
+			D = D + (2*dy)
+
+	return r
+	
 
 if __name__ == '__main__':
 
