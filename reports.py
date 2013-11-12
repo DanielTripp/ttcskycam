@@ -99,7 +99,7 @@ def get_reports_finished_flag_file_mtime():
 		return 0
 
 def get_poll_finished_flag_file_mtime():
-	filename = '/tmp/ttc-poll-locations-finished-flag_testdb'
+	filename = '/tmp/ttc-poll-locations-finished-flag'
 	if os.path.exists(filename):
 		return os.path.getmtime(filename)
 	else:
