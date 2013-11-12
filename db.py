@@ -48,7 +48,7 @@ def force_host(hostmoniker_):
 
 def connect():
 	global g_conn
-	DATABASE_CONNECT_POSITIONAL_ARGS = ("dbname='postgres2' user='postgres' host='%s' password='doingthis'" % (get_host()),)
+	DATABASE_CONNECT_POSITIONAL_ARGS = ("dbname='postgres' user='postgres' host='%s' password='doingthis'" % (get_host()),)
 	DATABASE_CONNECT_KEYWORD_ARGS = {}
 	DATABASE_DRIVER_MODULE_NAME = 'psycopg2'
 	USE_DB_DRIVER_IN_CURRENT_DIRECTORY = socket.gethostname().endswith('theorem.ca')
