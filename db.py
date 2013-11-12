@@ -19,7 +19,7 @@ create index predictions_idx on predictions (fudgeroute, stoptag, time_retrieved
 create index predictions_idx2 on predictions ( time_retrieved );
 
 create table reports (app_version varchar(20), report_type varchar(20), froute varchar(100), direction integer, 
-     time bigint, timestr varchar(30), time_inserted_str varchar(30), report_json text);
+     datazoom integer, time bigint, timestr varchar(30), time_inserted_str varchar(30), report_json text);
 create index reports_idx on reports (app_version, report_type, froute, direction, time desc) ;
 create index reports_idx_3 on reports ( time desc, time_inserted_str desc ) ;
 # The last index above is for my personal browsing of the database, not for the code's needs. 
@@ -1054,8 +1054,8 @@ def insert_report(report_type_, froute_, dir_, datazoom_, time_, report_data_obj
 	assert abs(time_ - now_em()) < 1000*60*60 and report_data_obj_ is not None
 	curs = conn().cursor()
 	report_json = util.to_json_str(report_data_obj_)
-	cols = [c.VERSION, report_type_, froute_, dir_, time_, em_to_str(time_), now_str(), report_json]
-	curs.execute('insert into reports values (%s,%s,%s,%s,%s,%s,%s,%s)', cols)
+	cols = [c.VERSION, report_type_, froute_, dir_, datazoom_, time_, em_to_str(time_), now_str(), report_json]
+	curs.execute('insert into reports values (%s,%s,%s,%s,%s,%s,%s,%s,%s)', cols)
 	curs.close()
 	set_report_in_memcache(report_type_, froute_, dir_, datazoom_, time_, report_json)
 	set_latest_report_time_in_memcache(report_type_, froute_, dir_, datazoom_, time_)

@@ -1,7 +1,7 @@
 #!/usr/bin/python2.6
 
-import sys, json, os.path, bisect, xml.dom, xml.dom.minidom, pickle
-import vinfo, geom, mc, c, snapgraph, util
+import sys, json, os.path, bisect, xml.dom, xml.dom.minidom
+import vinfo, geom, mc, c, snapgraph, picklestore, util
 from misc import *
 #from mrucache import *
 from lru_cache import lru_cache
@@ -33,7 +33,6 @@ SUBWAY_FUDGEROUTES = ['bloor_danforth', 'yonge_university_spadina']
 NON_SUBWAY_FUDGEROUTES = FUDGEROUTE_TO_CONFIGROUTES.keys()
 FUDGEROUTES = NON_SUBWAY_FUDGEROUTES + SUBWAY_FUDGEROUTES
 CONFIGROUTES = set(reduce(lambda x, y: x + y, FUDGEROUTE_TO_CONFIGROUTES.values(), []))
-USE_PICKLE_FILES = os.path.exists('USE_ROUTEINFO_PICKLE_FILES')
 
 def is_subway(froute_):
 	assert froute_ in FUDGEROUTES
@@ -465,13 +464,16 @@ class RouteInfo:
 		if mofr_ < 0:
 			return None
 		routeptaddr_to_mofr = self.datazoom_to_dir_to_routeptaddr_to_mofr[datazoom_][dir_]
+		# Writing this code this way because we might need to handle a mofr_ that 
+		# is a little greater than the max mofr of this route.  Hopefully not too 
+		# much - maybe a couple of meters?  I'm not sure.
 		for i in range(1, len(routeptaddr_to_mofr)):
 			if routeptaddr_to_mofr[i] >= mofr_:
-				prevpt = self.routepts(dir_, datazoom_)[i-1]; curpt = self.routepts(dir_, datazoom_)[i]
-				prevmofr = routeptaddr_to_mofr[i-1]; curmofr = routeptaddr_to_mofr[i]
-				pt = curpt.subtract(prevpt).scale((mofr_-prevmofr)/float(curmofr-prevmofr)).add(prevpt)
-				return (pt, prevpt.heading(curpt) if dir_==0 else curpt.heading(prevpt))
-		return None
+				break
+		prevpt = self.routepts(dir_, datazoom_)[i-1]; curpt = self.routepts(dir_, datazoom_)[i]
+		prevmofr = routeptaddr_to_mofr[i-1]; curmofr = routeptaddr_to_mofr[i]
+		pt = curpt.subtract(prevpt).scale((mofr_-prevmofr)/float(curmofr-prevmofr)).add(prevpt)
+		return (pt, prevpt.heading(curpt) if dir_==0 else curpt.heading(prevpt))
 
 	# For datazoom of None only. 
 	def mofr_to_lorouteptaddr(self, mofr_, dir_):
@@ -620,21 +622,13 @@ def max_mofr(route_):
 	return routeinfo(route_).max_mofr()
 
 def routeinfo(routename_):
-	froute = massage_to_fudgeroute(routename_)
-	return mc.get(routeinfo_impl, [froute])
+	return routeinfo_impl(massage_to_fudgeroute(routename_))
 
+@mc.decorate
+@picklestore.decorate
 def routeinfo_impl(froute_):
-	if froute_ not in FUDGEROUTES:
-		raise Exception('route %s is unknown' % (froute_))
-	if USE_PICKLE_FILES:
-		return get_routeinfo_from_pickle_file(froute_)
-	else:
-		return RouteInfo(froute_)
-
-def get_routeinfo_from_pickle_file(froute_):
-	with open(pickle_filename(froute_), 'rb') as fin:
-		return pickle.load(fin)
-
+	return RouteInfo(froute_)
+	
 def massage_to_fudgeroute(route_):
 	if route_ in FUDGEROUTES:
 		return route_
@@ -994,10 +988,6 @@ def get_subway_froute_to_datazoom_to_routepts():
 			r[froute][datazoom] = ri.routepts(0, datazoom)
 	return util.to_json_str(r)
 
-def pickle_filename(froute_):
-	assert froute_ in FUDGEROUTES
-	return 'pickled-routeinfo-%s' % froute_
-
 # Don't call this function from this module as a main.  It will write some unusable pickle files. 
 # They will refer to the RouteInfo class as '__main__.RouteInfo' and then when unpickled, when this module 
 # is likely imported from another file as "import routes" (because that's how most of the code is written right now) 
@@ -1007,11 +997,9 @@ def pickle_filename(froute_):
 # You can see the difference in the generated pickle files yourself (if you call this function from this module as a main 
 # vs. from another module when imported as "import routes" and examine the pickled output.  You might try text mode 
 # i.e. protocol=0 to pickle.dump()).
-def rebuild_pickle_files():
+def prime_routeinfos():
 	for froute in FUDGEROUTES:
-		ri = RouteInfo(froute) # being careful here not to get this routeinfo object from memcache or in-process cache. 
-		with open(pickle_filename(froute), 'wb') as fout:
-			pickle.dump(ri, fout, protocol=2)
+		routeinfo(froute)
 
 if __name__ == '__main__':
 

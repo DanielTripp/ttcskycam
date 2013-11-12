@@ -4,6 +4,6 @@ import routes
 
 if __name__ == '__main__':
 
-	routes.rebuild_pickle_files()
+	routes.prime_routeinfos()
 
 
