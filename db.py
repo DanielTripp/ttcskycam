@@ -1001,12 +1001,12 @@ def _get_observed_arrival_time_caught_vehicle_passing_vis(froute_, startstoptag_
 
 # returns report json, always non-None.  raises ReportNotFoundException if report does not exist in db. 
 @mc.decorate
-def get_report(report_type_, froute_, dir_, time_):
+def get_report(report_type_, froute_, dir_, datazoom_, time_):
 	assert isinstance(time_, long)
 	curs = conn().cursor()
 	try:
 		curs.execute('select report_json from reports where app_version = %s and report_type = %s and froute = %s and direction = %s '\
-				+' and time = %s', [c.VERSION, report_type_, froute_, dir_, time_])
+				+' and datazoom = %s and time = %s', [c.VERSION, report_type_, froute_, dir_, datazoom_, time_])
 		for row in curs:
 			return row[0]
 		else:
@@ -1018,20 +1018,23 @@ class ReportNotFoundException(Exception):
 	pass
 
 
-def get_latest_report_time(report_type_, froute_, dir_, datazoom_):
-	r = mc.get_from_memcache('db.get_latest_report_time', [report_type_, froute_, dir_, datazoom_], {})
+def get_latest_report_time(froute_, dir_):
+	r = mc.get_from_memcache('db.get_latest_report_time', [froute_, dir_], {})
 	if r is not None:
 		return r
 	else:
-		r = get_latest_report_time_impl(report_type_, froute_, dir_, datazoom_)
-		set_latest_report_time_in_memcache(report_type_, froute_, dir_, datazoom_, r)
+		r = get_latest_report_time_impl(froute_, dir_)
+		set_latest_report_time_in_memcache(froute_, dir_, r)
 		return r
 
-def get_latest_report_time_impl(report_type_, froute_, dir_):
+def get_latest_report_time_impl(froute_, dir_):
 	curs = conn().cursor('cursor_%d' % (int(time.time()*1000)))
 	try:
-		curs.execute('select time from reports where app_version = %s and report_type = %s and froute = %s and direction = %s '\
-				+' and time > %s order by time desc', [c.VERSION, report_type_, froute_, dir_, now_em() - 1000*60*c.REPORTS_MAX_AGE_MINS])
+		# We assume here (and elsewhere) and all of the reports for a certain 
+		# froute and direction (that is, all report types and datazooms thereof) 
+		# were inserted at the same time i.e. atomically in the database. 
+		curs.execute('select time from reports where app_version = %s and froute = %s and direction = %s '\
+				+' and time > %s order by time desc limit 1', [c.VERSION, froute_, dir_, now_em() - 1000*60*c.REPORTS_MAX_AGE_MINS])
 		for row in curs:
 			reports_time = row[0]
 			return reports_time
@@ -1040,25 +1043,49 @@ def get_latest_report_time_impl(report_type_, froute_, dir_):
 		curs.close()
 
 # As in - set a value in memcache for the function db.get_latest_report_time().
-def set_latest_report_time_in_memcache(report_type_, froute_, dir_, datazoom_, time_):
-	assert report_type_ in ('traffic', 'locations') and froute_ in routes.NON_SUBWAY_FUDGEROUTES and dir_ in (0, 1)
+def set_latest_report_time_in_memcache(froute_, dir_, time_):
+	assert froute_ in routes.NON_SUBWAY_FUDGEROUTES and dir_ in (0, 1)
 	assert isinstance(time_, long)
-	mc.set('db.get_latest_report_time', [report_type_, froute_, dir_, datazoom_], {}, time_)
+	mc.set('db.get_latest_report_time', [froute_, dir_], {}, time_)
 
 def set_report_in_memcache(report_type_, froute_, dir_, datazoom_, time_, data_):
 	mc.set('db.get_report', [report_type_, froute_, dir_, datazoom_, time_], {}, data_)
 
+def insert_reports(froute_, dir_, time_, reporttype_to_datazoom_to_reportdataobj_):
+	assert froute_ in routes.NON_SUBWAY_FUDGEROUTES and dir_ in (0, 1)
+	assert abs(time_ - now_em()) < 1000*60*60
+
+	reporttype_to_datazoom_to_reportjson = defaultdict(lambda: {})
+	for reporttype, datazoom_to_reportdataobj in reporttype_to_datazoom_to_reportdataobj_.iteritems():
+		assert reporttype in ('traffic', 'locations') 
+		assert set(datazoom_to_reportdataobj.keys()) == set(c.VALID_DATAZOOMS)
+		for datazoom, reportdataobj in datazoom_to_reportdataobj.iteritems():
+			reporttype_to_datazoom_to_reportjson[reporttype][datazoom] = util.to_json_str(reportdataobj)
+	
+	insert_reports_into_db(froute_, dir_, time_, reporttype_to_datazoom_to_reportjson)
+	insert_reports_into_memcache(froute_, dir_, time_, reporttype_to_datazoom_to_reportjson)
+
+# Here we want to insert all reports for a certain froute and direction (that 
+# is, all datazooms, both report types) into the database at the same time 
+# because there is some client side code that assumes this.  That client side 
+# code assumes this because it's easier to write that way.  Also it could be 
+# confusing if when the user changes zoom they might be forced back in time.  
+# That is the main issue - inserting all datazooms at the same time.  We insert 
+# both report types at the same time too, but that is less important.
 @trans
-def insert_report(report_type_, froute_, dir_, datazoom_, time_, report_data_obj_):
-	assert report_type_ in ('traffic', 'locations') and froute_ in routes.NON_SUBWAY_FUDGEROUTES and dir_ in (0, 1)
-	assert abs(time_ - now_em()) < 1000*60*60 and report_data_obj_ is not None
-	curs = conn().cursor()
-	report_json = util.to_json_str(report_data_obj_)
-	cols = [c.VERSION, report_type_, froute_, dir_, datazoom_, time_, em_to_str(time_), now_str(), report_json]
-	curs.execute('insert into reports values (%s,%s,%s,%s,%s,%s,%s,%s,%s)', cols)
-	curs.close()
-	set_report_in_memcache(report_type_, froute_, dir_, datazoom_, time_, report_json)
-	set_latest_report_time_in_memcache(report_type_, froute_, dir_, datazoom_, time_)
+def insert_reports_into_db(froute_, dir_, time_, reporttype_to_datazoom_to_reportjson_):
+	for reporttype, datazoom_to_reportjson in reporttype_to_datazoom_to_reportjson_.iteritems():
+		for datazoom, reportjson in datazoom_to_reportjson.iteritems():
+			curs = conn().cursor()
+			cols = [c.VERSION, reporttype, froute_, dir_, datazoom, time_, em_to_str(time_), now_str(), reportjson]
+			curs.execute('insert into reports values (%s,%s,%s,%s,%s,%s,%s,%s,%s)', cols)
+			curs.close()
+
+def insert_reports_into_memcache(froute_, dir_, time_, reporttype_to_datazoom_to_reportjson_):
+	for reporttype, datazoom_to_reportjson in reporttype_to_datazoom_to_reportjson_.iteritems():
+		for datazoom, reportjson in datazoom_to_reportjson.iteritems():
+			set_report_in_memcache(reporttype, froute_, dir_, datazoom, time_, reportjson)
+	set_latest_report_time_in_memcache(froute_, dir_, time_)
 
 @trans
 def insert_demo_locations(froute_, demo_report_timestr_, vid_, locations_):
