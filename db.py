@@ -20,7 +20,7 @@ create index predictions_idx2 on predictions ( time_retrieved );
 
 create table reports (app_version varchar(20), report_type varchar(20), froute varchar(100), direction integer, 
      datazoom integer, time bigint, timestr varchar(30), time_inserted_str varchar(30), report_json text);
-create index reports_idx on reports (app_version, report_type, froute, direction, time desc) ;
+create index reports_idx on reports (app_version, report_type, froute, direction, datazoom, time desc) ;
 create index reports_idx_3 on reports ( time desc, time_inserted_str desc ) ;
 # The last index above is for my personal browsing of the database, not for the code's needs. 
 
