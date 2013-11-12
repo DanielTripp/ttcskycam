@@ -131,11 +131,15 @@ def make_all_reports_and_insert_into_db_once():
 	report_time = round_up_by_minute(now_em())
 	for froute in sorted(FROUTES):
 		for direction in (0, 1):
-			for zoom in c.VALID_ZOOMS:
-				traffic_data = traffic.get_traffics_impl(froute, direction, zoom, report_time)
-				db.insert_report('traffic', froute, direction, zoom, report_time, traffic_data)
-				locations_data = traffic.get_recent_vehicle_locations_impl(froute, direction, zoom, report_time)
-				db.insert_report('locations', froute, direction, zoom, report_time, locations_data)
+			for datazoom in c.VALID_DATAZOOMS:
+				try:
+					traffic_data = traffic.get_traffics_impl(froute, direction, datazoom, report_time)
+					db.insert_report('traffic', froute, direction, datazoom, report_time, traffic_data)
+					locations_data = traffic.get_recent_vehicle_locations_impl(froute, direction, datazoom, report_time)
+					db.insert_report('locations', froute, direction, datazoom, report_time, locations_data)
+				except:
+					printerr('Problem during %s / dir=%d / datazoom=%d' % (froute, direction, datazoom))
+					raise
 
 def make_all_reports_and_insert_into_db_forever():
 	while True:

@@ -1,19 +1,21 @@
 #!/usr/bin/env python
 
-import sys, os, pickle, threading
+import sys, os, pickle, threading, functools
 from misc import *
 
-LOG = False
+LOG = os.path.exists('LOG_PICKLESTORE')
 
 g_filename_to_object = {}
 g_lock = threading.RLock()
 
 def get_filename(func_, args_, kwargs_):
-	assert len(args_) == 0 and len(kwargs_) == 0 # not supported yet 
-	r = 'pickled_%s.%s' % (func_.__module__, func_.__name__)
+	funcname = '%s.%s' % (func_.__module__, func_.__name__)
+	str_arg_list = [str(arg) for arg in args_] + ['%s=%s' % (kwargname, kwargs_[kwargname]) for kwargname in sorted(kwargs_.keys())]
+	r = 'pickled_%s(%s)' % (funcname, ','.join(str_arg_list))
 	return r
 
 def decorate(user_function_):
+	@functools.wraps(user_function_)
 	def decorating_function(*args, **kwargs):
 		with g_lock:
 			filename = get_filename(user_function_, args, kwargs)

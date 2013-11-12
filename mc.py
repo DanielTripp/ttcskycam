@@ -15,7 +15,7 @@
 # matter), to be re-created on the next incoming request. 
 
 
-import sys, os, os.path, subprocess, signal, re, time
+import sys, os, os.path, subprocess, signal, re, time, functools
 if len(sys.argv[0]) > 0 and (sys.argv[0] != '-c'): 
 	# b/c sys.argv[0] will be '' if this is imported from an interactive interpreter, 
 	# and we don't want to chdir in that case anyway. 
@@ -91,6 +91,7 @@ def get_from_memcache(func_, args_, kwargs_):
 	return get_memcache_client().get(key)
 
 def decorate(user_function_):
+	@functools.wraps(user_function_)
 	def decorating_function(*args, **kwargs):
 		return get(user_function_, args, kwargs)
 	
