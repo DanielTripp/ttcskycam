@@ -72,7 +72,7 @@ def get_current_report_from_db(report_type_, froute_, dir_, datazoom_, last_gott
 	if cur_time_rounded_up == last_gotten_time:
 		return (last_gotten_timestr_, None, dir_)
 	else:
-		latest_report_time = db.get_latest_report_time(report_type_, froute_, dir_, datazoom_)
+		latest_report_time = db.get_latest_report_time(froute_, dir_)
 		if latest_report_time == last_gotten_time:
 			return (last_gotten_timestr_, None, dir_)
 		else:
@@ -131,17 +131,20 @@ def make_all_reports_and_insert_into_db_once():
 	report_time = round_up_by_minute(now_em())
 	for froute in sorted(FROUTES):
 		for direction in (0, 1):
+			reporttype_to_datazoom_to_reportdataobj = defaultdict(lambda: {})
 			for datazoom in c.VALID_DATAZOOMS:
 				try:
 					traffic_data = traffic.get_traffics_impl(froute, direction, datazoom, report_time)
-					db.insert_report('traffic', froute, direction, datazoom, report_time, traffic_data)
+					reporttype_to_datazoom_to_reportdataobj['traffic'][datazoom] = traffic_data
 					locations_data = traffic.get_recent_vehicle_locations_impl(froute, direction, datazoom, report_time)
-					db.insert_report('locations', froute, direction, datazoom, report_time, locations_data)
+					reporttype_to_datazoom_to_reportdataobj['locations'][datazoom] = locations_data
 				except:
-					printerr('Problem during %s / dir=%d / datazoom=%d' % (froute, direction, datazoom))
+					printerr('%s: Problem during %s / dir=%d / datazoom=%d' % (now_str(), froute, direction, datazoom))
 					raise
+			db.insert_reports(froute, direction, report_time, reporttype_to_datazoom_to_reportdataobj)
 
 def make_all_reports_and_insert_into_db_forever():
+	i = 0
 	while True:
 		wait_for_locations_poll_to_finish()
 		t0 = time.time()
@@ -150,8 +153,10 @@ def make_all_reports_and_insert_into_db_forever():
 		reports_took_secs = t1 - t0
 		if reports_took_secs > 60:
 			printerr('Reports took too long to generate - %s seconds.  (Finished at %s.)' % (int(reports_took_secs), now_str()))
-		mc.clear_in_process_cache() # Avoid memory leak.  This cache will contain (among other things) all the reports we make, 
-				# and will grow indefinitely.
+		i += 1
+		if i % 10 == 0:
+			mc.clear_in_process_cache() # Avoid memory leak.  This cache will contain (among other things) 
+					# all the reports we make, and will grow indefinitely.
 
 
 if __name__ == '__main__':
