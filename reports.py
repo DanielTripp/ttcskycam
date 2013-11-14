@@ -144,6 +144,7 @@ def make_all_reports_and_insert_into_db_once():
 			db.insert_reports(froute, direction, report_time, reporttype_to_datazoom_to_reportdataobj)
 
 def make_all_reports_and_insert_into_db_forever():
+	routes.prime_routeinfos()
 	i = 0
 	while True:
 		wait_for_locations_poll_to_finish()
