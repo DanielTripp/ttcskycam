@@ -10,7 +10,7 @@ from misc import *
 LATSTEP = 0.00175; LNGSTEP = 0.0025
 
 if 1: # TODO: deal with this. 
-	fact = 4
+	fact = 2
 	LATSTEP /= fact
 	LNGSTEP /= fact
 
@@ -167,7 +167,7 @@ class SnapGraph(object):
 	# coincident AKA the same point, for our graph purposes. 
 	def __init__(self, polylines_, forpaths=True, disttolerance=DEFAULT_GRAPH_VERTEX_DIST_TOLERANCE):
 		assert isinstance(polylines_[0][0], geom.LatLng)
-		self.latstep = LATSTEP; self.lngstep = LNGSTEP
+		self.latstep = LATSTEP; self.lngstep = LNGSTEP; self.latref = LATREF; self.lngref = LNGREF
 		self.polylines = polylines_
 		if forpaths:
 			self.remove_useless_points_from_polylines(disttolerance)
@@ -489,7 +489,8 @@ class SnapGraph(object):
 	def snap(self, target_, searchradius_):
 		assert isinstance(target_, geom.LatLng) and (isinstance(searchradius_, int) or searchradius_ is None)
 		# Guarding against changes in LATSTEP/LNGSTEP while a SnapGraph object was sitting in memcached:
-		assert self.latstep == LATSTEP and self.lngstep == LNGSTEP
+		if not (self.latstep == LATSTEP and self.lngstep == LNGSTEP and self.latref == LATREF and self.lngref == LNGREF):
+			raise Exception('snapgraph\'s lat/lng step/ref changed.')
 		target_gridsquare = GridSquare(target_)
 		a_nearby_linesegaddr = self.get_a_nearby_linesegaddr(target_gridsquare, searchradius_)
 		if a_nearby_linesegaddr is None:
@@ -881,6 +882,80 @@ def bresenham1(gridsquare0_, gridsquare1_):
 		else:
 			ret(x, y)
 			D = D + (2*dy)
+
+	return r
+
+def get_octant(gridsquare1_, gridsquare2_):
+	x1 = gridsquare1_.gridlng; y1 = gridsquare1_.gridlat
+	x2 = gridsquare2_.gridlng; y2 = gridsquare2_.gridlat
+	dx = x2 - x1; dy = y2 - y1
+	if dx >= 0 and dy >= 0:
+		return 1 if dx >= dy else 2
+	elif dx <= 0 and dy >= 0:
+		return 3 if dy >= abs(dx) else 4
+	elif dx <= 0 and dy <= 0:
+		return 5 if abs(dx) >= abs(dy) else 6
+	else:
+		return 7 if abs(dy) >= dx else 8
+
+def get_supercover(gridsquare1_, gridsquare2_):
+	def switchxy(x__, y__):
+		return (y__, x__)
+	def negx(x__, y__):
+		return (-x__, y__)
+	def negy(x__, y__):
+		return (x__, -y__)
+	def negxy(x__, y__):
+		return (-x__, -y__)
+	def identity(x__, y__):
+		return (x__, y__)
+	x1 = gridsquare1_.gridlng; y1 = gridsquare1_.gridlat
+	x2 = gridsquare2_.gridlng; y2 = gridsquare2_.gridlat
+	dx = x2 - x1; dy = y2 - y1
+	octant = get_octant(gridsquare1_, gridsquare2_)
+	funcs = {1: [identity], 2: [switchxy], 3: [negx, switchxy], 4: [negx], 
+			5: [negxy], 6: [switchxy, negxy], 7: [negy, switchxy], 8: [negy]}[octant]
+
+
+# Thanks to http://lifc.univ-fcomte.fr/~dedu/projects/bresenham/index.html 
+def get_supercover_first_octant_only(gridsquare1_, gridsquare2_):
+	r = []
+
+	x1 = gridsquare1_.gridlng; y1 = gridsquare1_.gridlat
+	x2 = gridsquare2_.gridlng; y2 = gridsquare2_.gridlat
+	assert x1 <= x2 and y1 <= y2 and y2-y1 <= x2-x1
+
+	def ret(x__, y__):
+		r.append(GridSquare((y__, x__)))
+
+	x = x1
+	y = y1
+	dx = x2-x1
+	dy = y2-y1
+
+	ret(x1, y1)
+
+	ddy = 2 * dy
+	ddx = 2 * dx
+
+	errorprev = error = dx
+	for i in range(dx):
+		x += 1
+		error += ddy
+		if error > ddx:
+			y += 1
+			error -= ddx
+			if error + errorprev < ddx:
+				ret(x, y-1)
+			elif error + errorprev > ddx:
+				ret(x-1, y)
+			else:
+				ret(x, y-1)
+				ret(x-1, y)
+		ret(x, y)
+		errorprev = error
+
+	assert (y == y2) and (x == x2)
 
 	return r
 	
