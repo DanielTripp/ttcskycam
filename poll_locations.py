@@ -42,7 +42,7 @@ def insert_xml_into_db(xmldoc_, really_insert_into_db_):
 		elif elem.nodeName == 'lastTime':
 			nextbus_lasttime = long(elem.getAttribute('time'))
 	if not nextbus_lasttime:
-		raise Exception("Couldn't find lastTime")
+		raise Exception("Couldn't find lastTime in document:\n%s" % xmldoc_.toprettyxml(newl='\n'))
 
 	for vehicle_info in vehicles:
 		vehicle_info.time_retrieved = nextbus_lasttime
