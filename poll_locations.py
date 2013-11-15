@@ -13,12 +13,13 @@ POLL_PERIOD_SECS = 60
 def get_data_from_web_as_str(route_, time_es_=0):
 	wget_args = ['wget', '--tries=5', '--timeout=3', '-O', '-', 'http://webservices.nextbus.com/service/publicXMLFeed?command=vehicleLocations&a=ttc&r=%s&t=%d' \
 		% (route_, time_es_)]
-	return subprocess.Popen(wget_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()[0]
+	stdout, stderr = subprocess.Popen(wget_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
+	if not stdout:
+		raise Exception('Got no output from NextBus.  stderr from wget:_%s_' % stderr)
+	return stdout
 
 def get_data_from_web_as_xml(route_, time_es_=0):
 	data_str = get_data_from_web_as_str(route_, time_es_)
-	if not data_str:
-		raise Exception('Got no output from NextBus.')
 	def print_data_str(msg_):
 		print >> sys.stderr, '--- %s - %s:' % (now_str(), msg_)
 		print >> sys.stderr, '---'
