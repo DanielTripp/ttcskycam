@@ -412,7 +412,7 @@ def massage_whereclause_route_args(whereclause_):
 
 def massage_whereclause_vid_args(whereclause_):
 	r = whereclause_
-	r = re.sub(r'vid += +(\w+)', 'vehicle_id = \'\\1\'', r)
+	r = re.sub(r'vid *= *(\w+)', 'vehicle_id = \'\\1\'', r)
 	return r
 
 def massage_whereclause(whereclause_):
