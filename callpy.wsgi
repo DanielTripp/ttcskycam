@@ -1,9 +1,9 @@
 #!/usr/bin/python2.6
 
-import sys, os, os.path, urlparse, json, time
+import sys, os, os.path, urlparse, json, time, re
 from collections import Sequence
 sys.path.append('.')
-import geom, vinfo, mc, db
+import geom, vinfo, mc, db, util
 from misc import *
 
 LOG_CALLS = os.path.exists('CALLPY_LOG_CALLS')
@@ -42,16 +42,6 @@ def get_arg_objvals(vardict_):
 		r.append(arg_objval)
 	return r
 
-class OurJSONEncoder(json.JSONEncoder):
-
-	def default(self, o):
-		if isinstance(o, geom.LatLng):
-			return (o.lat, o.lng)
-		elif isinstance(o, vinfo.VehicleInfo):
-			return o.to_json_dict()
-		else:
-			return json.JSONEncoder.default(self, o)
-
 def looks_like_json_already(obj_):
 	return isinstance(obj_, basestring) and ((obj_[0] == '[' and obj_[-1] == ']') or (obj_[0] == '{' and obj_[-1] == '}'))
 
@@ -59,8 +49,8 @@ def call_func(query_string_, referer_):
 	vars = urlparse.parse_qs(query_string_)
 	module_and_funcname = vars['module_and_funcname'][0]
 	allowables = ['web.get_vehicle_svg', 'traffic.get_traffics', 'traffic.get_recent_vehicle_locations', 'routes.get_all_routes_latlons', 'routes.get_trip_endpoint_info', 'routes.snaptest', 'util.get_current_wrong_dirs', 'tracks.get_all_tracks_polylines', 'snaptogrid.get_display_grid', 'routes.get_configroute_to_fudgeroute_map', 'routes.get_fudgeroutes_for_map_bounds', 'routes.get_fudgeroute_to_intdir_to_englishdesc', 'routes.get_stops_dir_to_stoptag_to_latlng', 'paths.get_paths_by_latlngs', 'routes.routepts', 'paths.get_pathgridsquare', 'routes.get_all_froute_latlngs', 'streetlabels.get_labels', 'reports.get_traffic_report', 'reports.get_locations_report', 'geom.heading']
-	if (module_and_funcname in allowables) or ((referer_ is not None and referer_.endswith('test.24972394874134958.php')) \
-			and module_and_funcname.startswith('t.')):
+	if (module_and_funcname in allowables) or \
+			((referer_ is not None and os.path.basename(referer_).startswith('test.24972394874134958')) and module_and_funcname.startswith('t.')):
 		modulename = module_and_funcname.split('.')[0]
 		funcname = module_and_funcname.split('.')[1]
 		args = get_arg_objvals(vars)
@@ -70,7 +60,7 @@ def call_func(query_string_, referer_):
 		if looks_like_json_already(r):
 			return r
 		else:
-			return json.dumps(r, cls=OurJSONEncoder)
+			return util.to_json_str(r)
 	else:
 		printerr('Method %s not in allowed list.' % module_and_funcname)
 
