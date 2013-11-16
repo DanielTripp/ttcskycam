@@ -1,7 +1,7 @@
 #!/usr/bin/python2.6
 
 import json
-import vinfo, db, routes, mc, geom
+import vinfo, db, routes, mc, geom, snapgraph
 from misc import *
 
 def get_vids(route_, start_time_, end_time_):
@@ -102,6 +102,8 @@ class OurJSONEncoder(json.JSONEncoder):
 			return (o.start, o.end)
 		elif isinstance(o, vinfo.VehicleInfo):
 			return o.to_json_dict()
+		elif isinstance(o, snapgraph.GridSquare):
+			return (o.gridlat, o.gridlng)
 		else:
 			return json.JSONEncoder.default(self, o)
 
