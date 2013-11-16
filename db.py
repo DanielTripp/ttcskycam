@@ -1074,10 +1074,11 @@ def insert_reports(froute_, dir_, time_, reporttype_to_datazoom_to_reportdataobj
 # both report types at the same time too, but that is less important.
 @trans
 def insert_reports_into_db(froute_, dir_, time_, reporttype_to_datazoom_to_reportjson_):
+	time_inserted_str = now_str()
 	for reporttype, datazoom_to_reportjson in reporttype_to_datazoom_to_reportjson_.iteritems():
 		for datazoom, reportjson in datazoom_to_reportjson.iteritems():
 			curs = conn().cursor()
-			cols = [c.VERSION, reporttype, froute_, dir_, datazoom, time_, em_to_str(time_), now_str(), reportjson]
+			cols = [c.VERSION, reporttype, froute_, dir_, datazoom, time_, em_to_str(time_), time_inserted_str, reportjson]
 			curs.execute('insert into reports values (%s,%s,%s,%s,%s,%s,%s,%s,%s)', cols)
 			curs.close()
 
