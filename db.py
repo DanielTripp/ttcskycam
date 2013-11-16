@@ -687,6 +687,14 @@ def get_latlonnheadingnmofr_from_lo_sample(lolo_vi_, lo_vi_, datazoom_, be_cleve
 # note [1]: For a location anywhere on a track, we have two possible headings for vehicles on that track -
 # X and X + 180 degrees.  With this code we choose which one we want by choosing the one that is closest to the tracks-ignorant
 # heading indicated by the latlng diff of the two raw samples we're interpolating between.
+# 
+# note 23906728947234: slight lie about making mofr -1 here.  I used to set it to None, so that later whenever someone 
+# used vi.mofr on this object (which would probably be during serialization to JSON), 
+# vinfo.VehicleInfo would calculate it from the latlng.  It could be a valid mofr.  Something interpolated half-way between 
+# eg. a position 500 meters to one side of a route and 500 meters to the other could be a valid mofr.  But it doesn't mean 
+# much and more importantly - nobody is looking at this interpolated mofr - neither human nor code.  
+# So even though None would be more honest, I'm setting it to -1 for a slight performance increase (about 5% of a full 
+# reports generation run, I think).
 def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, datazoom_, be_clever_, raw_vilist_for_hint_=None):
 	assert isinstance(vi1_, vinfo.VehicleInfo) and isinstance(vi2_, vinfo.VehicleInfo) and (vi1_.vehicle_id == vi2_.vehicle_id)
 	assert vi1_.time < vi2_.time and (datazoom_ is None or datazoom_ in c.VALID_DATAZOOMS)
@@ -719,7 +727,7 @@ def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, datazoom_, be_clever_, raw_vi
 						break
 			if geom.diff_headings(tracks_based_heading, ref_heading) > 90: # see note [1] above
 				tracks_based_heading = geom.normalize_heading(tracks_based_heading+180)
-			r = (interped_loc_snap_result[0], tracks_based_heading, None)
+			r = (interped_loc_snap_result[0], tracks_based_heading, -1) # see note 23906728947234 
 
 	if r is None:
 		vi1_latlng = vi1_.latlng; vi2_latlng = vi2_.latlng
@@ -728,7 +736,7 @@ def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, datazoom_, be_clever_, raw_vi
 				vi1_latlng = routes.mofr_to_latlon(vi1_.fudgeroute, vi1_.mofr, vi1_.dir_tag_int, datazoom_)
 			if vi2_.mofr!=-1:
 				vi2_latlng = routes.mofr_to_latlon(vi2_.fudgeroute, vi2_.mofr, vi2_.dir_tag_int, datazoom_)
-		r = (vi1_latlng.avg(vi2_latlng, ratio_), vi1_latlng.heading(vi2_latlng), None)
+		r = (vi1_latlng.avg(vi2_latlng, ratio_), vi1_latlng.heading(vi2_latlng), -1) # see note 23906728947234 
 	return r
 
 def massage_to_list(time_to_vis_, start_time_, end_time_, log_=False):
