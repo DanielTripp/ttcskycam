@@ -998,7 +998,7 @@ def get_subway_froute_to_datazoom_to_routepts():
 # vs. from another module when imported as "import routes" and examine the pickled output.  You might try text mode 
 # i.e. protocol=0 to pickle.dump()).
 def prime_routeinfos():
-	for froute in FUDGEROUTES:
+	for froute in sorted(FUDGEROUTES):
 		routeinfo(froute)
 
 if __name__ == '__main__':
