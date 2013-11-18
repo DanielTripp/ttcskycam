@@ -25,7 +25,7 @@ def get_recent_vehicle_locations_impl(fudgeroute_, dir_, datazoom_, time_, log_=
 # single vehicle that say goes from mofr = 1000 to mofr = 1500 (over however many VehicleInfo objects), then goes AWOL for a while,
 # then reappears and goes from mofr = 500 to mofr = 1200 (i.e. it doubled back and did part of the same route again), then we can
 # handle that.
-# The above case is in my opinion only moderately important to handle.  Our traffic-determinging interpolating code needs monotonic
+# The above case is in my opinion only moderately important to handle.  Our traffic-determining interpolating code needs monotonic
 # vis like this, but we could get them another way eg. removing the earlier stretch, because it's probably not very crucial
 # to the result anyway.  But the more important case to handle is a buggy GPS or mofr case where a vehicle only appears to double back
 # (even a little bit) and thus appears to be going in a different direction for a while.  I wouldn't want a case like that to result in
@@ -162,7 +162,7 @@ def get_traffic_rawspeeds(fudgeroute_name_, dir_, datazoom_, time_, window_minut
 		mofr_to_rawtraffics[mofr] = []
 	for vid, vis_all_stretches in \
 				get_vid_to_vis_from_db_for_traffic(fudgeroute_name_, dir_, time_, window_minutes_, usewidemofr_=usewidemofr_, log_=log_).items():
-		for vis in get_stretches(vis_all_stretches):
+		for vis in get_stretches(vis_all_stretches, dir_):
 			if log_: printerr('For vid "%s":' % (vid))
 			if log_:
 				for vi in vis[::-1]:
@@ -171,9 +171,10 @@ def get_traffic_rawspeeds(fudgeroute_name_, dir_, datazoom_, time_, window_minut
 				continue
 			def mofr(vi__): return (vi__.widemofr if usewidemofr_ else vi__.mofr)
 			assert all(mofr(vi) != -1 for vi in vis)
+			mofrchunk_to_vis = get_mofrchunk_to_vis(vis, mofrstep)
 			for interp_mofr in mofrs_to_get:
 				if log_: printerr('\tFor mofr %d:' % (interp_mofr))
-				vi_lo, vi_hi = get_bounding_mofr_vis(interp_mofr, mofrstep, vis, usewidemofr_)
+				vi_lo, vi_hi = get_bounding_mofr_vis(interp_mofr, mofrstep, mofrchunk_to_vis, usewidemofr_)
 				if vi_lo and vi_hi:
 					if log_: printerr('\t\tFound bounding vis at mofrs %d and %d (%s and %s).' % (mofr(vi_lo), mofr(vi_hi), vi_lo.timestr, vi_hi.timestr))
 					interp_ratio = (interp_mofr - mofr(vi_lo))/float(mofr(vi_hi) - mofr(vi_lo))
@@ -186,14 +187,41 @@ def get_traffic_rawspeeds(fudgeroute_name_, dir_, datazoom_, time_, window_minut
 					if log_: printerr('\t\tNo bounding vis found for this mofr step / vid.')
 	return (mofr_to_rawtraffics if singlemofr_ is None else mofr_to_rawtraffics.values()[0])
 
-def get_stretches(vis_):
+# This is almost a great way to get all the pertinent bounding vi pairs, 
+# except it doesn't handle correctly the case where there are multiple vis in chunk X, 
+# no vis in chunk X+1, and the next vi in chunk X+2.  
+#def get_all_mofrstep_bounding_vi_pairs(vis_, mofrstep_, dir_):
+#	if len(vis_) < 2:
+#		return
+#	vis = (vis_ if dir_==1 else vis_[::-1])
+#	lo_idx = 0; hi_idx = 1
+#	while hi_idx < len(vis):
+#		lo_vi = vis[lo_idx]; hi_vi = vis[hi_idx]
+#		lo_chunk = lo_vi.mofrchunk(mofrstep_); hi_chunk = hi_vi.mofrchunk(mofrstep_)
+#		if lo_chunk != hi_chunk:
+#			interp_mofr = max(lo_chunk, hi_chunk)*mofrstep_
+#			yield (lo_vi, hi_vi, interp_mofr)
+#			lo_idx = hi_idx
+#			hi_idx += 1
+#		else:
+#			hi_idx += 1
+
+def get_mofrchunk_to_vis(vis_, mofrstep_):
+	r = defaultdict(lambda: [])
+	for vi in vis_:
+		r[int(vi.widemofr)/mofrstep_].append(vi)
+	return r
+
+def get_stretches(vis_, dir_):
 	if len(vis_) == 0:
 		return []
 	cur_stretch = [vis_[0]]
 	r = [cur_stretch]
 	for vi in vis_[1:]:
-		if abs(cur_stretch[-1].time - vi.time) < 1000*60*10:
-			cur_stretch.append(vi)
+		lastvi = cur_stretch[-1]
+		if abs(lastvi.time - vi.time) < 1000*60*10:
+			if (dir_ and (vi.widemofr >= lastvi.widemofr)) or (not dir_ and (vi.widemofr <= lastvi.widemofr)):
+				cur_stretch.append(vi)
 		else:
 			cur_stretch = [vi]
 			r.append(cur_stretch)
@@ -217,7 +245,6 @@ def get_observed_headway(froute_, stoptag_, time_, window_minutes_, usewidemofr_
 	else:
 		return None
 
-
 # [1] Here I am trying to implement the following judgement call:
 # It is better to show no traffic at all (white) than a misleading orange
 # that is derived from one or more vehicles that never traversed that stretch of road,
@@ -227,30 +254,38 @@ def get_observed_headway(froute_, stoptag_, time_, window_minutes_, usewidemofr_
 # between 13:05 and 13:35, and how this could result in vid 4087 single-handedly causing a
 # decent-looking traffic report for that stretch of road.  I would rather show white (or whatever
 # I'm showing to signify 'no traffic data' now) and thus encourage the user to look for the detour.
-def get_bounding_mofr_vis(mofr_, mofrstep_, vis_, usewidemofr_):
-	assert isinstance(mofr_, int) and isinstance(vis_, Sequence) and isinstance(usewidemofr_, bool)
-	assert all(vi1.vehicle_id == vi2.vehicle_id for vi1, vi2 in hopscotch(vis_))
+def get_bounding_mofr_vis(mofr_, mofrstep_, mofrchunk_to_vis_, usewidemofr_):
+	assert isinstance(mofr_, int) and isinstance(mofrchunk_to_vis_, defaultdict) and isinstance(usewidemofr_, bool)
+	if __debug__:
+		all_vis = sum(mofrchunk_to_vis_.values(), [])
+		assert all(vi1.vehicle_id == vi2.vehicle_id for vi1, vi2 in hopscotch(all_vis))
+		assert all(vi1.fudgeroute == vi2.fudgeroute for vi1, vi2 in hopscotch(all_vis))
 
-	get_mofr = lambda vi: (vi.widemofr if usewidemofr_ else vi.mofr)
+	def mofr_time_key(vi__):
+		return ((vi__.widemofr if usewidemofr_ else vi__.mofr), vi__.time)
 
-	prev_step_vis = filter(lambda vi: mofr_ - mofrstep_ < get_mofr(vi) < mofr_, vis_)
-	if prev_step_vis:
-		vi_lo = min(prev_step_vis, key=get_mofr)
+	prev_chunk_vis = mofrchunk_to_vis_[mofr_/mofrstep_ - 1]
+	if len(prev_chunk_vis) > 0:
+		vi_lo = min(prev_chunk_vis, key=mofr_time_key)
 	else:
-		lesser_vis = filter(lambda vi: get_mofr(vi) < mofr_, vis_)
-		if lesser_vis:
-			vi_lo = max(lesser_vis, key=get_mofr)
+		for mofrchunk in range(mofr_/mofrstep_ - 2, -1, -1):
+			vis_in_chunk = mofrchunk_to_vis_[mofrchunk]
+			if len(vis_in_chunk) > 0:
+				vi_lo = max(vis_in_chunk, key=mofr_time_key)
+				break
 		else:
 			vi_lo = None
 
-	greater_vis = filter(lambda vi: get_mofr(vi) > mofr_, vis_)
-	if greater_vis:
-		vi_hi = min(greater_vis, key=get_mofr)
+	for mofrchunk in range(mofr_/mofrstep_, max(mofrchunk_to_vis_.keys())+1):
+		vis_in_chunk = mofrchunk_to_vis_[mofrchunk]
+		if len(vis_in_chunk) > 0:
+			vi_hi = min(vis_in_chunk, key=mofr_time_key)
+			break
 	else:
 		vi_hi = None
 
 	if vi_lo and vi_hi:
-		assert get_mofr(vi_lo) < get_mofr(vi_hi)
+		assert mofr_time_key(vi_lo) < mofr_time_key(vi_hi)
 
 	if vi_lo and vi_hi and (abs(vi_hi.time - vi_lo.time) > 1000*60*8): # see [1] above.
 		return (None, None)
