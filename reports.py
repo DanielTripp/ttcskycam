@@ -40,7 +40,7 @@ def get_historical_report(report_type_, froute_, dir_, datazoom_, time_, log_=Fa
 	if DISALLOW_HISTORICAL_REPORTS:
 		raise Exception('Historical reports are disallowed.')
 	time_arg = round_down_by_minute(time_)
-	return calc_report(report_type_, froute_, dir_, datazoom_, time_arg)
+	return calc_report_json(report_type_, froute_, dir_, datazoom_, time_arg)
 
 def get_current_report(report_type_, froute_, dir_, datazoom_, last_gotten_timestr_, log_=False):
 	if GET_CURRENT_REPORTS_FROM_DB:
@@ -53,17 +53,21 @@ def calc_current_report(report_type_, froute_, dir_, datazoom_, last_gotten_time
 	if (last_gotten_timestr_ is not None) and (str_to_em(last_gotten_timestr_) == time_arg):
 		return util.to_json_str((em_to_str(time_arg), None, dir_))
 	else:
-		return calc_report(report_type_, froute_, dir_, datazoom_, time_arg)
+		return calc_report_json(report_type_, froute_, dir_, datazoom_, time_arg)
 
-def calc_report(report_type_, froute_, dir_, datazoom_, time_):
+def calc_report_obj(report_type_, froute_, dir_, datazoom_, time_, log_=False):
 	assert isinstance(time_, long) and (time_ != 0)
 	if report_type_ == 'traffic':
-		report_data_obj = traffic.get_traffics_impl(froute_, dir_, datazoom_, time_)
+		return traffic.get_traffics_impl(froute_, dir_, datazoom_, time_, log_=log_)
 	elif report_type_ == 'locations':
-		report_data_obj = traffic.get_recent_vehicle_locations_impl(froute_, dir_, datazoom_, time_)
+		return traffic.get_recent_vehicle_locations_impl(froute_, dir_, datazoom_, time_, log_=log_)
 	else:
 		assert False
-	return util.to_json_str((em_to_str(time_), report_data_obj, dir_))
+
+def calc_report_json(report_type_, froute_, dir_, datazoom_, time_):
+	assert isinstance(time_, long) and (time_ != 0)
+	report_obj = calc_report_obj(report_type_, froute_, dir_, datazoom_, time_)
+	return util.to_json_str((em_to_str(time_), report_obj, dir_))
 
 def get_current_report_from_db(report_type_, froute_, dir_, datazoom_, last_gotten_timestr_, log_=False):
 	last_gotten_time = (None if last_gotten_timestr_ is None else str_to_em(last_gotten_timestr_))
