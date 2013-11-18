@@ -168,6 +168,9 @@ class VehicleInfo:
 		r.latlng = r.latlng.copy()
 		return r
 
+	def mofrchunk(self, mofrstep_):
+		return int(self.widemofr)/mofrstep_
+
 def make_vi(**kwargs):
 	r = VehicleInfo('', -4, '9999', 43.0, -79.0, True, '', '', 0, 0L, 0L,
 		None, None)
