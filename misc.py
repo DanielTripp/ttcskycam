@@ -688,6 +688,34 @@ def max2(seq_, key=None):
 	except ValueError: # not sure if I should depend on this behaviour. 
 		return None
 
+def bisect_left_2(a_, x_, key=None, reverse=False):
+	assert is_sorted(a_, key=key, reverse=reverse)
+	key_n_vals = [((key(val) if key is not None else val), val) for val in a_]
+	if reverse:
+		key_n_vals.reverse()
+	keys = [key for key, elem in key_n_vals]
+	if reverse:
+		return len(a_) - bisect.bisect_right(keys, x_)
+	else:
+		return bisect.bisect_left(keys, x_)
+
+# Thanks to http://stackoverflow.com/questions/8977612/compose-function-and-functional-module 
+#def compose(*funcs, unpack=False):
+#	if not callable(func_1):
+#		raise TypeError("First argument to compose must be callable")
+#
+#	if unpack:
+#		if len(funcs) == 1:
+#			def composition(*args, **kwargs):
+#				return funcs[0](*args, **kwargs)
+#		else:
+#			def composition(*args, **kwargs):
+#				return funcs[0](*func_2(*args, **kwargs))
+#	else:
+#		def composition(*args, **kwargs):
+#			return func_1(func_2(*args, **kwargs))
+#	return composition
+
 if __name__ == '__main__':
 
 
