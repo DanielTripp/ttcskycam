@@ -107,13 +107,12 @@ class OurJSONEncoder(json.JSONEncoder):
 		else:
 			return json.JSONEncoder.default(self, o)
 
+def to_json_str(object_, indent=None):
+	return json.dumps(object_, cls=OurJSONEncoder, indent=indent, sort_keys=True)
 
-def to_json_str(object_):
-	return json.dumps(object_, cls=OurJSONEncoder)
-
-def to_json_file(object_, filename_):
+def to_json_file(object_, filename_, indent=None):
 	with open(filename_, 'w') as fout:
-		json.dump(object_, fout, cls=OurJSONEncoder)
+		json.dump(object_, fout, cls=OurJSONEncoder, indent=indent, sort_keys=True)
 
 # Find the mid-point of a loop.  
 # Pass in a completed loop i.e. last point is equal to first point. 
