@@ -1,6 +1,6 @@
 #!/usr/bin/python2.6
 
-import copy
+import re, copy
 import geom, routes
 from misc import *
 
@@ -171,12 +171,43 @@ class VehicleInfo:
 	def mofrchunk(self, mofrstep_):
 		return int(self.widemofr)/mofrstep_
 
-def make_vi(**kwargs):
+def makevi1(**kwargs):
 	r = VehicleInfo('', -4, '9999', 43.0, -79.0, True, '', '', 0, 0L, 0L,
 		None, None)
 	for key, val in kwargs.iteritems():
 		setattr(r, key, val)
 	return r
+
+def makevi(pos_, timestr_, *args_):
+	yyyymmdd = '2007-02-15'
+	if re.match(r'\d\d:\d\d', timestr_) or re.match(r'\d\d:\d\d:\d\d', timestr_):
+		time_em = str_to_em('%s %s' % (yyyymmdd, timestr_))
+	elif re.match(r'\d\d\d\d-\d\d-\d\d \d\d:\d\d.*', timestr_):
+		time_em = str_to_em(timestr_)
+	else:
+		raise ValueError()
+
+	r = VehicleInfo('', -4, '9999', 43.0, -79.0, True, 'dundas', '', 0, time_em, time_em, None, None)
+	dir_int = 0
+	for arg in args_:
+		if isinstance(arg, str) and re.match(r'\d\d\d\d', arg):
+			r.vehicle_id = arg
+		elif isinstance(arg, str) and arg in routes.NON_SUBWAY_FUDGEROUTES:
+			r.fudgeroute = arg
+		elif arg in (0, 1):
+			dir_int = arg
+		else:
+			raise ValueError()
+	r.route_tag = routes.FUDGEROUTE_TO_CONFIGROUTES[r.fudgeroute][0]
+	r.dir_tag = '%s_%d_%s' % (r.route_tag, dir_int, r.route_tag)
+
+	if isinstance(pos_, Sequence):
+		r.latlng = geom.LatLng(pos_[0], pos_[1])
+	elif isinstance(pos_, int):
+		r.latlng = routes.routeinfo(r.fudgeroute).mofr_to_latlon(pos_, dir_int)
+		r.mofr = r.widemofr = pos_
+		
+	return r 
 
 if __name__ == '__main__':
 

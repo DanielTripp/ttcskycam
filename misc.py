@@ -107,13 +107,16 @@ def decode_url_paramval(str_):
 		r += result_char
 	return r
 
-def str_to_em(datetimestr_):
+def str_to_em(datetimestr_, format_=None):
 	def impl(format__):
 		return int(time.mktime(time.strptime(datetimestr_, format__))*1000)
-	try:
-		return impl('%Y-%m-%d %H:%M:%S')
-	except ValueError:
-		return impl('%Y-%m-%d %H:%M')
+	if format_ is None:
+		try:
+			return impl('%Y-%m-%d %H:%M:%S')
+		except ValueError:
+			return impl('%Y-%m-%d %H:%M')
+	else:
+		return impl(format_)
 
 def printerr(*args):
 	sys.stderr.write(' '.join((str(x) for x in args)) + os.linesep)
@@ -698,6 +701,9 @@ def bisect_left_2(a_, x_, key=None, reverse=False):
 		return len(a_) - bisect.bisect_right(keys, x_)
 	else:
 		return bisect.bisect_left(keys, x_)
+
+def is_close(a_, b_, tolerance_):
+	return abs(a_ - b_) <= tolerance_
 
 # Thanks to http://stackoverflow.com/questions/8977612/compose-function-and-functional-module 
 #def compose(*funcs, unpack=False):

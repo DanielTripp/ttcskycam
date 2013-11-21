@@ -88,7 +88,7 @@ function initialize() {
 	// objects are on the map, the smoother the scrolling will be.   (I'm fairly sure that I noticed a difference in 
 	// scrolling smoothness with this erasing but it's not as pronounced as the difference that the delayed listener makes.)
 	google.maps.event.addListener(g_map, 'dragstart', erase_grid);
-	add_delayed_event_listener(g_map, 'bounds_changed', redraw_grid, 100);
+	//add_delayed_event_listener(g_map, 'bounds_changed', redraw_grid, 100);
 
 	$('#sqlstr_field').keydown(function (e){
 			if(e.keyCode == 13) {
