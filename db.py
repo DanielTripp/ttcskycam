@@ -616,18 +616,19 @@ def interp_by_time(vilist_, be_clever_, current_conditions_, dir_=None, datazoom
 	starttime = (round_up_by_minute(start_time_) if start_time_ is not None else round_down_by_minute(min(vi.time for vi in vilist_)))
 	endtime = (round_up_by_minute(end_time_) if end_time_ is not None else max(vi.time for vi in vilist_))
 	vids = set(vi.vehicle_id for vi in vilist_)
-	time_to_vis = {}
-	for interptime in lrange(starttime, endtime+1, 60*1000):
-		interped_timeslice = []
-		for vid in vids:
-			lolo_vi, lo_vi, hi_vi = get_nearest_time_vis(vilist_, vid, interptime)
+	interptimes = list(lrange(starttime, endtime+1, 60*1000))
+	time_to_out_vis = dict((interptime, []) for interptime in interptimes)
+	for vid in vids:
+		vis = [vi for vi in vilist_ if vi.vehicle_id == vid]
+		for interptime in interptimes:
+			lolo_vi, lo_vi, hi_vi = get_nearest_time_vis(vis, vid, interptime)
 			i_vi = None
 			if lo_vi and hi_vi:
 				if (min(interptime - lo_vi.time, hi_vi.time - interptime) > 3*60*1000) or dirs_disagree(dir_, hi_vi.dir_tag_int)\
 						or dirs_disagree(lo_vi.dir_tag_int, dir_) or (lo_vi.fudgeroute != hi_vi.fudgeroute):
 					continue
 				ratio = (interptime - lo_vi.time)/float(hi_vi.time - lo_vi.time)
-				i_latlon, i_heading, i_mofr = interp_latlonnheadingnmofr(lo_vi, hi_vi, ratio, datazoom_, be_clever_, vilist_)
+				i_latlon, i_heading, i_mofr = interp_latlonnheadingnmofr(lo_vi, hi_vi, ratio, datazoom_, be_clever_, vis)
 				i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, i_heading, vid, i_latlon.lat, i_latlon.lng,
 										 lo_vi.predictable and hi_vi.predictable,
 										 lo_vi.fudgeroute, lo_vi.route_tag, 0, interptime, interptime, i_mofr, None)
@@ -635,12 +636,12 @@ def interp_by_time(vilist_, be_clever_, current_conditions_, dir_=None, datazoom
 				if current_conditions_:
 					if (interptime - lo_vi.time > 3*60*1000) or dirs_disagree(dir_, lo_vi.dir_tag_int):
 						continue
-					latlng, heading = get_latlonnheadingnmofr_from_lo_sample(lolo_vi, lo_vi, datazoom_, be_clever_, vilist_)[:2]
+					latlng, heading = get_latlonnheadingnmofr_from_lo_sample(lolo_vi, lo_vi, datazoom_, be_clever_, vis)[:2]
 					i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, heading, vid, latlng.lat, latlng.lng,
 							lo_vi.predictable, lo_vi.fudgeroute, lo_vi.route_tag, 0, interptime, interptime, lo_vi.mofr, lo_vi.widemofr)
 
 			if i_vi:
-				interped_timeslice.append(i_vi)
+				time_to_out_vis[interptime].append(i_vi)
 				if log_:
 					printerr('lo: %s' % lo_vi)
 					if hi_vi:
@@ -648,8 +649,7 @@ def interp_by_time(vilist_, be_clever_, current_conditions_, dir_=None, datazoom
 					printerr('==> %s' % i_vi)
 					printerr()
 
-		time_to_vis[interptime] = interped_timeslice
-	return massage_to_list(time_to_vis, starttime, endtime, log_=log_)
+	return massage_to_list(time_to_out_vis, starttime, endtime, log_=log_)
 
 # Either arg could be None (i.e. blank dir_tag).  For this we consider None to 'agree' with 0 or 1.
 def dirs_disagree(dir1_, dir2_):
@@ -676,7 +676,7 @@ def get_latlonnheadingnmofr_from_lo_sample(lolo_vi_, lo_vi_, datazoom_, be_cleve
 
 		
 # be_clever_ - means use routes if mofrs are valid, else use 'tracks' if a streetcar.
-# hint_last_interped_vi_ is to help us return the correct heading in the case of a vehicle being stuck on tracks
+# raw_vilist_for_hint_ is to help us return the correct heading in the case of a vehicle being stuck on tracks
 # (i.e. not on route i.e. mofr==-1).  Usually the difference in latlng between vi1_ and vi2_ is enough for us to determine
 # the heading of the vehicle, but if the vehicle is standing still then we have to work for it more.  For on-route vehicles
 # the dirtag helps us with this - i.e. the routes.mofr_to_latlonnheading() call - but for tracks that doesn't help.
@@ -1110,7 +1110,7 @@ def insert_demo_locations(froute_, demo_report_timestr_, vid_, locations_):
 		else:
 			latlng = geom.LatLng(location)
 		croute = demo_froute_to_croute(froute_)
-		vi = vinfo.make_vi(vehicle_id=vid_, latlng=latlng, route_tag=croute, time=t, time_retrieved=t)
+		vi = vinfo.makevi1(vehicle_id=vid_, latlng=latlng, route_tag=croute, time=t, time_retrieved=t)
 		insert_vehicle_info(vi)
 
 def demo_froute_to_croute(froute_):
