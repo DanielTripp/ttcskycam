@@ -146,6 +146,13 @@ class LatLng:
 	def dist_to_lineseg(self, lineseg_):
 		return self.snap_to_lineseg(lineseg_)[2]
 
+	def is_close(self, other_, tolerance_=None):
+		if tolerance_ is None:
+			epsilon = 0.000001
+			return abs(self.lat - other_.lat) < epsilon and abs(self.lng - other_.lng) < epsilon
+		else:
+			return self.dist_m(other_) <= tolerance_
+
 def angle(arm1_, origin_, arm2_):
 	assert isinstance(arm1_, LatLng) and isinstance(origin_, LatLng) and isinstance(arm2_, LatLng)
 	abs_ang1 = origin_.abs_angle(arm1_)

@@ -11,11 +11,13 @@ if __name__ == '__main__':
 
 	froute_to_timetally = defaultdict(lambda: [0, 0])
 
+	yyyymmdd = '2013-11-15'
+
 	for hour in range(7, 23+1):
 	#for hour in [10]:
 		for minute in range(0, 60, 5):
 		#for minute in [30]:
-			tstr = '2013-11-15 %02d:%02d' % (hour, minute)
+			tstr = '%s %02d:%02d' % (yyyymmdd, hour, minute)
 			t = str_to_em(tstr)
 			curs = db.conn().cursor()
 			sqlstr = 'select froute, time_inserted_str from reports where time = %s order by time_inserted_str, froute' 
@@ -49,10 +51,11 @@ if __name__ == '__main__':
 				numsecs = (str_to_em(max(time_inserted_strs)) - str_to_em(min(time_inserted_strs)))/1000
 				print tstr, numsecs  
 			else:
-				print tstr, '-'
+				print tstr
 
 
-	for timetally, froute in sorted([(float(y[0])/y[1], x) for x, y in froute_to_timetally.items()], reverse=True):
-		print timetally, froute
+	if 0:
+		for timetally, froute in sorted([(float(y[0])/y[1], x) for x, y in froute_to_timetally.items()], reverse=True):
+			print timetally, froute
 
 
