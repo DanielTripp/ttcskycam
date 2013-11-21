@@ -11,27 +11,27 @@ if __name__ == '__main__':
 
 	froute_to_timetally = defaultdict(lambda: [0, 0])
 
-	yyyymmdd = '2013-11-15'
+	yyyymmdd = '2013-11-20'
 
 	for hour in range(7, 23+1):
 	#for hour in [10]:
 		for minute in range(0, 60, 5):
 		#for minute in [30]:
-			tstr = '%s %02d:%02d' % (yyyymmdd, hour, minute)
-			t = str_to_em(tstr)
+			report_timestr = '%s %02d:%02d' % (yyyymmdd, hour, minute)
+			report_time = str_to_em(report_timestr)
 			curs = db.conn().cursor()
 			sqlstr = 'select froute, time_inserted_str from reports where time = %s order by time_inserted_str, froute' 
-			curs.execute(sqlstr, [t])
+			curs.execute(sqlstr, [report_time])
 			time_inserted_strs = []
 			froute_to_mintime_n_maxtime = defaultdict(lambda: [None,None])
 			last_froute = None
 			for row in curs:
-				tstr = row[1]
-				time_inserted_strs.append(tstr)
+				time_inserted_str = row[1]
+				time_inserted_strs.append(time_inserted_str)
 				froute = row[0]
 				if froute != last_froute:
-					froute_to_mintime_n_maxtime[last_froute][1] = tstr
-					froute_to_mintime_n_maxtime[froute][0] = tstr
+					froute_to_mintime_n_maxtime[last_froute][1] = time_inserted_str
+					froute_to_mintime_n_maxtime[froute][0] = time_inserted_str
 					last_froute = froute
 			curs.close()
 
@@ -46,12 +46,12 @@ if __name__ == '__main__':
 					pass # print 'omitting %s' % froute
 
 
-			tstr = tstr[11:]
+			out_report_timestr = report_timestr[11:]
 			if len(time_inserted_strs) > 0:
 				numsecs = (str_to_em(max(time_inserted_strs)) - str_to_em(min(time_inserted_strs)))/1000
-				print tstr, numsecs  
+				print out_report_timestr, numsecs  
 			else:
-				print tstr
+				print out_report_timestr
 
 
 	if 0:
