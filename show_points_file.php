@@ -220,13 +220,16 @@ function get_latlngs_from_file() {
 				var filelines = contents_str.split('\n');
 				for(var filelinei in filelines) {
 					var fileline = filelines[filelinei];
-					var regex = /([-]?\d+\.\d+)[ ,]*([-]?\d+\.\d+)/g;
+					var regex = /.*?([-]?\d+\.\d+).*?([-]?\d+\.\d+).*/g;
 					var match = regex.exec(fileline);
 					if(match != null) {
 					  var lat = parseFloat(match[1], 10);
 						var lng = parseFloat(match[2], 10);
 						polyline.push([lat, lng]);
 					}
+					else { // tdr 
+						console.log("no");
+					} // tdr 
 				}
 			}
 		}
