@@ -11,7 +11,10 @@ if __name__ == '__main__':
 
 	froute_to_timetally = defaultdict(lambda: [0, 0])
 
-	yyyymmdd = '2013-11-20'
+	if len(sys.argv) == 2:
+		yyyymmdd = sys.argv[1]
+	else:
+		yyyymmdd = now_str_ymd()
 
 	for hour in range(7, 23+1):
 	#for hour in [10]:
