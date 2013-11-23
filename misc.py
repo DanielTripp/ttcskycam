@@ -24,6 +24,9 @@ def em_to_str_millis(t_):
 	millis = t_ - time.mktime(time.strptime(secs_formatted, format))*1000  # Hack.
 	return '%s.%03d' % (secs_formatted, millis)
 
+def em_to_str_ymd(t_):
+	return time.strftime('%Y-%m-%d', time.localtime(t_/1000))
+
 def em_to_str_hm(t_):
 	return time.strftime('%H:%M', time.localtime(t_/1000))
 
@@ -35,6 +38,9 @@ def now_em():
 
 def now_str():
 	return em_to_str(now_em())
+
+def now_str_ymd():
+	return em_to_str_ymd(now_em())
 
 def frange(min_, max_, step_):
 	x = min_
