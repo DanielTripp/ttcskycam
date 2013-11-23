@@ -227,9 +227,6 @@ function get_latlngs_from_file() {
 						var lng = parseFloat(match[2], 10);
 						polyline.push([lat, lng]);
 					}
-					else { // tdr 
-						console.log("no");
-					} // tdr 
 				}
 			}
 		}
