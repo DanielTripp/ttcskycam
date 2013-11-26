@@ -11,7 +11,7 @@ g_lock = threading.RLock()
 def get_filename(func_, args_, kwargs_):
 	funcname = '%s.%s' % (func_.__module__, func_.__name__)
 	str_arg_list = [str(arg) for arg in args_] + ['%s=%s' % (kwargname, kwargs_[kwargname]) for kwargname in sorted(kwargs_.keys())]
-	r = 'pickled_%s(%s)' % (funcname, ','.join(str_arg_list))
+	r = '%s(%s)' % (funcname, ','.join(str_arg_list))
 	return r
 
 def decorate(user_function_):
