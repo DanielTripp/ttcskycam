@@ -122,7 +122,7 @@ function draw_grid_lats() {
 		pts.push(new google.maps.LatLng(lat, gridbounds.getSouthWest().lng()));
 		pts.push(new google.maps.LatLng(lat, gridbounds.getNorthEast().lng()));
 		var line = new google.maps.Polyline({map: g_map, path: pts, strokeColor: 'rgb(0,0,255)', strokeWeight: (gridlat % 10 == 0 ? 1 : 0.5), 
-			clickable: false});
+			clickable: false, zIndex: 5});
 		g_grid_objects.push(line);
 		var marker = new RichMarker({
 			position: new google.maps.LatLng(lat, g_map.getBounds().getNorthEast().lng()), 
@@ -145,7 +145,7 @@ function draw_grid_lngs() {
 		pts.push(new google.maps.LatLng(gridbounds.getSouthWest().lat(), lng));
 		pts.push(new google.maps.LatLng(gridbounds.getNorthEast().lat(), lng));
 		var line = new google.maps.Polyline({map: g_map, path: pts, strokeColor: 'rgb(0,0,255)', strokeWeight: (gridlng % 10 == 0 ? 1 : 0.5), 
-			clickable: false});
+			clickable: false, zIndex: 5});
 		g_grid_objects.push(line);
 		var marker = new RichMarker({
 			position: new google.maps.LatLng(g_map.getBounds().getNorthEast().lat(), lng), 
@@ -160,8 +160,8 @@ function draw_grid_lngs() {
 }
 
 function get_number_label_svg(num_) {
-	return sprintf('<svg width="20" height="20" version="1.1">' +
-			'<rect x="0" y="0" width="20" height="20" style="fill:white;stroke:blue;stroke-width:0.5;fill-opacity:1.0;stroke-opacity:1.0"/>' +
+	return sprintf('<svg width="30" height="20" version="1.1">' +
+			'<rect x="0" y="0" width="30" height="20" style="fill:white;stroke:blue;stroke-width:0.5;fill-opacity:1.0;stroke-opacity:1.0"/>' +
 			'<text x="0" y="15" font-size="15" font-weight="bold" fill="rgb(0,0,255)">%d</text>' +
 			'</svg>', 
 			num_);
