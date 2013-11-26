@@ -63,7 +63,7 @@ function show_latlng_text() {
 
 function search() {
 		var string_to_search = document.getElementById('search_textfield').value;
-		var regex = /([-]?\d+\.\d+)[ ,]*([-]?\d+\.\d+)/g;
+		var regex = /.*?([-]?\d+\.\d+).*?([-]?\d+\.\d+).*/g;
 		var match = regex.exec(string_to_search);
 		if(match != null) {
 			var lat = parseFloat(match[1], 10);
