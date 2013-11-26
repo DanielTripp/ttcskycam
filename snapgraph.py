@@ -437,34 +437,6 @@ class SnapGraph(object):
 					self.polylineidx_to_gridsquares[polylineidx].add(gridsquare)
 		self.gridsquare_to_linesegaddrs = dict(self.gridsquare_to_linesegaddrs) # b/c a defaultdict can't be pickled i.e. memcached
 
-	def get_polylineidxes_near_polyline(self, polyline_, dist_m_):
-		polylineidxes = set()
-		for gridsquare in get_gridsquares_near_polyline(polyline_, dist_m_):
-			if gridsquare in self.gridsquare_to_linesegaddrs:
-				for linesegaddr in self.gridsquare_to_linesegaddrs[gridsquare]:
-					polylineidxes.add(linesegaddr.polylineidx)
-		for polylineidx in polylineidxes:
-			yield polylineidx
-
-	def get_nearby_polyline_combos(self, dist_m_):
-		for polylineidx in self.get_nearby_polylineidx_combos(self, dist_m_):
-			yield self.polyline[polylineidx]
-
-	def get_nearby_polylineidx_combos(self, dist_m_):
-		for polyline1idx, polyline1 in enumerate(self.polylines):
-			for polyline2idx in self.get_polylineidxes_near_polyline(polyline1, dist_m_):
-				yield (polyline1idx, polyline2idx) 
-
-	def all_pts_n_ptaddrs(self):
-		for polylineidx, polyline in enumerate(self.polylines):
-			for ptidx, pt in enumerate(polyline):
-				yield (Addr(polylineidx, ptidx), pt)
-
-	def all_ptaddrs(self):
-		for polylineidx, polyline in enumerate(self.polylines):
-			for ptidx in range(len(polyline)):
-				yield Addr(polylineidx, ptidx)
-
 	def get_lineseg(self, linesegaddr_):
 		polyline = self.polylines[linesegaddr_.polylineidx]
 		return geom.LineSeg(polyline[linesegaddr_.startptidx], polyline[linesegaddr_.startptidx+1])
@@ -762,13 +734,6 @@ def gridsquare_spiral_gen_by_geom_vals(center_gridsquare_, searchradius_):
 def get_nearby_gridsquares(center_gridsquare_, searchradius_):
 	return set(gridsquare_spiral_gen_by_geom_vals(center_gridsquare_, searchradius_))
 
-def get_gridsquares_touched_by_polyline(polyline_):
-	assert isinstance(polyline_, Sequence)
-	r = set()
-	for lineseg in geom.get_linesegs_in_polyline(polyline_):
-		r |= set(get_gridsquares_touched_by_lineseg(lineseg))
-	return r
-
 def pt_lies_along(pt_, lineseg_):
 	if 0.00 <= geom.get_pass_ratio(lineseg_.start, lineseg_.end, pt_) <= 1.0:
 		pass_pt = geom.get_pass_point(lineseg_.start, lineseg_.end, pt_)
@@ -784,29 +749,6 @@ def linesegs_coincide(lineseg1_, lineseg2_):
 		return False
 	else:
 		return pt_lies_along(lineseg1_.start, lineseg2_) or pt_lies_along(lineseg1_.end, lineseg2_)
-
-def get_nearby_lineseg_combos(snapgraph_, dist_m_):
-	for polyline1, polyline2 in snapgraph.get_nearby_polyline_combos(dist_m_):
-		for polyline1startptidx in range(len(polyline1)-1):
-			for polyline2startptidx in range(len(polyline2)-1):
-				if (polyline1 is polyline2) and (polyline1startptidx == polyline2startptidx):
-					continue
-				lineseg1 = geom.LineSeg(polyline1[polyline1startptidx], polyline1[polyline1startptidx+1])
-				lineseg2 = geom.LineSeg(polyline2[polyline2startptidx], polyline2[polyline2startptidx+1])
-				yield (lineseg1, lineseg2)
-
-def find_coinciding_linesegs(snapgraph_):
-	coincide_count = 0
-	same_count = 0
-	for i, (lineseg1, lineseg2) in enumerate(get_nearby_lineseg_combos(snapgraph, 5)):
-		if i % 1000 == 0:
-			print 'lineseg combo', i, 'coincide', coincide_count, 'same', same_count
-		if linesegs_coincide(lineseg1, lineseg2):
-			with open('s-coincide-%d' % coincide_count, 'w') as fout:
-				print >> fout, util.to_json_str([lineseg1, lineseg2])
-			coincide_count += 1
-		if lineseg1 == lineseg2:
-			same_count += 1
 
 # Thanks to http://tech-algorithm.com/articles/drawing-line-using-bresenham-algorithm/ 
 def bresenham2(gridsquare0_, gridsquare1_):
