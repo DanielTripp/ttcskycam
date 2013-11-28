@@ -685,6 +685,10 @@ def readfile(filename_):
 	with open(filename_) as fin:
 		return fin.read()
 
+def writefile(filename_, contents_):
+	with open(filename_, 'w') as fout:
+		return fout.write(contents_)
+
 def min2(seq_, key=None):
 	try:
 		return min(seq_, key=(key if key is not None else lambda x: x))
