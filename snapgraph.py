@@ -553,7 +553,7 @@ class SnapGraph(object):
 				addr2i = 0
 				while addr2i < len(addr2s):
 					addr2 = addr2s[addr2i]
-					if addr1.polylineidx != addr2.polylineidx:
+					if addr1.polylineidx < addr2.polylineidx:
 						if not(linesforaddr2_ and addr2.startptidx == len(self.polylines[addr2.polylineidx])-1):
 							yielded_addr2 = addr2.copy()
 							yield (addr1, yielded_addr2)
