@@ -185,19 +185,34 @@ function refresh_from_file() {
 }
 
 function get_latlngs_from_file() {
-	g_polyline_latlngs = [];
 	var contents_str = get_sync(get_value('filename_field'), {cache: false});
-	if(contents_str != null) {
+	get_latlngs_from_string(contents_str);
+}
+
+function refresh_from_textarea() {
+	forget_drawn_objects();
+	get_latlngs_from_textarea();
+	draw_objects();
+}
+
+function get_latlngs_from_textarea() {
+	var contents_str = get_value('contents_textarea');
+	get_latlngs_from_string(contents_str);
+}
+
+function get_latlngs_from_string(str_) {
+	g_polyline_latlngs = [];
+	if(str_ != null) {
 		var raw_polylines = [];
 		try {
 			try {
-				raw_polylines = $.parseJSON(contents_str);
+				raw_polylines = $.parseJSON(str_);
 			} catch(e) {
-				contents_str = contents_str.trim();
-				if(contents_str.charAt(contents_str.length-1) === ',') {
-					contents_str = contents_str.substring(0, contents_str.length-1);
+				str_ = str_.trim();
+				if(str_.charAt(str_.length-1) === ',') {
+					str_ = str_.substring(0, str_.length-1);
 				}
-				raw_polylines = $.parseJSON('['+contents_str+']');
+				raw_polylines = $.parseJSON('['+str_+']');
 			}
 			if(typeof raw_polylines[0][0] === 'number') { // file contains a polyline, not a list of polylines? 
 				raw_polylines = [raw_polylines]; // now it's a list of polylines. 
@@ -207,7 +222,7 @@ function get_latlngs_from_file() {
 			try {
 				var polyline = [];
 				raw_polylines.push(polyline);
-				var dom = $.parseXML(contents_str);
+				var dom = $.parseXML(str_);
 				$(dom).find('*').each(function() {
 					var lat = $(this).attr('lat'), lng = $(this).attr('lon');
 					if(lat != undefined && lng != undefined) {
@@ -217,7 +232,7 @@ function get_latlngs_from_file() {
 			} catch(err) {
 				var polyline = [];
 				raw_polylines.push(polyline);
-				var filelines = contents_str.split('\n');
+				var filelines = str_.split('\n');
 				for(var filelinei in filelines) {
 					var fileline = filelines[filelinei];
 					var regex = /.*?([-]?\d+\.\d+).*?([-]?\d+\.\d+).*/g;
@@ -444,14 +459,18 @@ function on_grid_checkbox_clicked() {
 	}
 }
 
-
+function on_submit_contents_clicked() {
+}
 
 
     </script>
   </head>
   <body onload="initialize()" >
 		<div id="map_canvas" style="width:80%; height:100%"></div>
-		<input type="text" size="130" name="filename_field" id="filename_field" />
+		Filename: <input type="text" size="80" name="filename_field" id="filename_field" /> <br>
+		OR Contents:<br>
+		<textarea id="contents_textarea" cols="80" rows="5"></textarea> 
+		<input type="button" onclick="refresh_from_textarea()" value="Submit Contents" />
 		<br>
 		<input type="button" onclick="on_opacity_down_clicked()" value="Opacity DOWN" />
 		<input type="button" onclick="on_opacity_up_clicked()" value="Opacity UP" />
