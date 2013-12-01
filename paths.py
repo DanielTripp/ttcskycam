@@ -289,7 +289,7 @@ def find_nearby_froutenmofrs(latlng_, radius_):
 		ri = routes.routeinfo(froute)
 		snap_result = ri.snapgraph.snap(latlng_, radius_)
 		if snap_result is not None:
-			pt_on_froute = snap_result[0]
+			pt_on_froute = snap_result.latlng
 			r.append((froute, ri.latlon_to_mofr(pt_on_froute)))
 	return r
 			

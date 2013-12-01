@@ -30,10 +30,6 @@ def get_polyline_from_file(filename_):
 		printerr('error with %s' % track_filename)
 		raise
 	
-
-def is_on_a_track(latlng_):
-	return (snap(latlng_) is not None)
-
 # This uses no search radius for the snap.  That is - it is unlimited, and will keep going until a line segment is found, 
 # no matter how far away.  This is okay here for a few reasons:
 # 
