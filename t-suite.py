@@ -11,16 +11,16 @@ if __name__ == '__main__':
 
 	log = False
 
-	do_all = False
-	do_print = False
+	do_all = 1
+	do_print = 1 
 
 	for day in ['2013-11-14']:
-		for hour in (range(0, 24) if do_all else (0,)):
-			for minute in ((0, 30) if do_all else (0,)):
+		for hour in (range(0, 24) if do_all else [9]):
+			for minute in ((0, 30) if do_all else [30]):
 				tstr = '%s %02d:%02d' % (day, hour, minute)
 				t = str_to_em(tstr)
-				for froute in (routes.NON_SUBWAY_FUDGEROUTES if do_all else ('king','queen','dundas','dufferin')):
-					for direction in ((0, 1) if do_all else (0,)):
+				for froute in (routes.NON_SUBWAY_FUDGEROUTES if do_all else ['carlton']):
+					for direction in ((0, 1) if do_all else [0]):
 						print tstr, froute, direction, 'traffic:'
 						r = reports.calc_report_obj('traffic', froute, direction, c.MIN_DATAZOOM, t, log_=log)
 						if do_print:
