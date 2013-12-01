@@ -9,7 +9,7 @@ from misc import *
 
 LATSTEP = 0.00175; LNGSTEP = 0.0025
 
-if 1: # TODO: deal with this. 
+if 1: # TODO: deal with this.  make up mind.
 	fact = 2
 	LATSTEP /= fact
 	LNGSTEP /= fact
@@ -80,22 +80,22 @@ class GridSquare(object):
 # Identifies a point or a line segment within a list of polylines - in particular, within 
 # the SnapGraph.polylines field - via list indices.  
 # Whether this identifies a line segment or a point will depend on the context.  
-# If it addresses a line segment, then the startptidx field of this class will identify 
+# If it addresses a line segment, then the ptidx field of this class will identify 
 # the /first/ point of the line segment (as it appears in SnapGraph.polylines).  
-class Addr(object):
+class PtAddr(object):
 
-	def __init__(self, polylineidx_, startptidx_):
+	def __init__(self, polylineidx_, ptidx_):
 		self.polylineidx = polylineidx_
-		self.startptidx = startptidx_
+		self.ptidx = ptidx_
 
 	def __eq__(self, other):
-		return (self.polylineidx == other.polylineidx) and (self.startptidx == other.startptidx)
+		return (self.polylineidx == other.polylineidx) and (self.ptidx == other.ptidx)
 
 	def __hash__(self):
-		return self.polylineidx + self.startptidx
+		return self.polylineidx + self.ptidx
 
 	def __str__(self):
-		return 'Addr(%d,%d)' % (self.polylineidx, self.startptidx)
+		return 'PtAddr(%d,%d)' % (self.polylineidx, self.ptidx)
 
 	def __repr__(self):
 		return self.__str__()
@@ -105,10 +105,10 @@ class Addr(object):
 		if cmp1 != 0:
 			return cmp1
 		else:
-			return cmp(self.startptidx, other.startptidx)
+			return cmp(self.ptidx, other.ptidx)
 
 	def copy(self):
-		return Addr(self.polylineidx, self.startptidx)
+		return PtAddr(self.polylineidx, self.ptidx)
 
 # Used as a dict key in a few places, and in sets.  Relying on that default object hash() = id() behaviour. 
 class Vertex(object):
@@ -134,7 +134,7 @@ class Vertex(object):
 		return ptaddrs[0]
 
 	def get_ptidx(self, polylineidx_):
-		return self.get_ptaddr(polylineidx_).startptidx
+		return self.get_ptaddr(polylineidx_).ptidx
 
 	# Returns any polylines that are mentioned more than once in this vertex. 
 	def get_looping_polylineidxes(self):
@@ -197,27 +197,27 @@ class SnapGraph(object):
 				return self.find_shortest_path_by_vertexes(start_vertex, dest_vertex, out_visited_vertexes=out_visited_vertexes)
 
 	def find_nearest_vertex(self, snapresult_):
-		snapped_pt, addr, addrisline = snapresult_
+		snapped_pt, ptaddr, addrisline = snapresult_
 		if addrisline:
-			ptidxes_with_a_vert = self.polylineidx_to_ptidx_to_vertex.get(addr.polylineidx, {}).keys()
+			ptidxes_with_a_vert = self.polylineidx_to_ptidx_to_vertex.get(ptaddr.polylineidx, {}).keys()
 			if len(ptidxes_with_a_vert) == 0:
 				return None
 			else:
-				lo_vert_ptidx = max2(ptidx for ptidx in ptidxes_with_a_vert if ptidx <= addr.startptidx)
-				hi_vert_ptidx = min2(ptidx for ptidx in ptidxes_with_a_vert if ptidx > addr.startptidx)
+				lo_vert_ptidx = max2(ptidx for ptidx in ptidxes_with_a_vert if ptidx <= ptaddr.ptidx)
+				hi_vert_ptidx = min2(ptidx for ptidx in ptidxes_with_a_vert if ptidx > ptaddr.ptidx)
 				if lo_vert_ptidx is None:
-					return self.polylineidx_to_ptidx_to_vertex[addr.polylineidx][hi_vert_ptidx]
+					return self.polylineidx_to_ptidx_to_vertex[ptaddr.polylineidx][hi_vert_ptidx]
 				elif hi_vert_ptidx is None:
-					return self.polylineidx_to_ptidx_to_vertex[addr.polylineidx][lo_vert_ptidx]
+					return self.polylineidx_to_ptidx_to_vertex[ptaddr.polylineidx][lo_vert_ptidx]
 				else:
 					nearest_ptidx_with_a_vert = min((lo_vert_ptidx, hi_vert_ptidx), 
-							key=lambda ptidx: self.get_point(Addr(addr.polylineidx, ptidx)).dist_m(snapped_pt))
-					return self.polylineidx_to_ptidx_to_vertex[addr.polylineidx][nearest_ptidx_with_a_vert]
+							key=lambda ptidx: self.get_point(ptaddr(ptaddr.polylineidx, ptidx)).dist_m(snapped_pt))
+					return self.polylineidx_to_ptidx_to_vertex[ptaddr.polylineidx][nearest_ptidx_with_a_vert]
 		else:
-			vertexes_on_polyline = self.polylineidx_to_ptidx_to_vertex[addr.polylineidx].values()
+			vertexes_on_polyline = self.polylineidx_to_ptidx_to_vertex[ptaddr.polylineidx].values()
 			if len(vertexes_on_polyline) > 0:
 				return min(vertexes_on_polyline, \
-						key=lambda vert: self.get_dist(addr.polylineidx, addr.startptidx, vert.get_ptidx(addr.polylineidx)))
+						key=lambda vert: self.get_dist(ptaddr.polylineidx, ptaddr.ptidx, vert.get_ptidx(ptaddr.polylineidx)))
 			else:
 				return None
 
@@ -274,7 +274,7 @@ class SnapGraph(object):
 		self.polylineidx_to_ptidx_to_vertex = defaultdict(lambda: {})
 		for vertex in vertexes:
 			for ptaddr in vertex.ptaddrs:
-				self.polylineidx_to_ptidx_to_vertex[ptaddr.polylineidx][ptaddr.startptidx] = vertex
+				self.polylineidx_to_ptidx_to_vertex[ptaddr.polylineidx][ptaddr.ptidx] = vertex
 		self.polylineidx_to_ptidx_to_vertex = dict(self.polylineidx_to_ptidx_to_vertex)
 
 	def init_vertex_to_connectedvertex_n_dists(self):
@@ -332,7 +332,7 @@ class SnapGraph(object):
 	def get_addr_to_vertex(self, disttolerance_):
 		latlngid_to_ontop_latlngids = self.get_graph_latlngid_to_ontop_latlngids(disttolerance_)
 		latlngid_to_addr = self.get_latlngid_to_addr(latlngid_to_ontop_latlngids)
-		addr_to_vertex = defaultdict(lambda: Vertex(self))
+		ptaddr_to_vertex = defaultdict(lambda: Vertex(self))
 
 		# Iterating in a sorted order like this not because this sort has any 
 		# useful meaning in itself, but so that the Vertex objects are created in a 
@@ -342,25 +342,25 @@ class SnapGraph(object):
 			pt = self.get_point(latlngid_to_addr[latlngid__])
 			return pt.lat + pt.lng
 		for latlngid, ontop_latlngids in iteritemssorted(latlngid_to_ontop_latlngids, key=key):
-			addrs = set(latlngid_to_addr[ontop_latlngid] for ontop_latlngid in set([latlngid]) | ontop_latlngids)
-			for addr1, addr2 in combinations(addrs, 2):
-				vertex = addr_to_vertex[addr1]
-				vertex.ptaddrs.add(addr1)
-				vertex.ptaddrs.add(addr2)
-				addr_to_vertex[addr2] = vertex
+			ptaddrs = set(latlngid_to_addr[ontop_latlngid] for ontop_latlngid in set([latlngid]) | ontop_latlngids)
+			for ptaddr1, ptaddr2 in combinations(ptaddrs, 2):
+				vertex = ptaddr_to_vertex[ptaddr1]
+				vertex.ptaddrs.add(ptaddr1)
+				vertex.ptaddrs.add(ptaddr2)
+				ptaddr_to_vertex[ptaddr2] = vertex
 
-		for addr in addr_to_vertex.keys():
-			vertex = addr_to_vertex[addr]
+		for ptaddr in ptaddr_to_vertex.keys():
+			vertex = ptaddr_to_vertex[ptaddr]
 			if len(vertex.get_looping_polylineidxes()) > 0:
-				del addr_to_vertex[addr]
+				del ptaddr_to_vertex[ptaddr]
 
-		return dict(addr_to_vertex)
+		return dict(ptaddr_to_vertex)
 
 	def get_latlngid_to_addr(self, latlngid_to_ontop_latlngids_):
 		r = {}
 		for polylineidx, polyline in enumerate(self.polylines):
 			for ptidx, pt in enumerate(polyline):
-				r[id(pt)] = Addr(polylineidx, ptidx)
+				r[id(pt)] = PtAddr(polylineidx, ptidx)
 		return r
 
 	# Might modify self.polylines. 
@@ -391,8 +391,8 @@ class SnapGraph(object):
 				# The point of that last test (not being too close to either end of the lineseg) is because those cases will 
 				# be picked up by the point/point combos above.  Also, splitting a lineseg that close to one end would be ridiculous. 
 				#print '-------- adding pt/line  ', ptaddr, linesegaddr, pt
-				self.polylines[linesegaddr.polylineidx].insert(linesegaddr.startptidx+1, snapped_pt)
-				linesegaddr.startptidx += 1
+				self.polylines[linesegaddr.polylineidx].insert(linesegaddr.ptidx+1, snapped_pt)
+				linesegaddr.ptidx += 1
 				add(pt, snapped_pt)
 
 		for linesegaddr1, linesegaddr2 in self.get_addr_combos_near_each_other(True, True, disttolerance_):
@@ -402,13 +402,13 @@ class SnapGraph(object):
 			if intersection_pt is not None:
 				if all(pt.dist_m(intersection_pt) > disttolerance_ for pt in lineseg1.ptlist() + lineseg2.ptlist()):
 					#print '-------- adding line/line', linesegaddr1, linesegaddr2, intersection_pt
-					self.polylines[linesegaddr1.polylineidx].insert(linesegaddr1.startptidx+1, intersection_pt)
+					self.polylines[linesegaddr1.polylineidx].insert(linesegaddr1.ptidx+1, intersection_pt)
 					# Need to do this because we're building our maps based on object ID of the latlngs and that code 
 					# doesn't handle a single LatLng object being shared between two lines. 
 					intersection_pt_copy_for_line2 = intersection_pt.copy()
-					self.polylines[linesegaddr2.polylineidx].insert(linesegaddr2.startptidx+1, intersection_pt_copy_for_line2)
-					linesegaddr1.startptidx += 1
-					linesegaddr2.startptidx += 1
+					self.polylines[linesegaddr2.polylineidx].insert(linesegaddr2.ptidx+1, intersection_pt_copy_for_line2)
+					linesegaddr1.ptidx += 1
+					linesegaddr2.ptidx += 1
 					add(intersection_pt, intersection_pt_copy_for_line2)
 		#self.assert_latlngid_to_ontop_latlngids_is_sane(latlngid_to_ontop_latlngids)
 		return dict(latlngid_to_ontop_latlngids)
@@ -427,11 +427,11 @@ class SnapGraph(object):
 					assert latlngid_is_in_polylines(ontop_latlngid)
 
 	def init_gridsquare_to_linesegaddrs(self):
-		self.gridsquare_to_linesegaddrs = defaultdict(lambda: set()) # key: GridSquare.  value: set of Addr
+		self.gridsquare_to_linesegaddrs = defaultdict(lambda: set()) # key: GridSquare.  value: set of PtAddr
 		self.polylineidx_to_gridsquares = [set() for i in range(len(self.polylines))]
 		for polylineidx, polyline in enumerate(self.polylines):
 			for startptidx in range(0, len(polyline)-1):
-				linesegaddr = Addr(polylineidx, startptidx)
+				linesegaddr = PtAddr(polylineidx, startptidx)
 				for gridsquare in get_gridsquares_touched_by_lineseg(self.get_lineseg(linesegaddr)):
 					self.gridsquare_to_linesegaddrs[gridsquare].add(linesegaddr)
 					self.polylineidx_to_gridsquares[polylineidx].add(gridsquare)
@@ -439,16 +439,19 @@ class SnapGraph(object):
 
 	def get_lineseg(self, linesegaddr_):
 		polyline = self.polylines[linesegaddr_.polylineidx]
-		return geom.LineSeg(polyline[linesegaddr_.startptidx], polyline[linesegaddr_.startptidx+1])
+		return geom.LineSeg(polyline[linesegaddr_.ptidx], polyline[linesegaddr_.ptidx+1])
 
 	def get_point(self, linesegaddr_):
-		return self.polylines[linesegaddr_.polylineidx][linesegaddr_.startptidx]
+		return self.polylines[linesegaddr_.polylineidx][linesegaddr_.ptidx]
+
+	def multisnap(self, target_, searchradius_):
+		pass
 
 	# arg searchradius_ is in metres.  None means unlimited i.e. keep looking forever.  
 	# As long as this object contains some lines, something will be found and returned.  Probably quickly, too. 
 	# The word 'forever' is misleading. 
 	#
-	# returns None, or a tuple - (geom.LatLng, Addr, bool)
+	# returns None, or a tuple - (geom.LatLng, PtAddr, bool)
 	# if None: no line was found within the search radius.
 	# if tuple:
 	#	elem 0: snapped-to point.  geom.LatLng.
@@ -485,7 +488,7 @@ class SnapGraph(object):
 				if best_yet_snapresult[1] == 0:
 					reference_point_addr = best_yet_linesegaddr
 				else:
-					reference_point_addr = Addr(best_yet_linesegaddr.polylineidx, best_yet_linesegaddr.startptidx+1)
+					reference_point_addr = PtAddr(best_yet_linesegaddr.polylineidx, best_yet_linesegaddr.ptidx+1)
 				return (self.get_point(reference_point_addr).copy(), reference_point_addr, False)
 
 	def _snap_get_endgame_linesegaddrs(self, target_gridsquare_, search_radius_):
@@ -501,18 +504,18 @@ class SnapGraph(object):
 		return int(r)
 
 	def heading(self, linesegaddr_, referencing_lineseg_aot_point_):
-		assert isinstance(linesegaddr_, Addr)
+		assert isinstance(linesegaddr_, PtAddr)
 		# TODO: do something fancier on corners i.e. when referencing_lineseg_aot_point_ is False.
 		assert (0 <= linesegaddr_.polylineidx < len(self.polylines))
 		if referencing_lineseg_aot_point_:
-			assert 0 <= linesegaddr_.startptidx < len(self.polylines[linesegaddr_.polylineidx])-1
+			assert 0 <= linesegaddr_.ptidx < len(self.polylines[linesegaddr_.polylineidx])-1
 		else:
-			assert 0 <= linesegaddr_.startptidx < len(self.polylines[linesegaddr_.polylineidx])
-		startptidx = linesegaddr_.startptidx
-		if linesegaddr_.startptidx == len(self.polylines[linesegaddr_.polylineidx])-1:
+			assert 0 <= linesegaddr_.ptidx < len(self.polylines[linesegaddr_.polylineidx])
+		startptidx = linesegaddr_.ptidx
+		if linesegaddr_.ptidx == len(self.polylines[linesegaddr_.polylineidx])-1:
 			assert not referencing_lineseg_aot_point_
 			startptidx -= 1
-		linesegaddr = Addr(linesegaddr_.polylineidx, startptidx)
+		linesegaddr = PtAddr(linesegaddr_.polylineidx, startptidx)
 		lineseg = self.get_lineseg(linesegaddr)
 		return lineseg.start.heading(lineseg.end)
 
@@ -529,16 +532,16 @@ class SnapGraph(object):
 				for linesegaddr in self.gridsquare_to_linesegaddrs[gridsquare]:
 					yield linesegaddr
 
-	# If the consumer of this generator modifies the startptidx field of the 
+	# If the consumer of this generator modifies the ptidx field of the 
 	# yielded objects, that will be noticed by the generator and looping will be 
-	# affected.   This behaviour is only supported for startptidx (not 
+	# affected.   This behaviour is only supported for ptidx (not 
 	# polylineidx) because that's all I need right now. 
 	def get_addr_combos_near_each_other(self, linesforaddr1_, linesforaddr2_, dist_m_):
 		if dist_m_ is None: raise Exception()  # we work with sets.  can't handle infinite search radius. 
 		for addr1polylineidx in range(len(self.polylines)):
 			addr1ptidx = 0
 			while addr1ptidx < len(self.polylines[addr1polylineidx]) - (1 if linesforaddr1_ else 0):
-				addr1 = Addr(addr1polylineidx, addr1ptidx)
+				addr1 = PtAddr(addr1polylineidx, addr1ptidx)
 				if linesforaddr1_:
 					if linesforaddr2_:
 						addr2s = self.get_linesegaddrs_near_lineseg(addr1, dist_m_)
@@ -554,18 +557,18 @@ class SnapGraph(object):
 				while addr2i < len(addr2s):
 					addr2 = addr2s[addr2i]
 					if addr1.polylineidx < addr2.polylineidx:
-						if not(linesforaddr2_ and addr2.startptidx == len(self.polylines[addr2.polylineidx])-1):
+						if not(linesforaddr2_ and addr2.ptidx == len(self.polylines[addr2.polylineidx])-1):
 							yielded_addr2 = addr2.copy()
 							yield (addr1, yielded_addr2)
-							if addr1ptidx != addr1.startptidx:
-								assert addr1polylineidx == addr1.polylineidx and addr1ptidx == addr1.startptidx-1
-								addr1ptidx = addr1.startptidx
-								addr2s = get_adjusted_addrs_from_polyline_split(addr1.polylineidx, addr1.startptidx, addr2s)
-								self.adjust_addrs_from_polyline_split(addr1.polylineidx, addr1.startptidx)
-							if addr2.startptidx != yielded_addr2.startptidx:
-								assert addr2.polylineidx == yielded_addr2.polylineidx and addr2.startptidx == yielded_addr2.startptidx-1
-								addr2s = get_adjusted_addrs_from_polyline_split(yielded_addr2.polylineidx, yielded_addr2.startptidx, addr2s)
-								self.adjust_addrs_from_polyline_split(yielded_addr2.polylineidx, yielded_addr2.startptidx)
+							if addr1ptidx != addr1.ptidx:
+								assert addr1polylineidx == addr1.polylineidx and addr1ptidx == addr1.ptidx-1
+								addr1ptidx = addr1.ptidx
+								addr2s = get_adjusted_addrs_from_polyline_split(addr1.polylineidx, addr1.ptidx, addr2s)
+								self.adjust_addrs_from_polyline_split(addr1.polylineidx, addr1.ptidx)
+							if addr2.ptidx != yielded_addr2.ptidx:
+								assert addr2.polylineidx == yielded_addr2.polylineidx and addr2.ptidx == yielded_addr2.ptidx-1
+								addr2s = get_adjusted_addrs_from_polyline_split(yielded_addr2.polylineidx, yielded_addr2.ptidx, addr2s)
+								self.adjust_addrs_from_polyline_split(yielded_addr2.polylineidx, yielded_addr2.ptidx)
 								addr2i += 1
 					addr2i += 1
 				addr1ptidx += 1
@@ -588,10 +591,10 @@ class SnapGraph(object):
 	def get_ptaddrs_in_gridsquares(self, gridsquares_):
 		r = set()
 		for gridsquare in gridsquares_:
-			for addr in self.gridsquare_to_linesegaddrs.get(gridsquare, []):
-				r.add(addr)
-				if addr.startptidx == len(self.polylines[addr.polylineidx]) - 2:
-					r.add(Addr(addr.polylineidx, addr.startptidx+1))
+			for ptaddr in self.gridsquare_to_linesegaddrs.get(gridsquare, []):
+				r.add(ptaddr)
+				if ptaddr.ptidx == len(self.polylines[ptaddr.polylineidx]) - 2:
+					r.add(PtAddr(ptaddr.polylineidx, ptaddr.ptidx+1))
 		return r
 
 	def get_linesegaddrs_near_point(self, ptaddr_, searchradius_):
@@ -624,12 +627,12 @@ def get_adjusted_addrs_from_polyline_split(polylineidx_, newptidx_, addrs_):
 	inaddrs = (addrs_ if isinstance(addrs_, Sequence) else list(addrs_))
 	r = []
 	for addr in inaddrs:
-		if addr.polylineidx == polylineidx_ and addr.startptidx >= newptidx_:
-			r.append(Addr(addr.polylineidx, addr.startptidx+1))
+		if addr.polylineidx == polylineidx_ and addr.ptidx >= newptidx_:
+			r.append(PtAddr(addr.polylineidx, addr.ptidx+1))
 		else:
 			r.append(addr)
-	if Addr(polylineidx_, newptidx_-1) in addrs_:
-		r.append(Addr(polylineidx_, newptidx_))
+	if PtAddr(polylineidx_, newptidx_-1) in addrs_:
+		r.append(PtAddr(polylineidx_, newptidx_))
 	return (r if isinstance(addrs_, Sequence) else set(r))
 
 def get_gridsquares_touched_by_lineseg(lineseg_):
@@ -907,7 +910,7 @@ if __name__ == '__main__':
 	addrs = set()
 	for plineidx in range(3, -1, -1):
 		for startptidx in range(3, -1, -1):
-			addrs.add(Addr(plineidx, startptidx))
+			addrs.add(PtAddr(plineidx, startptidx))
 	print sorted(addrs)
 
 

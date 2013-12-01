@@ -431,7 +431,7 @@ class RouteInfo:
 		snap_result = self.snapgraph.snap(post_, {0:50, 1:300, 1.5:600, 2:2000}[tolerance_])
 		if snap_result is None:
 			return -1
-		direction = snap_result[1].polylineidx; routeptidx = snap_result[1].startptidx
+		direction = snap_result[1].polylineidx; routeptidx = snap_result[1].ptidx
 		r = self.datazoom_to_dir_to_routeptaddr_to_mofr[None][direction][routeptidx]
 		if snap_result[2]:
 			r += snap_result[0].dist_m(self.routepts(direction, None)[routeptidx])
