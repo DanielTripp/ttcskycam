@@ -8,6 +8,16 @@ from misc import *
 
 RADIUS_OF_EARTH = 6367.44465
 
+class LineSegSnapResult(object):
+
+	# "pals" is for "Percent Along Line Segment".  Between 0.0 and 1.0, inclusive. 
+	def __init__(self, latlng_, pals_, dist_):
+		assert isinstance(latlng_, LatLng) and isinstance(pals_, float) and isinstance(dist_, float)
+		assert 0.0 <= pals_ <= 1.0
+		self.latlng = latlng_
+		self.pals = pals_
+		self.dist = dist_
+
 class LatLng:
 
 	def __init__(self, lat_, lng_=None):
@@ -110,19 +120,16 @@ class LatLng:
 	def copy(self):
 		return LatLng(self.lat, self.lng)
 
-	# returns a tuple - (snapped point, 0|1|None, dist)
-	# elem 1: 0 if the first point of the line is the snapped-to point, 1 if the second, None if neither.
+	# returns a LineSegSnapResult.  Never None. 
 	def snap_to_lineseg(self, lineseg_):
 		assert isinstance(lineseg_, LineSeg)
-		if (angle(lineseg_.end, lineseg_.start, self) < math.pi/2) and (angle(lineseg_.start, lineseg_.end, self) < math.pi/2):
-			snappedpt = get_pass_point(lineseg_.start, lineseg_.end, self)
-			return (snappedpt, None, self.dist_m(snappedpt))
+		snappedpt, passratio = get_pass_point_and_ratio(lineseg_.start, lineseg_.end, self)
+		if 0.0 <= passratio <= 1.0:
+			return LineSegSnapResult(snappedpt, passratio, self.dist_m(snappedpt))
+		elif passratio < 0.0:
+			return LineSegSnapResult(lineseg_.start, 0.0, self.dist_m(lineseg_.start))
 		else:
-			dist0 = self.dist_m(lineseg_.start); dist1 = self.dist_m(lineseg_.end)
-			if dist0 < dist1:
-				return (lineseg_.start, 0, dist0)
-			else:
-				return (lineseg_.end, 1, dist1)
+			return LineSegSnapResult(lineseg_.end, 1.0, self.dist_m(lineseg_.end))
 
 	# returns (snapped_pt, dist_from_self_to_snapped_pt), or (None, None) if the snap fails. 
 	# Unlike snap_to_lineseg(), this only works for points that are 'inside' the 
@@ -144,7 +151,7 @@ class LatLng:
 		return (None, None)
 
 	def dist_to_lineseg(self, lineseg_):
-		return self.snap_to_lineseg(lineseg_)[2]
+		return self.snap_to_lineseg(lineseg_).dist
 
 	def is_close(self, other_, tolerance_=None):
 		if tolerance_ is None:
@@ -179,10 +186,13 @@ def passes(standpt_, forept_, post_, tolerance_=0):
 	return r
 
 def get_pass_point(standpt_, forept_, post_):
+	return get_pass_point_and_ratio(standpt_, forept_, post_)[0]
+
+def get_pass_point_and_ratio(standpt_, forept_, post_):
 	assert isinstance(standpt_, LatLng) and isinstance(forept_, LatLng) and isinstance(post_, LatLng)
 	ratio = get_pass_ratio(standpt_, forept_, post_)
-	r = standpt_.add(forept_.subtract(standpt_).scale(ratio))
-	return r
+	pt = standpt_.add(forept_.subtract(standpt_).scale(ratio))
+	return (pt, ratio)
 
 def get_pass_ratio(standpt_, forept_, post_):
 	assert isinstance(standpt_, LatLng) and isinstance(forept_, LatLng) and isinstance(post_, LatLng)

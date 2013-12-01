@@ -159,6 +159,32 @@ class Vertex(object):
 	def __repr__(self):
 		return self.__str__()
 
+class PosAddr(object):
+
+	def __init__(self, linesegaddr_, pals_):
+		assert isinstance(linesegaddr_, PtAddr) and isinstance(pals_, float)
+		assert 0.0 <= pals_ <= 1.0
+		self.linesegaddr = linesegaddr_
+		self.pals = pals_
+
+	def __str__(self):
+		return 'PosAddr(%s,%.2f)' % (self.linesegaddr, self.pals)
+
+	def __repr__(self):
+		return self.__str__()
+
+class SnapResult(object):
+	
+	def __init__(self, posaddr_, latlng_):
+		self.posaddr = posaddr_
+		self.latlng = latlng_
+
+	def __str__(self):
+		return 'SnapResult(%s,%s)' % (self.posaddr, self.latlng)
+
+	def __repr__(self):
+		return self.__repr__()
+
 
 # This can be pickled or memcached. 
 class SnapGraph(object):
@@ -197,8 +223,9 @@ class SnapGraph(object):
 				return self.find_shortest_path_by_vertexes(start_vertex, dest_vertex, out_visited_vertexes=out_visited_vertexes)
 
 	def find_nearest_vertex(self, snapresult_):
-		snapped_pt, ptaddr, addrisline = snapresult_
-		if addrisline:
+		assert isinstance(snapresult_, SnapResult)
+		ptaddr = snapresult_.posaddr.linesegaddr
+		if snapresult_.posaddr.pals not in [0.0, 1.0]:
 			ptidxes_with_a_vert = self.polylineidx_to_ptidx_to_vertex.get(ptaddr.polylineidx, {}).keys()
 			if len(ptidxes_with_a_vert) == 0:
 				return None
@@ -211,9 +238,11 @@ class SnapGraph(object):
 					return self.polylineidx_to_ptidx_to_vertex[ptaddr.polylineidx][lo_vert_ptidx]
 				else:
 					nearest_ptidx_with_a_vert = min((lo_vert_ptidx, hi_vert_ptidx), 
-							key=lambda ptidx: self.get_point(ptaddr(ptaddr.polylineidx, ptidx)).dist_m(snapped_pt))
+							key=lambda ptidx: self.get_point(ptaddr(ptaddr.polylineidx, ptidx)).dist_m(snapresult_.latlng))
 					return self.polylineidx_to_ptidx_to_vertex[ptaddr.polylineidx][nearest_ptidx_with_a_vert]
 		else:
+			if snapresult_.posaddr.pals == 1.0:
+				ptaddr.ptidx += 1
 			vertexes_on_polyline = self.polylineidx_to_ptidx_to_vertex[ptaddr.polylineidx].values()
 			if len(vertexes_on_polyline) > 0:
 				return min(vertexes_on_polyline, \
@@ -451,16 +480,7 @@ class SnapGraph(object):
 	# As long as this object contains some lines, something will be found and returned.  Probably quickly, too. 
 	# The word 'forever' is misleading. 
 	#
-	# returns None, or a tuple - (geom.LatLng, PtAddr, bool)
-	# if None: no line was found within the search radius.
-	# if tuple:
-	#	elem 0: snapped-to point.  geom.LatLng.
-	# 	elem 1: reference line segment address (or point address) that the snapped-to point is on.
-	#	elem 2: 'snapped-to point is along a line' flag.
-	#			if True: then interpret elem 1 as the address of a line segment (not a point).  The snapped-to point
-	# 				(i.e. elem 0) is somewhere along that line segment.
-	# 			if False: then intepret elem 1 as the address of a point (not a line) - and the snapped-to point (elem 0)
-	# 				is exactly the point referenced by elem 1.
+	# returns: a SnapResult, or None if no lines were found within the search radius.
 	def snap(self, target_, searchradius_):
 		assert isinstance(target_, geom.LatLng) and (isinstance(searchradius_, int) or searchradius_ is None)
 		# Guarding against changes in LATSTEP/LNGSTEP while a SnapGraph object was sitting in memcached:
@@ -472,24 +492,26 @@ class SnapGraph(object):
 			return None
 		a_nearby_lineseg = self.get_lineseg(a_nearby_linesegaddr)
 		endgame_search_radius = self._snap_get_endgame_search_radius(a_nearby_lineseg, target_gridsquare)
-		best_yet_snapresult = None; best_yet_linesegaddr = None
+		best_yet_lssr = None; best_yet_linesegaddr = None  # "lssr" stands for LineSegSnapResult. 
 		for linesegaddr in self._snap_get_endgame_linesegaddrs(target_gridsquare, endgame_search_radius):
 			lineseg = self.get_lineseg(linesegaddr)
-			cur_snapresult = target_.snap_to_lineseg(lineseg)
-			if best_yet_snapresult==None or cur_snapresult[2]<best_yet_snapresult[2]:
-				best_yet_snapresult = cur_snapresult
+			cur_lssr = target_.snap_to_lineseg(lineseg)
+			if best_yet_lssr==None or cur_lssr.dist < best_yet_lssr.dist:
+				best_yet_lssr = cur_lssr
 				best_yet_linesegaddr = linesegaddr
-		if (best_yet_snapresult == None) or (searchradius_ is not None and best_yet_snapresult[2] > searchradius_):
+		if (best_yet_lssr == None) or (searchradius_ is not None and best_yet_lssr.dist > searchradius_):
 			return None
 		else:
-			if best_yet_snapresult[1] == None:
-				return (best_yet_snapresult[0], best_yet_linesegaddr, True)
-			else:
-				if best_yet_snapresult[1] == 0:
+			if best_yet_lssr.pals in [0.0, 1.0]:
+				if best_yet_lssr.pals == 0.0:
 					reference_point_addr = best_yet_linesegaddr
 				else:
+					# I don't think that separating this case is very important.  
+					# We could return ptidx and pals=1.0 rather than ptidx+1 and pals=0.0.
 					reference_point_addr = PtAddr(best_yet_linesegaddr.polylineidx, best_yet_linesegaddr.ptidx+1)
-				return (self.get_point(reference_point_addr).copy(), reference_point_addr, False)
+				return SnapResult(PosAddr(reference_point_addr,0.0), self.get_point(reference_point_addr).copy())
+			else:
+				return SnapResult(PosAddr(best_yet_linesegaddr,best_yet_lssr.pals), best_yet_lssr.latlng)
 
 	def _snap_get_endgame_linesegaddrs(self, target_gridsquare_, search_radius_):
 		assert isinstance(target_gridsquare_, GridSquare)
@@ -500,7 +522,8 @@ class SnapGraph(object):
 
 	def _snap_get_endgame_search_radius(self, a_nearby_lineseg_, target_gridsquare_):
 		assert isinstance(a_nearby_lineseg_, geom.LineSeg) and isinstance(target_gridsquare_, GridSquare)
-		r = max(snap_result[2] for snap_result in [latlng.snap_to_lineseg(a_nearby_lineseg_) for latlng in target_gridsquare_.corner_latlngs()])
+		corners = target_gridsquare_.corner_latlngs()
+		r = max(sr.dist for sr in [latlng.snap_to_lineseg(a_nearby_lineseg_) for latlng in corners])
 		return int(r)
 
 	def heading(self, linesegaddr_, referencing_lineseg_aot_point_):

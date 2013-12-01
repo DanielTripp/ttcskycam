@@ -3,7 +3,6 @@
 import sys, json, os.path, bisect, xml.dom, xml.dom.minidom
 import vinfo, geom, mc, c, snapgraph, picklestore, util
 from misc import *
-#from mrucache import *
 from lru_cache import lru_cache
 
 # To add a new route: 
@@ -431,18 +430,20 @@ class RouteInfo:
 		snap_result = self.snapgraph.snap(post_, {0:50, 1:300, 1.5:600, 2:2000}[tolerance_])
 		if snap_result is None:
 			return -1
-		direction = snap_result[1].polylineidx; routeptidx = snap_result[1].ptidx
+		direction = snap_result.posaddr.linesegaddr.polylineidx
+		routeptidx = snap_result.posaddr.linesegaddr.ptidx
+		if snap_result.posaddr.pals == 1.0:
+			routeptidx += 1
 		r = self.datazoom_to_dir_to_routeptaddr_to_mofr[None][direction][routeptidx]
-		if snap_result[2]:
-			r += snap_result[0].dist_m(self.routepts(direction, None)[routeptidx])
+		if snap_result.posaddr.pals not in [0.0, 1.0]:
+			r += snap_result.latlng.dist_m(self.routepts(direction, None)[routeptidx])
 		r = int(r)
-		#g_latlon_to_mofr_mrucache[mrucache_key] = r
 		return r
 
 	def snaptest(self, pt_, tolerance_=0):
 		assert isinstance(pt_, geom.LatLng) and (tolerance_ in (0, 1, 2))
 		snap_result = self.snapgraph.snap(pt_, {0:50, 1:300, 2:750}[tolerance_])
-		snapped_pt = (snap_result[0] if snap_result is not None else None)
+		snapped_pt = (snap_result.latlng if snap_result is not None else None)
 		mofr = self.latlon_to_mofr(pt_, tolerance_)
 		resnapped_pts = [self.mofr_to_latlon(mofr, 0), self.mofr_to_latlon(mofr, 1)]
 		return (snapped_pt, mofr, resnapped_pts)
