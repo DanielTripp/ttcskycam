@@ -208,8 +208,12 @@ function get_latlngs_from_string(str_) {
 			try {
 				raw_polylines = $.parseJSON(str_);
 			} catch(e) {
-				str_ = str_.trim();
-				if(str_.charAt(str_.length-1) === ',') {
+				str_ = str_.replace(/\(/g, '[');
+				str_ = str_.replace(/\)/g, ']');
+				while(str_.charAt(0) !== '[') { // remove leading non-JSON: 
+					str_ = str_.substring(1, str_.length);
+				}
+				while(str_.charAt(str_.length-1) !== ']') { // remove trailing non-JSON: 
 					str_ = str_.substring(0, str_.length-1);
 				}
 				raw_polylines = $.parseJSON('['+str_+']');
