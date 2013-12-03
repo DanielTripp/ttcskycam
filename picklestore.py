@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-import sys, os, pickle, threading, functools
+import sys, os, cPickle, threading, functools
 from misc import *
 
 LOG = os.path.exists('LOG_PICKLESTORE')
@@ -27,14 +27,14 @@ def decorate(user_function_):
 				if os.path.exists(full_filename):
 					if LOG: printerr('picklestore: %s: reading pickled file.' % filename)
 					with open(full_filename) as fin:
-						r = pickle.load(fin)
+						r = cPickle.load(fin)
 				else:
 					if LOG: printerr('picklestore: %s: calling user function.' % filename)
 					r = user_function_(*args, **kwargs)
 					if LOG: printerr('picklestore: %s: done calling user function.' % filename)
 					if LOG: printerr('picklestore: %s: dumping to pickle file.' % filename)
 					with open(full_filename, 'w') as fout:
-						pickle.dump(r, fout)
+						cPickle.dump(r, fout, cPickle.HIGHEST_PROTOCOL)
 					if LOG: printerr('picklestore: %s: done dumping to pickle file.' % filename)
 				g_filename_to_object[filename] = r
 			return r
