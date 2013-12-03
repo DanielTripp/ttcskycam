@@ -473,8 +473,27 @@ class SnapGraph(object):
 	def get_point(self, linesegaddr_):
 		return self.polylines[linesegaddr_.polylineidx][linesegaddr_.ptidx]
 
+	# returns: list of SnapResult.
 	def multisnap(self, target_, searchradius_):
-		pass
+		assert searchradius_ is not None
+		linesegaddr_to_lssr = {}
+		for linesegaddr in self.get_nearby_linesegaddrs(GridSquare(target_), searchradius_):
+			lineseg = self.get_lineseg(linesegaddr)
+			lssr = target_.snap_to_lineseg(lineseg)
+			if lssr.dist <= searchradius_:
+				linesegaddr_to_lssr[linesegaddr] = lssr
+		plineidxes = set(addr.polylineidx for addr in linesegaddr_to_lssr.keys())
+		r = []
+		for plineidx in plineidxes:
+			plines_linesegaddr_to_lssr = dict((k, v) for k, v in linesegaddr_to_lssr.iteritems() if k.polylineidx == plineidx)
+			plines_linesegaddrs = plines_linesegaddr_to_lssr.keys()
+			plines_lssr = plines_linesegaddr_to_lssr.values()
+			relevant_idxes = get_local_minima_indexes(plines_lssr, lambda lssr: lssr.dist)
+			for idx in relevant_idxes:
+				linesegaddr = plines_linesegaddrs[idx]
+				lssr = plines_lssr[idx]
+				r.append(SnapResult(PosAddr(linesegaddr, lssr.pals), lssr.latlng))
+		return r
 
 	# arg searchradius_ is in metres.  None means unlimited i.e. keep looking forever.  
 	# As long as this object contains some lines, something will be found and returned.  Probably quickly, too. 

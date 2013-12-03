@@ -715,6 +715,37 @@ def bisect_left_2(a_, x_, key=None, reverse=False):
 def is_close(a_, b_, tolerance_):
 	return abs(a_ - b_) <= tolerance_
 
+def sublist(list_, indexes_):
+	return [e for i, e in enumerate(list_) if i in indexes_]
+
+def get_local_minima_indexes(list_, key_):
+	assert isinstance(list_, Sequence) and callable(key_)
+	if len(list_) == 0:
+		return []
+	elif len(list_) == 1:
+		return [0]
+	else:
+		keys = [key_(e) for e in list_]
+		r = []
+		for i in range(len(list_)):
+			key = keys[i]
+			if i == 0:
+				is_minima = (keys[0] <= keys[1])
+			elif i == len(list_)-1:
+				is_minima = (keys[-1] < keys[-2])
+			else:
+				is_minima = (keys[i] < keys[i-1]) and (keys[i] <= keys[i+1])
+			if is_minima:
+				r.append(i)
+		return r
+
+def permutation_2_indexes(list_):
+	assert isinstance(list_, Sequence)
+	for i in range(len(list_)):
+		for j in range(len(list_)):
+			if i != j:
+				yield (i, j)
+
 # Thanks to http://stackoverflow.com/questions/8977612/compose-function-and-functional-module 
 #def compose(*funcs, unpack=False):
 #	if not callable(func_1):
