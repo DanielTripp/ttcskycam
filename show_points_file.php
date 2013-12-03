@@ -210,12 +210,13 @@ function get_latlngs_from_string(str_) {
 			} catch(e) {
 				str_ = str_.replace(/\(/g, '[');
 				str_ = str_.replace(/\)/g, ']');
-				while(str_.charAt(0) !== '[') { // remove leading non-JSON: 
+				while(str_.length > 0 && str_.match(/^-?\d\d\.\d\d\d+/) == null && str_.charAt(0) !== '[') { // remove leading non-JSON: 
 					str_ = str_.substring(1, str_.length);
 				}
-				while(str_.charAt(str_.length-1) !== ']') { // remove trailing non-JSON: 
+				while(str_.length > 0 && str_.match(/-?\d\d\.\d\d\d+$/) == null && str_.charAt(str_.length-1) !== ']') { // remove trailing non-JSON: 
 					str_ = str_.substring(0, str_.length-1);
 				}
+				console.log(str_); // tdr 
 				raw_polylines = $.parseJSON('['+str_+']');
 			}
 			if(typeof raw_polylines[0][0] === 'number') { // file contains a polyline, not a list of polylines? 
