@@ -205,24 +205,27 @@ function get_latlngs_from_string(str_) {
 	if(str_ != null) {
 		var raw_polylines = [];
 		try {
+			str_ = str_.replace(/\(/g, '[');
+			str_ = str_.replace(/\)/g, ']');
 			try {
 				raw_polylines = $.parseJSON(str_);
+				console.log('Slightly massaged JSON parse succeeded.');
 			} catch(e) {
-				str_ = str_.replace(/\(/g, '[');
-				str_ = str_.replace(/\)/g, ']');
-				while(str_.length > 0 && str_.match(/^-?\d\d\.\d\d\d+/) == null && str_.charAt(0) !== '[') { // remove leading non-JSON: 
+				while(str_.length > 0 && str_.match(/^-79\.\d\d\d+/) == null && str_.charAt(0) !== '[') { // remove leading non-JSON: 
 					str_ = str_.substring(1, str_.length);
 				}
-				while(str_.length > 0 && str_.match(/-?\d\d\.\d\d\d+$/) == null && str_.charAt(str_.length-1) !== ']') { // remove trailing non-JSON: 
+				while(str_.length > 0 && str_.match(/43\.\d\d\d+$/) == null && str_.charAt(str_.length-1) !== ']') { // remove trailing non-JSON: 
 					str_ = str_.substring(0, str_.length-1);
 				}
-				console.log(str_); // tdr 
+				console.log(sprintf('Trying massaged JSON: "%s"', str_));
 				raw_polylines = $.parseJSON('['+str_+']');
+				console.log('JSON parse succeeded.');
 			}
 			if(typeof raw_polylines[0][0] === 'number') { // file contains a polyline, not a list of polylines? 
 				raw_polylines = [raw_polylines]; // now it's a list of polylines. 
 			}
 		} catch(e) {
+			console.log('JSON parse failed.');
 			// So it wasn't JSON.    Maybe it's XML: 
 			try {
 				var polyline = [];
