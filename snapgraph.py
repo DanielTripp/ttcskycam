@@ -238,7 +238,7 @@ class SnapGraph(object):
 					return self.polylineidx_to_ptidx_to_vertex[ptaddr.polylineidx][lo_vert_ptidx]
 				else:
 					nearest_ptidx_with_a_vert = min((lo_vert_ptidx, hi_vert_ptidx), 
-							key=lambda ptidx: self.get_point(ptaddr(ptaddr.polylineidx, ptidx)).dist_m(snapresult_.latlng))
+							key=lambda ptidx: self.get_point(PtAddr(ptaddr.polylineidx, ptidx)).dist_m(snapresult_.latlng))
 					return self.polylineidx_to_ptidx_to_vertex[ptaddr.polylineidx][nearest_ptidx_with_a_vert]
 		else:
 			if snapresult_.posaddr.pals == 1.0:
