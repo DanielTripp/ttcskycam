@@ -164,10 +164,17 @@ class PosAddr(object):
 	def __init__(self, linesegaddr_, pals_):
 		assert isinstance(linesegaddr_, PtAddr) and isinstance(pals_, float)
 		assert 0.0 <= pals_ <= 1.0
-		self.linesegaddr = linesegaddr_
-		self.pals = pals_
+		if pals_ == 1.0: # Normalizing so that self.pals will be between 0.0 and 1.0 inclusive / exclusive.  
+			# Saves us from writing code to that effect elsewhere. 
+			self.linesegaddr = PtAddr(linesegaddr_.polylineidx, linesegaddr_.ptidx+1)
+			self.pals = 0.0
+		else:
+			self.linesegaddr = linesegaddr_
+			self.pals = pals_
+		assert 0.0 <= self.pals < 1.0
 
 	def __str__(self):
+		assert 0.0 <= self.pals < 1.0
 		return 'PosAddr(%s,%.2f)' % (self.linesegaddr, self.pals)
 
 	def __repr__(self):
@@ -225,7 +232,14 @@ class SnapGraph(object):
 	def find_nearest_vertex(self, snapresult_):
 		assert isinstance(snapresult_, SnapResult)
 		ptaddr = snapresult_.posaddr.linesegaddr
-		if snapresult_.posaddr.pals not in [0.0, 1.0]:
+		if snapresult_.posaddr.pals == 0.0:
+			vertexes_on_polyline = self.polylineidx_to_ptidx_to_vertex[ptaddr.polylineidx].values()
+			if len(vertexes_on_polyline) > 0:
+				return min(vertexes_on_polyline, \
+						key=lambda vert: self.get_dist(ptaddr.polylineidx, ptaddr.ptidx, vert.get_ptidx(ptaddr.polylineidx)))
+			else:
+				return None
+		else:
 			ptidxes_with_a_vert = self.polylineidx_to_ptidx_to_vertex.get(ptaddr.polylineidx, {}).keys()
 			if len(ptidxes_with_a_vert) == 0:
 				return None
@@ -240,15 +254,6 @@ class SnapGraph(object):
 					nearest_ptidx_with_a_vert = min((lo_vert_ptidx, hi_vert_ptidx), 
 							key=lambda ptidx: self.get_point(PtAddr(ptaddr.polylineidx, ptidx)).dist_m(snapresult_.latlng))
 					return self.polylineidx_to_ptidx_to_vertex[ptaddr.polylineidx][nearest_ptidx_with_a_vert]
-		else:
-			if snapresult_.posaddr.pals == 1.0:
-				ptaddr.ptidx += 1
-			vertexes_on_polyline = self.polylineidx_to_ptidx_to_vertex[ptaddr.polylineidx].values()
-			if len(vertexes_on_polyline) > 0:
-				return min(vertexes_on_polyline, \
-						key=lambda vert: self.get_dist(ptaddr.polylineidx, ptaddr.ptidx, vert.get_ptidx(ptaddr.polylineidx)))
-			else:
-				return None
 
 	# Thanks to http://en.wikipedia.org/wiki/Dijkstra's_algorithm 
 	def find_shortest_path_by_vertexes(self, srcvertex_, destvertex_, out_visited_vertexes=None):
@@ -521,16 +526,7 @@ class SnapGraph(object):
 		if (best_yet_lssr == None) or (searchradius_ is not None and best_yet_lssr.dist > searchradius_):
 			return None
 		else:
-			if best_yet_lssr.pals in [0.0, 1.0]:
-				if best_yet_lssr.pals == 0.0:
-					reference_point_addr = best_yet_linesegaddr
-				else:
-					# I don't think that separating this case is very important.  
-					# We could return ptidx and pals=1.0 rather than ptidx+1 and pals=0.0.
-					reference_point_addr = PtAddr(best_yet_linesegaddr.polylineidx, best_yet_linesegaddr.ptidx+1)
-				return SnapResult(PosAddr(reference_point_addr,0.0), self.get_point(reference_point_addr).copy())
-			else:
-				return SnapResult(PosAddr(best_yet_linesegaddr,best_yet_lssr.pals), best_yet_lssr.latlng)
+			return SnapResult(PosAddr(best_yet_linesegaddr,best_yet_lssr.pals), best_yet_lssr.latlng)
 
 	def _snap_get_endgame_linesegaddrs(self, target_gridsquare_, search_radius_):
 		assert isinstance(target_gridsquare_, GridSquare)
