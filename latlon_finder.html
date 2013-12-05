@@ -33,6 +33,7 @@ function initialize() {
 	google.maps.event.addListener(g_marker, 'drag', on_drag);
 
 	google.maps.event.addListener(g_map, 'zoom_changed', on_zoom_changed);
+	google.maps.event.addListener(g_map, 'bounds_changed', on_bounds_changed);
 
 	on_zoom_changed();
 	show_latlng_text();
@@ -50,6 +51,16 @@ function initialize() {
 
 function on_zoom_changed() {
 	set_contents('p_zoom', "Zoom: "+(g_map.getZoom())); 
+}
+
+function on_bounds_changed() {
+	var ne = g_map.getBounds().getNorthEast();
+	var n = ne.lat(), e = ne.lng();
+	var sw = g_map.getBounds().getSouthWest();
+	var s = sw.lat(), w = sw.lng();
+	set_contents('p_bounds', sprintf(
+			"Bounds:&nbsp;&nbsp;&nbsp;&nbsp;pt.is_within_box(geom.LatLng(%.8f,%.8f), geom.LatLng(%.8f,%.8f))", 
+			s, w, n, e)); 
 }
 
 function on_drag() {
@@ -110,6 +121,7 @@ function pan_to_marker_maybe() {
 		<div id="map_canvas" style="width:80%; height:100%"></div>
 		<p id="p_zoom"/>
 		<p id="p_latlng"/>
+		<p id="p_bounds"/>
 		<p id="p_used_geocoder">...</p>
 		<form name="form1">
 			<input type="text" size="60" name="search_textfield" id="search_textfield" />
