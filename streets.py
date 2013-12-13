@@ -73,7 +73,7 @@ def get_simplified_polyline_via_rdp_algo(pline_, epsilon_):
 
 @picklestore.decorate
 def get_polylines_from_shapefile():
-	streetname_to_polylines = get_streetname_to_polylines_from_shapefile()
+	streetname_to_polylines = get_streetname_to_polylines_from_shapefile_directly()
 	for plines in streetname_to_polylines.itervalues():
 		join_connected_plines(plines)
 	return sum(streetname_to_polylines.itervalues(), [])
@@ -93,7 +93,7 @@ def join_connected_plines(plines_):
 			break
 
 @picklestore.decorate
-def get_streetname_to_polylines_from_shapefile():
+def get_streetname_to_polylines_from_shapefile_directly():
 	street_fcode_descs = ['Access Road', 'Busway', 'Collector', 'Collector Ramp', 'Expressway', 'Expressway Ramp', 'Local', 'Major Arterial', 'Major Arterial Ramp', 'Minor Arterial', 'Minor Arterial Ramp', 'Pending', 'Other', 'Other Ramp']
 	sf = shapefile.Reader('toronto_street_map/centreline_wgs84/CENTRELINE_WGS84')
 	fields = [x for x in sf.fields if x[0] != 'DeletionFlag']
