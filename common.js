@@ -277,8 +277,8 @@ function callpy_url(module_and_funcname_, func_args_) {
 	return "callpy.wsgi?"+paramstr;
 }
 
-function toJsonString(obj_) {
-	return window.JSON.stringify(obj_);
+function toJsonString(obj_, indent_) {
+	return window.JSON.stringify(obj_, undefined, (indent_ ? 2 : 0));
 }
 
 function cgi_url(cgi_path_, func_args_) {
@@ -451,31 +451,47 @@ function add_delayed_event_listener(listenee_, eventname_, real_listener_func_, 
 	google.maps.event.addListener(listenee_, eventname_, delaying_listener);
 }
 
-var g_hover_listener_mousein_listenee_objectid_to_closeable = new buckets.Dictionary();
+var g_hover_listener_listenee_objectid_to_mapobjects = new buckets.Dictionary();
 
-// listener_func_ should return something that we can all close() on. 
+// listener_func_ can return something that we can all close() or setMap(null) on, or an array of same. 
 // delay_millis_ - we will use this for the delay in both calling listener_func_, and calling close() on the
 // 		object that it returns.
 function add_hover_listener(listenee_, listener_func_, delay_millis_) {
-	google.maps.event.addListener(listenee_, 'mouseover', function() { 
-		g_hover_listener_mousein_listenee_objectid_to_closeable.set(object_id(listenee_), null);
+	google.maps.event.addListener(listenee_, 'mouseover', function(mouseevent__) { 
+		hover_listener_close_objects(listenee_);
+		g_hover_listener_listenee_objectid_to_mapobjects.set(object_id(listenee_), null);
 		setTimeout(function() {
-			if(g_hover_listener_mousein_listenee_objectid_to_closeable.containsKey(object_id(listenee_))) {
-				var closeable = listener_func_();
-				g_hover_listener_mousein_listenee_objectid_to_closeable.set(object_id(listenee_), closeable);
+			if(g_hover_listener_listenee_objectid_to_mapobjects.containsKey(object_id(listenee_))) {
+				var mapobject_or_mapobjects = listener_func_(mouseevent__.latLng);
+				if(mapobject_or_mapobjects != null) {
+					var mapobjects = [];
+					if(mapobject_or_mapobjects.close != undefined || mapobject_or_mapobjects.setMap != undefined) {
+						mapobjects.push(mapobject_or_mapobjects);
+					} else {
+						mapobjects = mapobject_or_mapobjects;
+					}
+					g_hover_listener_listenee_objectid_to_mapobjects.set(object_id(listenee_), mapobjects);
+				}
 			}
 		}, delay_millis_);
 	});
 	google.maps.event.addListener(listenee_, 'mouseout', function() { 
-		var closeable = g_hover_listener_mousein_listenee_objectid_to_closeable.get(object_id(listenee_));
-		g_hover_listener_mousein_listenee_objectid_to_closeable.remove(object_id(listenee_));
-		var close_it = function() {
-			if(closeable != null) {
-				closeable.close();
-			}
-		};
-		setTimeout(close_it, delay_millis_);
+		setTimeout(function() { hover_listener_close_objects(listenee_); }, delay_millis_);
 	});
+}
+
+function hover_listener_close_objects(listenee_) {
+	var mapobjects = g_hover_listener_listenee_objectid_to_mapobjects.get(object_id(listenee_));
+	g_hover_listener_listenee_objectid_to_mapobjects.remove(object_id(listenee_));
+	if(mapobjects != null) {
+		mapobjects.forEach(function(mapobject) {
+			if(mapobject.close != undefined) {
+				mapobject.close();
+			} else {
+				mapobject.setMap(null);
+			}
+		});
+	}
 }
 
 var g_next_objid = 1;
