@@ -2,9 +2,7 @@
 
 from collections import defaultdict, Sequence
 from itertools import *
-import pprint
-import math
-import geom
+import pprint, math, geom, bisect
 from misc import *
 
 LATSTEP = 0.00175; LNGSTEP = 0.0025
@@ -198,6 +196,10 @@ class Path(object):
 				assert False
 		return r
 
+	def __str__(self):
+		return self.pathsteps.__str__()
+
+
 # This can be pickled or memcached. 
 class SnapGraph(object):
 
@@ -232,14 +234,32 @@ class SnapGraph(object):
 				posaddr_to_bounding_vertexes[posaddr] = self.get_bounding_vertexes(posaddr)
 			dists_n_paths = []
 			for start_posaddr, dest_posaddr in product(start_posaddrs, dest_posaddrs):
+				# Multiplying these by 3 because otherwise some strange choices will be made for shortest path 
+				# when going around corners.  I don't know how to explain this in comments, without pictures. 
+				# Anwyay I got the 3 by trial and error. 
+				start_latlng_to_posaddr_dist = self.get_latlng(start_posaddr).dist_m(startlatlng_)*3
+				dest_latlng_to_posaddr_dist = self.get_latlng(dest_posaddr).dist_m(destlatlng_)*3
 				for start_vertex in posaddr_to_bounding_vertexes[start_posaddr]:
 					for dest_vertex in posaddr_to_bounding_vertexes[dest_posaddr]:
 						dist, vertex_path = self.find_path_by_vertexes(start_vertex, dest_vertex, out_visited_vertexes)
 						if dist is not None:
+							dist += start_latlng_to_posaddr_dist + dest_latlng_to_posaddr_dist
+							dist += self.get_latlng(start_posaddr).dist_m(vertex_path[0].pos())
+							dist += self.get_latlng(dest_posaddr).dist_m(vertex_path[-1].pos())
 							path = Path([start_posaddr] + vertex_path + [dest_posaddr], self)
 							dists_n_paths.append((dist, path))
+				if (start_posaddr.linesegaddr.polylineidx == dest_posaddr.linesegaddr.polylineidx) \
+						and self.do_posaddrs_have_no_vertexes_between_them(start_posaddr, dest_posaddr):
+					dist = self.get_dist_between_posaddrs(start_posaddr, dest_posaddr)
+					dist += start_latlng_to_posaddr_dist + dest_latlng_to_posaddr_dist
+					path = Path([start_posaddr, dest_posaddr], self)
+					dists_n_paths.append((dist, path))
 			dists_n_paths.sort(key=lambda e: e[0])
 			return dists_n_paths
+
+	def do_posaddrs_have_no_vertexes_between_them(self, posaddr1_, posaddr2_):
+		assert posaddr1_.linesegaddr.polylineidx == posaddr2_.linesegaddr.polylineidx
+		return (self.get_bounding_vertexes(posaddr1_) == self.get_bounding_vertexes(posaddr2_))
 
 	# return a list of Vertex, length 0, 1, or 2.
 	def get_bounding_vertexes(self, posaddr_):
@@ -249,7 +269,7 @@ class SnapGraph(object):
 			vertexes_on_polyline = self.polylineidx_to_ptidx_to_vertex[ptaddr.polylineidx].values()
 			if len(vertexes_on_polyline) > 0:
 				vert = min(vertexes_on_polyline, \
-						key=lambda vert: self.get_dist(ptaddr.polylineidx, ptaddr.ptidx, vert.get_ptidx(ptaddr.polylineidx)))
+						key=lambda vert: self.get_dist_between_points(ptaddr.polylineidx, ptaddr.ptidx, vert.get_ptidx(ptaddr.polylineidx)))
 				return [vert]
 			else:
 				return []
@@ -273,6 +293,11 @@ class SnapGraph(object):
 			pt1 = self.get_point(posaddr_.linesegaddr)
 			pt2 = self.get_point(PtAddr(posaddr_.linesegaddr.polylineidx, posaddr_.linesegaddr.ptidx+1))
 			return pt1.avg(pt2, posaddr_.pals)
+
+	def get_dist_to_reference_point(self, posaddr_):
+		posaddr_latlng = self.get_latlng(posaddr_)
+		refpt = self.get_point(posaddr_.linesegaddr)
+		return refpt.dist_m(posaddr_latlng)
 
 	# Thanks to http://en.wikipedia.org/wiki/Dijkstra's_algorithm 
 	def find_path_by_vertexes(self, srcvertex_, destvertex_, out_visited_vertexes=None):
@@ -341,7 +366,7 @@ class SnapGraph(object):
 			for vertex in vertexes_in_polyline_order: # see note 239084723 
 				self.vertex_to_connectedvertex_n_dists[vertex]
 			for vertex1, vertex2 in hopscotch(vertexes_in_polyline_order):
-				dist = self.get_dist(polylineidx, vertex1.get_ptidx(polylineidx), vertex2.get_ptidx(polylineidx))
+				dist = self.get_dist_between_points(polylineidx, vertex1.get_ptidx(polylineidx), vertex2.get_ptidx(polylineidx))
 				self.vertex_to_connectedvertex_n_dists[vertex1].append((vertex2, dist))
 				self.vertex_to_connectedvertex_n_dists[vertex2].append((vertex1, dist))
 		self.vertex_to_connectedvertex_n_dists = dict(self.vertex_to_connectedvertex_n_dists)
@@ -390,8 +415,24 @@ class SnapGraph(object):
 		return [x[0] for x in connectedvertex_n_dists]
 
 	# pt args are inclusive / inclusive. 
-	def get_dist(self, polylineidx_, startptidx_, endptidx_):
+	def get_dist_between_points(self, polylineidx_, startptidx_, endptidx_):
 		return abs(self.polylineidx_to_ptidx_to_mapl[polylineidx_][endptidx_] - self.polylineidx_to_ptidx_to_mapl[polylineidx_][startptidx_])
+
+	def get_dist_between_posaddrs(self, posaddr1_, posaddr2_):
+		assert posaddr1_.linesegaddr.polylineidx == posaddr2_.linesegaddr.polylineidx
+		plineidx = posaddr1_.linesegaddr.polylineidx
+		r = self.get_dist_between_points(plineidx, posaddr1_.linesegaddr.ptidx, posaddr2_.linesegaddr.ptidx)
+		posaddr1_dist_to_refpt = self.get_dist_to_reference_point(posaddr1_)
+		posaddr2_dist_to_refpt = self.get_dist_to_reference_point(posaddr2_)
+		is_posaddr1_less_than_posaddr2 = \
+				cmp([posaddr1_.linesegaddr.ptidx, posaddr1_.pals], [posaddr2_.linesegaddr.ptidx, posaddr2_.pals]) < 0
+		if is_posaddr1_less_than_posaddr2:
+			r -= posaddr1_dist_to_refpt
+			r += posaddr2_dist_to_refpt
+		else:
+			r += posaddr1_dist_to_refpt
+			r -= posaddr2_dist_to_refpt
+		return r
 
 	def get_addr_to_vertex(self, disttolerance_):
 		latlngid_to_ontop_latlngids = self.get_graph_latlngid_to_ontop_latlngids(disttolerance_)
@@ -521,13 +562,13 @@ class SnapGraph(object):
 		plineidxes = set(addr.polylineidx for addr in linesegaddr_to_lssr.keys())
 		r = []
 		for plineidx in plineidxes:
-			plines_linesegaddr_to_lssr = dict((k, v) for k, v in linesegaddr_to_lssr.iteritems() if k.polylineidx == plineidx)
-			plines_linesegaddrs = plines_linesegaddr_to_lssr.keys()
-			plines_lssr = plines_linesegaddr_to_lssr.values()
-			relevant_idxes = get_local_minima_indexes(plines_lssr, lambda lssr: lssr.dist)
+			plines_linesegaddr_to_lssr = sorteddict((k, v) for k, v in linesegaddr_to_lssr.iteritems() if k.polylineidx == plineidx)
+			plines_linesegaddrs = plines_linesegaddr_to_lssr.sortedkeys()
+			plines_lssrs = plines_linesegaddr_to_lssr.values_sorted_by_key()
+			relevant_idxes = get_local_minima_indexes(plines_lssrs, lambda lssr: lssr.dist)
 			for idx in relevant_idxes:
 				linesegaddr = plines_linesegaddrs[idx]
-				lssr = plines_lssr[idx]
+				lssr = plines_lssrs[idx]
 				r.append(PosAddr(linesegaddr, lssr.pals))
 		return r
 
