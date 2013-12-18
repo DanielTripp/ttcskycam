@@ -18,6 +18,12 @@ class LineSegSnapResult(object):
 		self.pals = pals_
 		self.dist = dist_
 
+	def __str__(self):
+		return 'LineSegSnapResult( (%.8f,%.8f) pals:%.2f dist:%.2f )' % (self.latlng.lat, self.latlng.lng, self.pals, self.dist)
+
+	def __repr__(self):
+		return self.__str__()
+
 class LatLng:
 
 	def __init__(self, lat_, lng_=None):

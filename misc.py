@@ -394,6 +394,9 @@ class sorteddict(dict):
 	def sortedkeys(self):
 		return self._sortedkeys
 
+	def values_sorted_by_key(self):
+		return [self[k] for k in self.sortedkeys()]
+
 	def ceilitem(self, key_):
 		assert len(self) == len(self._sortedkeys)
 		if not self:

@@ -21,3 +21,5 @@ reports.get_locations_report
 geom.heading
 browse_snapgraph.get_infos_for_box
 browse_snapgraph.get_connected_vert_latlngs
+browse_snapgraph.find_paths
+browse_snapgraph.multisnap
