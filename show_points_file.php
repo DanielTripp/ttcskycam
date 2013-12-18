@@ -339,6 +339,26 @@ function draw_objects() {
 	if(is_selected('polyline_checkbox')) {
 		draw_polylines();
 	}
+
+	refresh_dists();
+}
+
+function refresh_dists() {
+	var contents = '';
+	var all_polylines_dist_m = 0;
+	for(var i=0; i<g_polyline_latlngs.length; i++) {
+		var pline_latlngs = g_polyline_latlngs[i];
+		var polyline_dist_m = 0;
+		for(var j=0; j<pline_latlngs.length-1; j++) {
+			var pt1 = pline_latlngs[j]; pt2 = pline_latlngs[j+1];
+			var lineseg_dist_m = dist_m(pt1, pt2);
+			polyline_dist_m += lineseg_dist_m;
+		}
+		contents += sprintf('polyline %d: %.2f meters<br>', i, polyline_dist_m);
+		all_polylines_dist_m += polyline_dist_m;
+	}
+	contents += sprintf('sum total of polyline dists: %.2f meters<br>', all_polylines_dist_m);
+	set_contents('p_dists', contents);
 }
 
 function draw_polylines() {
@@ -487,5 +507,6 @@ function on_submit_contents_clicked() {
 		<label for="grid_checkbox">Grid:</label><input type="checkbox" id="grid_checkbox" name="grid_checkbox" onclick="on_grid_checkbox_clicked()"/>
 		<label for="colors_checkbox">Colors:</label><input type="checkbox" id="colors_checkbox" name="colors_checkbox" onclick="redraw_objects()"/>
 		<p id="p_zoom"/>
+		<p id="p_dists"/>
   </body>
 </html>
