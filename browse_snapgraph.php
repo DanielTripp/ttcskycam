@@ -201,9 +201,16 @@ function forget_path_objects() {
 }
 
 function get_polyline_color(polyline_latlngs_) {
-	var colors = [[0, 0, 0], [150, 150, 150], [255, 0, 0], [255, 0, 255], [0, 255, 255], [0, 127, 0], 
+	var colors = [[255, 0, 0], [255, 0, 255], [0, 255, 255], [0, 127, 0], 
 			[130, 127, 0], [127, 0, 0], [127, 0, 127], [0, 127, 127, ], [0, 255, 0], [0, 0, 255]];
-	var r = colors[get_polyline_color_hash(polyline_latlngs_) % colors.length];
+	var hashval = get_polyline_color_hash(polyline_latlngs_);
+	var base_color = colors[hashval % colors.length];
+	var num_gradients = 11;
+	var gradient_num = hashval % num_gradients;
+	var percent_shift_to_white = (gradient_num/num_gradients)*0.75;
+	var r = [avg(base_color[0], 255, percent_shift_to_white), 
+					avg(base_color[1], 255, percent_shift_to_white), 
+					avg(base_color[2], 255, percent_shift_to_white)];
 	return sprintf('rgb(%d,%d,%d)', r[0], r[1], r[2]);
 }
 
