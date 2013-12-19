@@ -45,8 +45,10 @@ function initialize() {
 
 function on_map_clicked(mouseevent_) {
 	forget_multisnap_markers();
+	set_contents('p_multisnap_latlng', '');
 	callpy('browse_snapgraph.multisnap', mouseevent_.latLng, 
 		{success: function(latlngs__) {
+			set_contents('p_multisnap_latlng', sprintf('Multisnap:&nbsp;&nbsp;&nbsp;(%.8f,%.8f)', mouseevent_.latLng.lat(), mouseevent_.latLng.lng()));
 			latlngs__.forEach(function(latlng) {
 				var marker = new google.maps.Marker({map: g_map, position: google_LatLng(latlng), draggable: false});
 				g_multisnap_markers.push(marker);
@@ -87,7 +89,7 @@ function on_path_marker_dragged() {
 
 function set_marker_latlngs_contents() {
 	var start = g_start_marker.getPosition(), dest = g_dest_marker.getPosition();
-	set_contents('p_marker_latlngs', sprintf('(%.8f,%.8f)&nbsp;&nbsp;&nbsp;&nbsp;(%.8f,%.8f)', 
+	set_contents('p_marker_latlngs', sprintf('Path markers:&nbsp;&nbsp;&nbsp;&nbsp;(%.8f,%.8f)&nbsp;&nbsp;&nbsp;&nbsp;(%.8f,%.8f)', 
 			start.lat(), start.lng(), dest.lat(), dest.lng()));
 }
 
@@ -232,5 +234,6 @@ function get_polyline_color_hash(polyline_latlngs_) {
 		<p id="p_error"/>
 		<p id="p_loading_urls"/>
 		<p id="p_marker_latlngs"/>
+		<p id="p_multisnap_latlng"/>
   </body>
 </html>
