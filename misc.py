@@ -2,6 +2,7 @@
 
 import sys, os, os.path, time, math, datetime, calendar, bisect, tempfile, subprocess, StringIO, re
 from collections import Sequence, MutableSequence, defaultdict, MutableSet
+from itertools import *
 
 def es_to_str(t_):
 	if t_ is None or t_ == 0:
@@ -765,6 +766,23 @@ def permutation_2_indexes(list_):
 #		def composition(*args, **kwargs):
 #			return func_1(func_2(*args, **kwargs))
 #	return composition
+
+# return a list of lists. 
+def get_maximal_connected_groups(list_, is_connected_func_):
+	assert isinstance(list_, Sequence) and callable(is_connected_func_)
+	groups = [[x] for x in list_]
+	while True:
+		joined_something = False
+		for idx1, idx2 in permutation_2_indexes(groups):
+			group1 = groups[idx1]; group2 = groups[idx2]
+			if any(is_connected_func_(x1, x2) for x1, x2 in product(group1, group2)):
+				group1 += group2
+				del groups[idx2]
+				joined_something = True
+				break
+		if not joined_something:
+			break
+	return groups
 
 if __name__ == '__main__':
 

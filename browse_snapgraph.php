@@ -22,6 +22,7 @@ var g_path_objects = [];
 var g_start_marker = null, g_dest_marker = null;
 var g_connected_vertex_map_objects = [];
 var g_multisnap_markers = [];
+var g_found_polyline = null;
 
 function initialize() {
 
@@ -41,6 +42,11 @@ function initialize() {
 
 	add_delayed_event_listener(g_map, 'bounds_changed', on_bounds_changed, 750);
 
+	$('#plineidx_field').keydown(function (e) {
+		if(e.keyCode == 13) {
+			$('#plineidx_button').trigger('click');
+		}
+	});
 }
 
 function on_map_clicked(mouseevent_) {
@@ -87,6 +93,13 @@ function on_path_marker_dragged() {
 		});
 }
 
+function forget_found_polyline() {
+	if(g_found_polyline != null) {
+		g_found_polyline.setMap(null);
+		g_found_polyline = null;
+	}
+}
+
 function set_marker_latlngs_contents() {
 	var start = g_start_marker.getPosition(), dest = g_dest_marker.getPosition();
 	set_contents('p_marker_latlngs', sprintf('Path markers:&nbsp;&nbsp;&nbsp;&nbsp;(%.8f,%.8f)&nbsp;&nbsp;&nbsp;&nbsp;(%.8f,%.8f)', 
@@ -125,15 +138,26 @@ function make_vert_circle(vertinfo_) {
 	var vertpos = google_LatLng(vertinfo_.pos);
 	var circle = new google.maps.Circle({map: g_map, center: vertpos, radius: 20, 
 			fillOpacity: 0, zIndex: 10});
+	add_hover_listener(circle, function(latlng__) { 
+			var infowin_content = sprintf('Vertex %d - (%.8f,%.8f)<br>', vertinfo_.id, vertpos.lat(), vertpos.lng());
+			vertinfo_.ptaddrs.forEach(function(ptaddr) {
+				infowin_content += sprintf('pline %d pt %d, ', ptaddr[0], ptaddr[1]);
+			});
+			infowin_content = infowin_content.substring(0, infowin_content.length-2) + '<br>';
+			var infowin = new google.maps.InfoWindow({content: infowin_content,
+					position: latlng__, disableAutoPan: true, zIndex: 1});
+			infowin.open(g_map);
+			return infowin;
+		}, 250);
 	google.maps.event.addListener(circle, 'click', function() {
 			forget_connected_vertex_map_objects();
-			var infowin_content = sprintf('Vertex %d<br>', vertinfo_.id);
+			var infowin_content = sprintf('Vertex %d - (%.8f,%.8f)<br>', vertinfo_.id, vertpos.lat(), vertpos.lng());
 			vertinfo_.ptaddrs.forEach(function(ptaddr) {
 				infowin_content += sprintf('pline %d pt %d, ', ptaddr[0], ptaddr[1]);
 			});
 			infowin_content = infowin_content.substring(0, infowin_content.length-2) + '<br>';
 			infowin_content += 'Connected to: '+toJsonString(vertinfo_.connectedids);
-			var infowin = new google.maps.InfoWindow({content: infowin_content, position: vertpos, disableAutoPan: true});
+			var infowin = new google.maps.InfoWindow({content: infowin_content, position: vertpos, disableAutoPan: true, zIndex: 2});
 			g_connected_vertex_map_objects.push(infowin);
 			infowin.open(g_map);
 
@@ -141,9 +165,9 @@ function make_vert_circle(vertinfo_) {
 			connected_vert_latlngs.forEach(function(latlng) {
 				var color = 'rgb(75,75,75)';
 				g_connected_vertex_map_objects.push(new google.maps.Circle({map: g_map, center: google_LatLng(latlng), radius: 30, 
-						fillColor: color, fillOpacity: 1, strokeWeight: 0, zIndex: 0}));
+						fillColor: color, fillOpacity: 1, strokeWeight: 0, zIndex: 2}));
 				g_connected_vertex_map_objects.push(new google.maps.Polyline({map: g_map, path: [google_LatLng(latlng), vertpos], 
-						strokeColor: color, strokeWeight: 20, zIndex: 0}));
+						strokeColor: color, strokeWeight: 15, zIndex: 3}));
 			});
 
 			google.maps.event.addListener(infowin, 'closeclick', forget_connected_vertex_map_objects);
@@ -161,7 +185,7 @@ function forget_connected_vertex_map_objects() {
 function make_pline(plineidx_, pline_pts_) {
 	var glatlngs = google_LatLngs(pline_pts_);
 	var pline = new google.maps.Polyline({map: g_map, path: glatlngs, strokeColor: get_polyline_color(glatlngs), 
-			strokeWeight: 6, zIndex: 1});
+			strokeWeight: 6, zIndex: 2});
 	add_hover_listener(pline, function(latlng__) { 
 			var infowin = new google.maps.InfoWindow({content: sprintf('pline %d', plineidx_), 
 					position: latlng__, disableAutoPan: true});
@@ -216,6 +240,7 @@ function get_polyline_color(polyline_latlngs_) {
 	return sprintf('rgb(%d,%d,%d)', r[0], r[1], r[2]);
 }
 
+// This seems to always return something that ends in '1'.  I don't know why. 
 function get_polyline_color_hash(polyline_latlngs_) {
 	var r = 0;
 	polyline_latlngs_.forEach(function(latlng) {
@@ -224,6 +249,34 @@ function get_polyline_color_hash(polyline_latlngs_) {
 	return Math.round(Math.abs(r));
 }
 
+function on_plineidx_button_clicked() {
+	forget_found_polyline();
+	var plineidx = parseInt(get_value('plineidx_field'));
+	callpy('browse_snapgraph.get_pline_latlngs', plineidx, 
+		{success: function(latlngs__) {
+			if(latlngs__ === null) {
+				alert('Polyline not found.');
+			} else {
+				g_found_polyline = new google.maps.Polyline({map: g_map, path: google_LatLngs(latlngs__), zIndex: 1, 
+						strokeWeight: 50, strokeColor: 'rgb(255,230,0)'}); // max strokeWeight might be 32. 
+				google.maps.event.addListener(g_found_polyline, 'click', forget_found_polyline);
+
+				var closest_point = null, closest_point_dist = 0;
+				var closest_i = -1;// tdr 
+				for(var i=0; i<latlngs__.length; i++) {
+					var latlng = google_LatLng(latlngs__[i]);
+					var cur_pt_dist = dist_m(latlng, g_map.getCenter());
+					if(closest_point === null || closest_point_dist > cur_pt_dist) {
+						closest_point = latlng;
+						closest_point_dist = cur_pt_dist;
+					}
+				}
+				g_map.setCenter(closest_point);
+			}
+		}
+	});
+	
+}
 
 
     </script>
@@ -231,6 +284,7 @@ function get_polyline_color_hash(polyline_latlngs_) {
   <body onload="initialize()" >
 		<div id="map_canvas" style="width:100%; height:100%"></div>
 		<br>
+		Find polyline by index:<input type="text" size="10" name="plineidx_field" id="plineidx_field" value="790"/> <input type="button" id="plineidx_button" onclick="on_plineidx_button_clicked()" value="Ok" /> <br>
 		<p id="p_error"/>
 		<p id="p_loading_urls"/>
 		<p id="p_marker_latlngs"/>
