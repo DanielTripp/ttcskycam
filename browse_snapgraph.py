@@ -23,6 +23,13 @@ def find_paths(start_latlng_, dest_latlng_):
 def multisnap(latlng_):
 	return [sg().get_latlng(posaddr) for posaddr in sg().multisnap(latlng_, 100)]
 
+def get_pline_latlngs(plineidx_):
+	plines = sg().polylines
+	if plineidx_ in xrange(len(plines)):
+		return plines[plineidx_]
+	else:
+		return None
+
 if __name__ == '__main__':
 
 	for i in range(300):

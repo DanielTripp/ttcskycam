@@ -146,7 +146,7 @@ class Vertex(object):
 		return self.id
 
 	def __str__(self):
-		return 'Vertex(id:%d, %s, %s)' % (self.id, self.pos(), sorted(self.ptaddrs))
+		return 'Vertex(id:%d)' % (self.id)
 
 	def __repr__(self):
 		return self.__str__()
@@ -173,6 +173,9 @@ class PosAddr(object):
 	def __str__(self):
 		assert 0.0 <= self.pals < 1.0
 		return 'PosAddr(%s,%.2f)' % (self.linesegaddr, self.pals)
+
+	def __hash__(self):
+		return self.linesegaddr.__hash__() + int(self.pals*100)
 
 	def __repr__(self):
 		return self.__str__()
@@ -344,7 +347,15 @@ class SnapGraph(object):
 		self.init_polylineidx_to_ptidx_to_vertex(disttolerance_)
 		self.init_polylineidx_to_ptidx_to_mapl()
 		self.init_vertex_to_connectedvertex_n_dists()
+		self.init_plineidx_to_connected_plineidxes()
 		self.vertexid_to_vertex = dict((vert.id, vert) for vert in self.get_vertexes())
+
+	def init_plineidx_to_connected_plineidxes(self):
+		self.plineidx_to_connected_plineidxes = defaultdict(lambda: set())
+		for vert in self.get_vertexes():
+			for ptaddr1, ptaddr2 in permutations(vert.ptaddrs, 2):
+				self.plineidx_to_connected_plineidxes[ptaddr1.polylineidx].add(ptaddr2.polylineidx)
+		self.plineidx_to_connected_plineidxes = dict(self.plineidx_to_connected_plineidxes)
 
 	def init_polylineidx_to_ptidx_to_vertex(self, disttolerance_):
 		addr_to_vertex = self.get_addr_to_vertex(disttolerance_)
@@ -550,7 +561,7 @@ class SnapGraph(object):
 	def get_point(self, linesegaddr_):
 		return self.polylines[linesegaddr_.polylineidx][linesegaddr_.ptidx]
 
-	# returns: list of PosAddr. 
+	# returns: list of PosAddr, sorted by dist to target_ in increasing order. 
 	def multisnap(self, target_, searchradius_):
 		assert searchradius_ is not None
 		linesegaddr_to_lssr = {}
@@ -560,7 +571,8 @@ class SnapGraph(object):
 			if lssr.dist <= searchradius_:
 				linesegaddr_to_lssr[linesegaddr] = lssr
 		plineidxes = set(addr.polylineidx for addr in linesegaddr_to_lssr.keys())
-		r = []
+
+		posaddr_to_dist = {}
 		for plineidx in plineidxes:
 			plines_linesegaddr_to_lssr = sorteddict((k, v) for k, v in linesegaddr_to_lssr.iteritems() if k.polylineidx == plineidx)
 			plines_linesegaddrs = plines_linesegaddr_to_lssr.sortedkeys()
@@ -569,8 +581,26 @@ class SnapGraph(object):
 			for idx in relevant_idxes:
 				linesegaddr = plines_linesegaddrs[idx]
 				lssr = plines_lssrs[idx]
-				r.append(PosAddr(linesegaddr, lssr.pals))
+				posaddr_to_dist[PosAddr(linesegaddr, lssr.pals)] = lssr.dist
+
+		are_posaddrs_connected = lambda pa1, pa2: self.are_plines_connected(pa1.linesegaddr.polylineidx, pa2.linesegaddr.polylineidx)
+		connected_posaddr_groups = get_maximal_connected_groups(posaddr_to_dist.keys(), are_posaddrs_connected)
+		r = []
+		for connected_posaddr_group in connected_posaddr_groups:
+			connected_posaddr_group.sort(key=lambda posaddr: posaddr_to_dist[posaddr])
+			r_for_connected_group = []
+			for candidate_posaddr in connected_posaddr_group:
+				candidate_heading = target_.heading(self.get_latlng(candidate_posaddr))
+				if not any(geom.diff_headings(candidate_heading, target_.heading(self.get_latlng(other_posaddr))) < 85 \
+						for other_posaddr in r_for_connected_group):
+					r_for_connected_group.append(candidate_posaddr)
+			r += r_for_connected_group
+
+		r.sort(key=lambda posaddr: posaddr_to_dist[posaddr])
 		return r
+
+	def are_plines_connected(self, plineidx1_, plineidx2_):
+		return plineidx2_ in self.plineidx_to_connected_plineidxes[plineidx1_]
 
 	# arg searchradius_ is in metres.  None means unlimited i.e. keep looking forever.  
 	# As long as this object contains some lines, something will be found and returned.  Probably quickly, too. 
