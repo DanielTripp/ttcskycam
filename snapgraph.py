@@ -562,6 +562,17 @@ class SnapGraph(object):
 		return self.polylines[linesegaddr_.polylineidx][linesegaddr_.ptidx]
 
 	# returns: list of PosAddr, sorted by dist to target_ in increasing order. 
+	# There are three stages to this.  The first finds all of the possible lineseg snaps.  Simple.  
+	# The second reduces that list of lineseg snaps to probably one per polyline.  The reason for doing this is because 
+	# for most cases, several consecutive linesegs will be within the search radius, and we'll see a lot of useless 
+	# snaps with a pals of 0 or 1.  These are not useful.  So we get the closest ones only AKA local minima (by dist to target).
+	# The third case reduces the list more, in a similar way, but looking across polylines.  This deals best with the scenario of 
+	# many short streets (polylines) in a small area.  So before this stage there would tend to be many snaps at one extreme 
+	# end of each of these polylines - which will be at a vertex which connects that polyline to the one that the target is 
+	# closest to.  (Or there might be a polyline or two in between - same issue.)   So we look at connected groups of polylines.  
+	# There is a chance that we could throw out some useful results in this stage.  Also, there is nothing special about the 
+	# heading difference chosen.  This code will do you a disservice if you use it on an unusual layout, such as polylines 
+	# with a long skinny 'U' shape.  But the graphs that we use aren't like that. 
 	def multisnap(self, target_, searchradius_):
 		assert searchradius_ is not None
 		linesegaddr_to_lssr = {}
