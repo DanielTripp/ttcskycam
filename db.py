@@ -716,10 +716,10 @@ def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, datazoom_, be_clever_, raw_vi
 			# ^^ these snap results don't seem to be used.  latlngs from them should probably be used as inputs 
 			# to the interped tracks snap below.  Should fix that some time. 
 			simple_interped_loc = vi1_.latlng.avg(vi2_.latlng, ratio_)
-			interped_loc_snap_result = tracks.snap(simple_interped_loc)
-			assert interped_loc_snap_result is not None # Again, a tracks snap always succeeds. 
-			line_aot_pt = interped_loc_snap_result.posaddr.pals != 0.0
-			tracks_based_heading = tracks.heading(interped_loc_snap_result.posaddr.linesegaddr, line_aot_pt)
+			interped_loc_snap_posaddr = tracks.snap(simple_interped_loc)
+			assert interped_loc_snap_posaddr is not None # Again, a tracks snap always succeeds. 
+			line_aot_pt = interped_loc_snap_posaddr.pals != 0.0
+			tracks_based_heading = tracks.heading(interped_loc_snap_posaddr.linesegaddr, line_aot_pt)
 			ref_heading = vi1_.latlng.heading(vi2_.latlng)
 			# We've got to find the general direction this vehicle is going, and I don't trust a location difference of < 50 metres, 
 			# so let's keep looking back in time until we have a difference greater than 50 metres: 
@@ -730,7 +730,7 @@ def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, datazoom_, be_clever_, raw_vi
 						break
 			if geom.diff_headings(tracks_based_heading, ref_heading) > 90: # see note [1] above
 				tracks_based_heading = geom.normalize_heading(tracks_based_heading+180)
-			r = (interped_loc_snap_result.latlng, tracks_based_heading, -1) # see note 23906728947234 
+			r = (tracks.get_latlng(interped_loc_snap_posaddr), tracks_based_heading, -1) # see note 23906728947234 
 
 	if r is None:
 		vi1_latlng = vi1_.latlng; vi2_latlng = vi2_.latlng

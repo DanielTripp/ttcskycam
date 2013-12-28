@@ -162,7 +162,7 @@ function init_snaptest_marker() {
 					//alert(snaptest_result[2][0] + 1);
 					var newmarker = new google.maps.Marker({
 						position: new google.maps.LatLng(snaptest_result[2][i][0], snaptest_result[2][i][1]), map: g_map, draggable: false, 
-						icon: 'http://www.google.com/mapfiles/markerB.png', zIndex: 5
+						icon: 'http://labs.google.com/ridefinder/images/mm_20_green.png', zIndex: 10
 						});
 					g_resnapped_markers[i] = newmarker;
 				}
@@ -172,7 +172,7 @@ function init_snaptest_marker() {
 		if(snapped_pt != null) {
 			g_snapped_marker = new google.maps.Marker({
 				position: new google.maps.LatLng(snapped_pt[0], snapped_pt[1]), map: g_map, draggable: false, 
-				icon: 'http://www.google.com/mapfiles/markerA.png', zIndex: 10 
+				icon: 'http://www.google.com/mapfiles/markerA.png', zIndex: 5
 				});
 		}
 	});
@@ -544,7 +544,7 @@ function show_route_dist_m() {
 	g_route_markers.forEach(function(marker) {
 		pts.push(marker.getPosition());
 	});
-	set_contents('dist', sprintf('%.3f meters', dist_m_polyline(pts)));
+	set_contents('dist', sprintf('Length of route: %.3f meters', dist_m_polyline(pts)));
 }
 
 function on_zoom_changed() {
@@ -559,7 +559,7 @@ function on_add_marker_button_clicked() {
     </script>
   </head>
   <body onload="initialize()">
-		<div id="map_canvas" style="width:80%; height:100%"></div>
+		<div id="map_canvas" style="width:80%; height:90%"></div>
     <div style="position:absolute; top:0; right:0; height:100%;">
 			<form name="form2">
       <table border="1">
@@ -606,12 +606,12 @@ function on_add_marker_button_clicked() {
 						<input id="dundasradiobutton" type="radio" name="fudgeroute" value="dundas" checked="checked" /><label for="dundasradiobutton">Dundas</label><br/>
 						<input id="dupontradiobutton" type="radio" name="fudgeroute" value="dupont" /><label for="dupontradiobutton">Dupont</label><br/>
 						<input id="keeleradiobutton" type="radio" name="fudgeroute" value="keele" /><label for="keeleradiobutton">Keele</label><br/>
-						<input id="kingradiobutton" type="radio" name="fudgeroute" value="king" /><label for="kingradiobutton">King</label><br/>
+						<input id="kingradiobutton" type="radio" name="fudgeroute" value="king" checked="checked" /><label for="kingradiobutton">King</label><br/>
 						<input id="lansdowneradiobutton" type="radio" name="fudgeroute" value="lansdowne" /><label for="lansdowneradiobutton">Lansdowne</label><br/>
 						<input id="ossingtonradiobutton" type="radio" name="fudgeroute" value="ossington" /><label for="ossingtonradiobutton">Ossington</label><br/>
 						<input id="queenradiobutton" type="radio" name="fudgeroute" value="queen" /><label for="queenradiobutton">Queen</label><br/>
 						<input id="spadinaradiobutton" type="radio" name="fudgeroute" value="spadina" /><label for="spadinaradiobutton">Spadina</label><br/>
-						<input id="stclairradiobutton" type="radio" name="fudgeroute" value="stclair" checked="checked" /><label for="stclairradiobutton">St. Clair</label><br/>
+						<input id="stclairradiobutton" type="radio" name="fudgeroute" value="stclair" /><label for="stclairradiobutton">St. Clair</label><br/>
 						<input id="bloordanforthradiobutton" type="radio" name="fudgeroute" value="bloor_danforth" /><label for="bloordanforthradiobutton">Bloor Danforth</label><br/>
 						<input id="yongeuniversityspadinaradiobutton" type="radio" name="fudgeroute" value="yonge_university_spadina" /><label for="yongeuniversityspadinaradiobutton">Yonge University Spadina</label><br/>
 					</td>
@@ -639,7 +639,7 @@ function on_add_marker_button_clicked() {
 				<tr>
 					<td>
 						<label for="useclientsidesnap_checkbox">Use client-side snap:</label>
-						<input type="checkbox" id="useclientsidesnap_checkbox" name="useclientsidesnap_checkbox" checked="checked"/>
+						<input type="checkbox" id="useclientsidesnap_checkbox" name="useclientsidesnap_checkbox" />
 					</td>
 				</tr>
       </table>

@@ -50,6 +50,9 @@ def heading(linesegaddr_, referencing_lineseg_aot_point_):
 def get_all_tracks_polylines():
 	return get_snapgraph().polylines
 
+def get_latlng(posaddr_):
+	return get_snapgraph().get_latlng(posaddr_)
+
 if __name__ == '__main__':
 
 	print get_all_tracks_polylines()
