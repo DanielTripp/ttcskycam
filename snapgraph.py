@@ -206,24 +206,35 @@ class Path(object):
 # This can be pickled or memcached. 
 class SnapGraph(object):
 
-	# arg disttolerance: Two points need to be less than this far apart for us to consider them 
-	# coincident AKA the same point, for our graph purposes. 
-	def __init__(self, polylines_, forpaths=True, disttolerance=DEFAULT_GRAPH_VERTEX_DIST_TOLERANCE):
+	# arg polylines_: We might modify this, if 'forpaths' is true.  We might split some line segments, where they 
+	# 	intersect other line segments.  We will not join polylines or remove any points. 
+	# arg forpaths_disttolerance: Two points need to be less than this far apart for us to consider them 
+	# 	coincident AKA the same point, for our path-graph purposes. 
+	def __init__(self, polylines_, forpaths=True, forpaths_disttolerance=DEFAULT_GRAPH_VERTEX_DIST_TOLERANCE):
 		assert isinstance(polylines_[0][0], geom.LatLng)
 		self.latstep = LATSTEP; self.lngstep = LNGSTEP; self.latref = LATREF; self.lngref = LNGREF
 		self.polylines = polylines_
-		if forpaths:
-			self.remove_useless_points_from_polylines(disttolerance)
 		self.init_gridsquare_to_linesegaddrs()
-		self.init_polylineidx_to_ptidx_to_mapl()
 		if forpaths:
-			self.init_path_structures(disttolerance)
-			self.init_gridsquare_to_linesegaddrs() # rebuilding it because for those linesegs that were split within init_path_structures() - 
-				# say lineseg A was split into A1 and A2, and A covered the sets of gridsquares S.  
-				# after init_path_structures() is done, self.gridsquare_to_linesegaddrs will be such that A1 is portrayed as covering all of S, 
-				# and so does A2.  This is of course too wide a net in many cases - I think if the original start point, the original end 
-				# point, and the split point, are in 3 different gridsquares.  init_path_structures() does this because the code is easier to 
-				# write.  But now we can make it better by rebuilding it. 
+			self.init_path_structures(forpaths_disttolerance)
+			self.init_gridsquare_to_linesegaddrs() # rebuilding it because for those 
+				# linesegs that were split within init_path_structures() - 
+				# say lineseg A was split into A1 and A2, and A covered the sets of 
+				# gridsquares S.  after init_path_structures() is done, 
+				# self.gridsquare_to_linesegaddrs will be such that A1 is portrayed as 
+				# covering all of S, and so does A2.  This is of course too wide a net 
+				# in many cases - I think if the original start point, the original end 
+				# point, and the split point, are in 3 different gridsquares.  
+				# init_path_structures() does this because the code is easier to write.  
+				# But now we can make it better by rebuilding it. 
+		else:
+			# We want to build this even if 'forpaths' is false, because get_mapl() 
+			# depends on it, and we want get_mapl() to be available even if 
+			# 'forpaths' is false.  If 'forpaths' is true, then this is built at a 
+			# sensitive time, elsewhere (after the intersections of line segments are 
+			# found and the line segments split appropriately, but before the 
+			# distance-between-vertexes info is built.)
+			self.init_polylineidx_to_ptidx_to_mapl()
 
 	# return list of (dist, Path) pairs.  Dist is a float, in meters.  
 	def find_paths(self, startlatlng_, destlatlng_, out_visited_vertexes=None):
@@ -351,6 +362,7 @@ class SnapGraph(object):
 
 	def init_path_structures(self, disttolerance_):
 		self.init_polylineidx_to_ptidx_to_vertex(disttolerance_)
+		self.init_polylineidx_to_ptidx_to_mapl()
 		self.init_vertex_to_connectedvertex_n_dists()
 		self.init_plineidx_to_connected_plineidxes()
 		self.vertexid_to_vertex = dict((vert.id, vert) for vert in self.get_vertexes())
@@ -412,15 +424,6 @@ class SnapGraph(object):
 			assert len(ptidx_to_mapl) == len(polyline)
 			self.polylineidx_to_ptidx_to_mapl.append(ptidx_to_mapl)
 		assert len(self.polylineidx_to_ptidx_to_mapl) == len(self.polylines)
-
-	def remove_useless_points_from_polylines(self, disttolerance_):
-		for polylineidx, polyline in enumerate(self.polylines):
-			startptidx = 0
-			while startptidx < len(polyline)-1:
-				if polyline[startptidx].dist_m(polyline[startptidx+1]) < disttolerance_:
-					del polyline[startptidx+1]
-				else:
-					startptidx += 1
 
 	def get_vertexes(self):
 		return self.vertex_to_connectedvertex_n_dists.keys()
