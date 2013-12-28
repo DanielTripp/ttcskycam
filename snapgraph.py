@@ -215,6 +215,7 @@ class SnapGraph(object):
 		if forpaths:
 			self.remove_useless_points_from_polylines(disttolerance)
 		self.init_gridsquare_to_linesegaddrs()
+		self.init_polylineidx_to_ptidx_to_mapl()
 		if forpaths:
 			self.init_path_structures(disttolerance)
 			self.init_gridsquare_to_linesegaddrs() # rebuilding it because for those linesegs that were split within init_path_structures() - 
@@ -297,6 +298,11 @@ class SnapGraph(object):
 			pt2 = self.get_point(PtAddr(posaddr_.linesegaddr.polylineidx, posaddr_.linesegaddr.ptidx+1))
 			return pt1.avg(pt2, posaddr_.pals)
 
+	def get_mapl(self, posaddr_):
+		r = self.polylineidx_to_ptidx_to_mapl[posaddr_.linesegaddr.polylineidx][posaddr_.linesegaddr.ptidx]
+		r += self.get_dist_to_reference_point(posaddr_)
+		return r
+
 	def get_dist_to_reference_point(self, posaddr_):
 		posaddr_latlng = self.get_latlng(posaddr_)
 		refpt = self.get_point(posaddr_.linesegaddr)
@@ -345,7 +351,6 @@ class SnapGraph(object):
 
 	def init_path_structures(self, disttolerance_):
 		self.init_polylineidx_to_ptidx_to_vertex(disttolerance_)
-		self.init_polylineidx_to_ptidx_to_mapl()
 		self.init_vertex_to_connectedvertex_n_dists()
 		self.init_plineidx_to_connected_plineidxes()
 		self.vertexid_to_vertex = dict((vert.id, vert) for vert in self.get_vertexes())

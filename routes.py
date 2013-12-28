@@ -427,23 +427,16 @@ class RouteInfo:
 		# and that the code that builds the routeptidx -> mofr map for each rsdt, and presumably calls this function, 
 		# uses a tolerance argument to this function that is higher than the greatest rsdt. 
 		# Otherwise a lot of things will be broken. 
-		snap_result = self.snapgraph.snap(post_, {0:50, 1:300, 1.5:600, 2:2000}[tolerance_])
-		if snap_result is None:
+		posaddr = self.snapgraph.snap(post_, {0:50, 1:300, 1.5:600, 2:2000}[tolerance_])
+		if posaddr is None:
 			return -1
-		direction = snap_result.posaddr.linesegaddr.polylineidx
-		routeptidx = snap_result.posaddr.linesegaddr.ptidx
-		if snap_result.posaddr.pals == 1.0:
-			routeptidx += 1
-		r = self.datazoom_to_dir_to_routeptaddr_to_mofr[None][direction][routeptidx]
-		if snap_result.posaddr.pals not in [0.0, 1.0]:
-			r += snap_result.latlng.dist_m(self.routepts(direction, None)[routeptidx])
-		r = int(r)
-		return r
+		else:
+			return int(self.snapgraph.get_mapl(posaddr))
 
 	def snaptest(self, pt_, tolerance_=0):
 		assert isinstance(pt_, geom.LatLng) and (tolerance_ in (0, 1, 2))
-		snap_result = self.snapgraph.snap(pt_, {0:50, 1:300, 2:750}[tolerance_])
-		snapped_pt = (snap_result.latlng if snap_result is not None else None)
+		posaddr = self.snapgraph.snap(pt_, {0:50, 1:300, 2:750}[tolerance_])
+		snapped_pt = (self.snapgraph.get_latlng(posaddr) if posaddr is not None else None)
 		mofr = self.latlon_to_mofr(pt_, tolerance_)
 		resnapped_pts = [self.mofr_to_latlon(mofr, 0), self.mofr_to_latlon(mofr, 1)]
 		return (snapped_pt, mofr, resnapped_pts)
