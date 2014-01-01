@@ -69,7 +69,9 @@ function on_drag() {
 }
 
 function show_latlng_text() {
-	set_contents('p_latlng', sprintf("Marker's position:   %.7f, %.7f", g_marker.getPosition().lat(), g_marker.getPosition().lng()));
+	var lat = g_marker.getPosition().lat(), lng = g_marker.getPosition().lng();
+	set_contents('p_latlng', sprintf("Marker's position:&nbsp;&nbsp;&nbsp;geom.LatLng(%.7f,%.7f)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;%.7f,%.7f", 
+			lat, lng, lat, lng));
 }
 
 function search() {
