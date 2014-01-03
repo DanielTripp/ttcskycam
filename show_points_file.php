@@ -83,10 +83,6 @@ function initialize() {
 function init_spiderfying() {
 	g_spiderfier = new OverlappingMarkerSpiderfier(g_map, {markersWontMove: true, markersWontHide: true});
 
-	g_spiderfier.addListener('click', function(marker__) {
-		console.log('spiderfy click'); // tdr 
-	});
-
 	g_spiderfier.addListener('spiderfy', function(markers__) {
 		if(g_mouseovered_object_infowindow != null) {
 			g_mouseovered_object_infowindow.close();
@@ -97,6 +93,10 @@ function init_spiderfying() {
 		} 
 	});
 	g_spiderfier.addListener('unspiderfy', function(markers__) {
+		if(g_mouseovered_object_infowindow != null) {
+			g_mouseovered_object_infowindow.close();
+			g_mouseovered_object_infowindow = null;
+		}
 		for(var i=0; i<markers__.length; i++) {
 			markers__[i].setIcon(make_marker_icon());
 		}
@@ -260,7 +260,6 @@ function get_latlngs_from_string(str_) {
 			// So it wasn't JSON.    Maybe it's XML: 
 			try {
 				var polyline = [];
-				raw_polylines.push(polyline);
 				var dom = $.parseXML(str);
 				$(dom).find('*').each(function() {
 					var lat = $(this).attr('lat'), lng = $(this).attr('lon');
@@ -268,6 +267,7 @@ function get_latlngs_from_string(str_) {
 						polyline.push([lat, lng]);
 					}
 				});
+				raw_polylines.push(polyline);
 			} catch(err) {
 				var polyline = [];
 				raw_polylines.push(polyline);
@@ -468,7 +468,7 @@ function add_marker_mouseover_listener_for_infowin(mapobject_, label_) {
 		g_mouseovered_object_infowindow_close_timer = setTimeout(function() {
 			infowin.close();
 			g_mouseovered_object_infowindow_close_timer = null;
-		}, 3000);
+		}, 1000);
 	});
 }
 
