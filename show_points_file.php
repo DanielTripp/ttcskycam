@@ -14,6 +14,7 @@
 		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
 		<script type="text/javascript" src="common.js"></script>
 		<script type="text/javascript" src="js/buckets-minified.js"></script>
+		<script type="text/javascript" src="js/oms.min.js"></script>
     <script type="text/javascript">
 
 var POLYLINE_STROKEWEIGHT = 3;
@@ -47,6 +48,8 @@ function initialize() {
 
 	init_map();
 
+	init_spiderfying();
+
 	// Using a delayed listener for the grid redraw because bounds_changed events can happen dozens of times a second while 
 	// drag-scrolling the map, and redrawing on every one of those was making that dragging very choppy.  
 	// And I see no utility in redrawing the map more than 10 times per second.  
@@ -59,7 +62,7 @@ function initialize() {
 	google.maps.event.addListener(g_map, 'zoom_changed', on_zoom_changed);
 	on_zoom_changed();
 
-	google.maps.event.addListener(g_map, 'click', function(mouseevent_) {
+	google.maps.event.addListener(g_map, 'rightclick', function(mouseevent_) {
 		on_mouse_click_for_show_dist(mouseevent_.latLng);
 	});
 
@@ -69,10 +72,35 @@ function initialize() {
       }
     });
 
-	if(false) { 
-		set_value('filename_field', 'simp2');
-		refresh_from_file();
+	if(true) { 
+		//set_value('filename_field', 'simp2');
+		//refresh_from_file();
+		refresh_from_textarea();
 	}
+
+}
+
+function init_spiderfying() {
+	g_spiderfier = new OverlappingMarkerSpiderfier(g_map, {markersWontMove: true, markersWontHide: true});
+
+	g_spiderfier.addListener('click', function(marker__) {
+		console.log('spiderfy click'); // tdr 
+	});
+
+	g_spiderfier.addListener('spiderfy', function(markers__) {
+		if(g_mouseovered_object_infowindow != null) {
+			g_mouseovered_object_infowindow.close();
+			g_mouseovered_object_infowindow = null;
+		}
+		for(var i=0; i<markers__.length; i++) {
+			markers__[i].setIcon(make_marker_icon('rgb(0,255,0)'));
+		} 
+	});
+	g_spiderfier.addListener('unspiderfy', function(markers__) {
+		for(var i=0; i<markers__.length; i++) {
+			markers__[i].setIcon(make_marker_icon());
+		}
+	});
 }
 
 function redraw_grid() {
@@ -176,6 +204,9 @@ function erase_grid() {
 
 function on_zoom_changed() {
 	set_contents('p_zoom', sprintf('zoom: %d', g_map.getZoom()));
+	if(is_selected('arrows_checkbox')) {
+		redraw_objects();
+	}
 }
 
 function refresh_from_file() {
@@ -354,18 +385,21 @@ function refresh_dists() {
 			var lineseg_dist_m = dist_m(pt1, pt2);
 			polyline_dist_m += lineseg_dist_m;
 		}
-		contents += sprintf('polyline %d: %.2f meters<br>', i, polyline_dist_m);
+		contents += sprintf('polyline [%d]: %d points, %.2f meters<br>', i, pline_latlngs.length, polyline_dist_m);
 		all_polylines_dist_m += polyline_dist_m;
 	}
-	contents += sprintf('sum total of polyline dists: %.2f meters<br>', all_polylines_dist_m);
+	contents += sprintf('sum total of all polyline lengths: %.2f meters<br>', all_polylines_dist_m);
 	set_contents('p_dists', contents);
 }
 
 function draw_polylines() {
 	for(var i=0; i<g_polyline_latlngs.length; i++) {
 		var polyline_latlngs = g_polyline_latlngs[i];
-		var polyline = new google.maps.Polyline({path: polyline_latlngs, strokeWeight: POLYLINE_STROKEWEIGHT, strokeOpacity: 0.7, 
-				strokeColor: get_polyline_color(polyline_latlngs), clickable: false, map: g_map});
+		var polylineOptions = {path: polyline_latlngs, strokeWeight: POLYLINE_STROKEWEIGHT, strokeOpacity: 0.7, 
+				strokeColor: get_polyline_color(polyline_latlngs), clickable: false, 
+				icons: (is_selected('arrows_checkbox') ? make_polyline_arrow_icons(g_map.getZoom(), polyline_latlngs) : null), 
+				map: g_map};
+		var polyline = new google.maps.Polyline(polylineOptions);
 		add_marker_mouseover_listener_for_infowin(polyline, sprintf('line #%d', i));
 		g_polylines.push(polyline);
 	}
@@ -390,12 +424,16 @@ function get_polyline_color_hash(polyline_latlngs_) {
 	return Math.round(Math.abs(r));
 }
 
+function make_marker_icon(color_) {
+	return {path: google.maps.SymbolPath.CIRCLE, scale: 14, strokeWeight : 0, fillOpacity: g_opacity, 
+			fillColor: (color_ === undefined ? 'black' : color_)};
+}
+
 function make_marker(latlng_, label_) {
-	var marker = new google.maps.Marker({position: latlng_, map: g_map, 
-			icon: {path: google.maps.SymbolPath.CIRCLE, scale: 14, strokeWeight : 0, fillOpacity: g_opacity, fillColor: 'black'}
-		});
+	var marker = new google.maps.Marker({position: latlng_, map: g_map, icon: make_marker_icon()});
 	g_markers.push(marker);
 	add_marker_mouseover_listener_for_infowin(marker, label_);
+	g_spiderfier.addMarker(marker);
 	add_marker_click_listener_for_show_dist(marker);
 }
 
@@ -410,11 +448,15 @@ function add_marker_mouseover_listener_for_infowin(mapobject_, label_) {
 			clearTimeout(g_mouseovered_object_infowindow_close_timer);
 			g_mouseovered_object_infowindow_close_timer = null;
 		}
+		var pos = null;
 		if(mapobject_.getPosition === 'function') { // marker probably. 
-			infowin.setPosition(marker_.getPosition());
+			pos = marker_.getPosition();
 		} else {
-			infowin.setPosition(new google.maps.LatLng(mouseevent_.latLng.lat()+0.0001, mouseevent_.latLng.lng()+0.0001));
+			pos = mouseevent_.latLng;
 		}
+		var map_height_lat= g_map.getBounds().getNorthEast().lat() - g_map.getBounds().getSouthWest().lat(); 
+		pos = new google.maps.LatLng(pos.lat() + map_height_lat*0.03, pos.lng());
+		infowin.setPosition(pos);
 		infowin.open(g_map);
 		g_mouseovered_object_infowindow = infowin;
 	});
@@ -431,7 +473,7 @@ function add_marker_mouseover_listener_for_infowin(mapobject_, label_) {
 }
 
 function add_marker_click_listener_for_show_dist(marker_) {
-	google.maps.event.addListener(marker_, 'click', function() {
+	google.maps.event.addListener(marker_, 'rightclick', function() {
 		on_mouse_click_for_show_dist(marker_.getPosition());
 	});
 }
@@ -497,15 +539,28 @@ function on_submit_contents_clicked() {
 		<div id="map_canvas" style="width:80%; height:100%"></div>
 		Filename: <input type="text" size="80" name="filename_field" id="filename_field" /> <br>
 		OR Contents:<br>
-		<textarea id="contents_textarea" cols="80" rows="5"></textarea> 
+		<textarea id="contents_textarea" cols="80" rows="5">
+		[(43.6585890,-79.3965331), (43.6579360,-79.3997590), (43.6587210,-79.3958810), (43.6592179,-79.3935154), (43.6598780,-79.3903730), (43.6592179,-79.3935154), (43.6601232,-79.3891835)]
+		</textarea> 
 		<input type="button" onclick="refresh_from_textarea()" value="Submit Contents" />
 		<br>
 		<input type="button" onclick="on_opacity_down_clicked()" value="Opacity DOWN" />
 		<input type="button" onclick="on_opacity_up_clicked()" value="Opacity UP" />
-		<label for="dots_checkbox">Dots:</label><input checked="checked" type="checkbox" id="dots_checkbox" name="dots_checkbox" onclick="redraw_objects()"/>
-		<label for="polyline_checkbox">Polylines:</label><input type="checkbox" id="polyline_checkbox" name="polyline_checkbox" onclick="redraw_objects()"/>
-		<label for="grid_checkbox">Grid:</label><input type="checkbox" id="grid_checkbox" name="grid_checkbox" onclick="on_grid_checkbox_clicked()"/>
-		<label for="colors_checkbox">Colors:</label><input type="checkbox" id="colors_checkbox" name="colors_checkbox" onclick="redraw_objects()"/>
+		<input checked type="checkbox" id="dots_checkbox" name="dots_checkbox" onclick="redraw_objects()"/>
+		<label for="dots_checkbox">Dots</label>
+
+		<input type="checkbox" id="polyline_checkbox" name="polyline_checkbox" checked onclick="redraw_objects()"/>
+		<label for="polyline_checkbox">Polylines</label>
+
+		<input type="checkbox" id="grid_checkbox" name="grid_checkbox" onclick="on_grid_checkbox_clicked()"/>
+		<label for="grid_checkbox">Grid</label>
+
+		<input type="checkbox" id="colors_checkbox" name="colors_checkbox" onclick="redraw_objects()"/>
+		<label for="colors_checkbox">Colors</label>
+
+		<input type="checkbox" id="arrows_checkbox" name="arrows_checkbox" checked onclick="redraw_objects()"/>
+		<label for="arrows_checkbox">Arrows</label>
+
 		<p id="p_zoom"/>
 		<p id="p_dists"/>
   </body>
