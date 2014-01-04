@@ -231,19 +231,20 @@ def get_maximal_sublists2(list_, predicate_):
 	return r
 
 # Return all input elements, but group them by runs of the same key.
-def get_maximal_sublists3(list_, key_):
+def get_maximal_sublists3(list_, key_, returnidxes=False, keybyindex=False):
 	assert callable(key_)
 	if not list_:
 		return list_
-	cur_sublist = [list_[0]]
+	cur_sublist = [0 if returnidxes else list_[0]]
 	r = [cur_sublist]
-	prev_elem_key = key_(list_[0])
-	for prev_elem, cur_elem in hopscotch(list_):
-		cur_elem_key = key_(cur_elem)
+	prev_elem_key = key_(0 if keybyindex else list_[0])
+	for previ, curi in hopscotch(range(len(list_))):
+		prev_elem = list_[previ]; cur_elem = list_[curi]
+		cur_elem_key = key_(curi if keybyindex else cur_elem)
 		if prev_elem_key == cur_elem_key:
-			cur_sublist.append(cur_elem)
+			cur_sublist.append(curi if returnidxes else cur_elem)
 		else:
-			cur_sublist = [cur_elem]
+			cur_sublist = [curi if returnidxes else cur_elem]
 			r.append(cur_sublist)
 		prev_elem_key = cur_elem_key
 	return r
@@ -313,9 +314,9 @@ def round(x_, step_):
 	ru = round_up(x_, step_)
 	return (rd if x_ - rd < ru - x_ else ru)
 
-def first(iterable_, predicate_):
+def first(iterable_, predicate_=None):
 	for e in iterable_:
-		if predicate_(e):
+		if predicate_ is None or predicate_(e):
 			return e
 	return None
 
@@ -783,6 +784,20 @@ def get_maximal_connected_groups(list_, is_connected_func_):
 		if not joined_something:
 			break
 	return groups
+
+def sliceii(list_, idx1_, idx2_):
+	assert isinstance(list_, Sequence)
+	assert idx1_ in range(len(list_)) and idx2_ in range(len(list_)) # -ve or too-high indexes not supported, due to laziness. 
+	if idx1_ < idx2_:
+		return list_[idx1_:idx2_+1]
+	else:
+		r = []
+		i = idx1_
+		while i >= idx2_:
+			r.append(list_[i])
+			i -= 1
+		return r
+		
 
 if __name__ == '__main__':
 

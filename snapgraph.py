@@ -124,8 +124,10 @@ class Vertex(object):
 	def get_ptaddr(self, polylineidx_):
 		ptaddrs = [ptaddr for ptaddr in self.ptaddrs if ptaddr.polylineidx == polylineidx_]
 		if len(ptaddrs) != 1:
-			raise Exception('Problem around %s, polyline %d (%s)' \
-					% (self, polylineidx_, [self.snapgraph.get_point(ptaddr) for ptaddr in ptaddrs]))
+			plineidxes = [ptaddr.polylineidx for ptaddr in self.ptaddrs]
+			plineidx_to_pts = dict((plineidx, self.snapgraph.polylines[plineidx]) for plineidx in plineidxes)
+			raise Exception('Problem around %s, polyline %d (%s) - %s, %s' \
+					% (self, polylineidx_, ptaddrs, self.ptaddrs, plineidx_to_pts))
 		return ptaddrs[0]
 
 	def get_ptidx(self, polylineidx_):
@@ -145,6 +147,9 @@ class Vertex(object):
 	def __hash__(self):
 		return self.id
 
+	def __eq__(self, other):
+		return isinstance(other, Vertex) and (self.id == other.id)
+
 	def __str__(self):
 		return 'Vertex(id:%d)' % (self.id)
 
@@ -155,6 +160,20 @@ class Vertex(object):
 		return {'id': self.id, 'pos': self.pos(), 
 				'ptaddrs': [[addr.polylineidx, addr.ptidx] for addr in self.ptaddrs], 
 				'connectedids': [vert_n_dist[0].id for vert_n_dist in self.snapgraph.vertex_to_connectedvertex_n_dists[self]]}
+
+	def get_shortest_common_plineidx(self, other_):
+		assert self.snapgraph is other_.snapgraph
+		plineidxes = set(ptaddr.polylineidx for ptaddr in self.ptaddrs) & set(ptaddr.polylineidx for ptaddr in other_.ptaddrs)
+		if len(plineidxes) == 0:
+			raise Exception('No plines in common between %s and %s' % (self, other_))
+		elif len(plineidxes) == 1:
+			return anyelem(plineidxes)
+		else:
+			def key(plineidx__):
+				self_ptidx = self.get_ptidx(plineidx__)
+				other_ptidx = other_.get_ptidx(plineidx__)
+				return self.snapgraph.get_dist_between_points(plineidx__, self_ptidx, other_ptidx)
+			return min(plineidxes, key=key)
 
 class PosAddr(object):
 
@@ -175,7 +194,16 @@ class PosAddr(object):
 		return 'PosAddr(%s,%.2f)' % (self.linesegaddr, self.pals)
 
 	def __hash__(self):
-		return self.linesegaddr.__hash__() + int(self.pals*100)
+		return hash(self._key())
+
+	def __eq__(self, other):
+		return isinstance(other, PosAddr) and (self._key() == other._key())
+
+	def _key(self):
+		return (self.linesegaddr, self.pals)
+
+	def __cmp__(self, other):
+		return cmp(self._key(), other._key())
 
 	def __repr__(self):
 		return self.__str__()
@@ -183,25 +211,53 @@ class PosAddr(object):
 class Path(object):
 	
 	def __init__(self, pathsteps_, snapgraph_):
-		assert all(isinstance(e, PosAddr) or isinstance(e, Vertex) for e in pathsteps_)
+		assert len(pathsteps_) >= 1 and (isinstance(e, PosAddr) for e in (pathsteps_[0], pathsteps_[-1]))
+		assert (isinstance(e, Vertex) for e in pathsteps_[1:-1])
 		assert isinstance(snapgraph_, SnapGraph)
 		self.pathsteps = pathsteps_
 		self.snapgraph = snapgraph_
 
 	def latlngs(self):
-		r = []
-		for pathstep in self.pathsteps:
-			if isinstance(pathstep, PosAddr):
-				r.append(self.snapgraph.get_latlng(pathstep))
-			elif isinstance(pathstep, Vertex):
-				r.append(pathstep.pos())
-			else:
-				assert False
+		startposaddr = self.pathsteps[0]; destposaddr = self.pathsteps[-1]
+		r = [self.snapgraph.get_latlng(startposaddr)]
+		if len(self.pathsteps) == 2:
+			r += self.snapgraph.get_pts_between(startposaddr, destposaddr)
+		if len(self.pathsteps) >= 3:
+			start_plineidx = startposaddr.linesegaddr.polylineidx
+			start_ptidx = startposaddr.linesegaddr.ptidx
+			first_vert_ptidx = self.pathsteps[1].get_ptidx(start_plineidx)
+			start_ptidx += (1 if start_ptidx < first_vert_ptidx else 0)
+			r += sliceii(self.snapgraph.polylines[start_plineidx], start_ptidx, first_vert_ptidx)
+		if len(self.pathsteps) >= 4:
+			verts = self.pathsteps[1:-1]
+			for vert1, vert2 in hopscotch(verts):
+				plineidx = vert1.get_shortest_common_plineidx(vert2)
+				vert1_ptidx = vert1.get_ptidx(plineidx)
+				vert2_ptidx = vert2.get_ptidx(plineidx)
+				r += sliceii(self.snapgraph.polylines[plineidx], vert1_ptidx, vert2_ptidx)
+		if len(self.pathsteps) >= 3:
+			dest_plineidx = destposaddr.linesegaddr.polylineidx
+			dest_ptidx = destposaddr.linesegaddr.ptidx
+			last_vert_ptidx = self.pathsteps[-2].get_ptidx(dest_plineidx)
+			dest_ptidx += (1 if dest_ptidx < last_vert_ptidx else 0)
+			r += sliceii(self.snapgraph.polylines[dest_plineidx], last_vert_ptidx, dest_ptidx)
+		r += [self.snapgraph.get_latlng(destposaddr)]
 		return r
 
 	def __str__(self):
 		return self.pathsteps.__str__()
 
+	def __repr__(self):
+		return self.__str__()
+
+	def __add__(self, other):
+		assert self.snapgraph == other.snapgraph
+		if self.pathsteps[-1] == other.pathsteps[0]:
+			r_pathsteps = self.pathsteps + other.pathsteps[1:]
+		else:
+			r_pathsteps = self.pathsteps + other.pathsteps
+		r = Path(r_pathsteps, self.snapgraph)
+		return r
 
 # This can be pickled or memcached. 
 class SnapGraph(object):
@@ -236,11 +292,10 @@ class SnapGraph(object):
 			# distance-between-vertexes info is built.)
 			self.init_polylineidx_to_ptidx_to_mapl()
 
-	# return list of (dist, Path) pairs.  Dist is a float, in meters.  
-	def find_paths(self, startlatlng_, destlatlng_, out_visited_vertexes=None):
-		snap_tolerance = 100
-		start_posaddrs = self.multisnap(startlatlng_, snap_tolerance)
-		dest_posaddrs = self.multisnap(destlatlng_, snap_tolerance)
+	# return list of (dist, Path) pairs.  Dist is a float, in meters.   List is sorted in ascending order of dist. 
+	def find_paths(self, startlatlng_, startposaddrs_, destlatlng_, destposaddrs_, snap_tolerance=100, out_visited_vertexes=None):
+		start_posaddrs = (startposaddrs_ if startposaddrs_ is not None else self.multisnap(startlatlng_, snap_tolerance))
+		dest_posaddrs = (destposaddrs_ if destposaddrs_ is not None else self.multisnap(destlatlng_, snap_tolerance))
 		if not(start_posaddrs and dest_posaddrs):
 			return []
 		else:
@@ -254,49 +309,65 @@ class SnapGraph(object):
 				# Anwyay I got the 3 by trial and error. 
 				start_latlng_to_posaddr_dist = self.get_latlng(start_posaddr).dist_m(startlatlng_)*3
 				dest_latlng_to_posaddr_dist = self.get_latlng(dest_posaddr).dist_m(destlatlng_)*3
-				for start_vertex in posaddr_to_bounding_vertexes[start_posaddr]:
-					for dest_vertex in posaddr_to_bounding_vertexes[dest_posaddr]:
-						dist, vertex_path = self.find_path_by_vertexes(start_vertex, dest_vertex, out_visited_vertexes)
-						if dist is not None:
-							dist += start_latlng_to_posaddr_dist + dest_latlng_to_posaddr_dist
-							dist += self.get_latlng(start_posaddr).dist_m(vertex_path[0].pos())
-							dist += self.get_latlng(dest_posaddr).dist_m(vertex_path[-1].pos())
-							path = Path([start_posaddr] + vertex_path + [dest_posaddr], self)
-							dists_n_paths.append((dist, path))
-				if (start_posaddr.linesegaddr.polylineidx == dest_posaddr.linesegaddr.polylineidx) \
-						and self.do_posaddrs_have_no_vertexes_between_them(start_posaddr, dest_posaddr):
-					dist = self.get_dist_between_posaddrs(start_posaddr, dest_posaddr)
+				start_latlng_to_posaddr_dist = dest_latlng_to_posaddr_dist = 0
+				dist, path = self.find_path_by_posaddrs(start_posaddr, dest_posaddr, out_visited_vertexes)
+				if dist is not None:
 					dist += start_latlng_to_posaddr_dist + dest_latlng_to_posaddr_dist
-					path = Path([start_posaddr, dest_posaddr], self)
 					dists_n_paths.append((dist, path))
 			dists_n_paths.sort(key=lambda e: e[0])
 			return dists_n_paths
 
-	def do_posaddrs_have_no_vertexes_between_them(self, posaddr1_, posaddr2_):
-		assert posaddr1_.linesegaddr.polylineidx == posaddr2_.linesegaddr.polylineidx
-		return (self.get_bounding_vertexes(posaddr1_) == self.get_bounding_vertexes(posaddr2_))
+	# return list of (dist, Path) pairs.  Dist is a float, in meters.   List is sorted in ascending order of dist. 
+	def find_multipaths(self, latlngs_, snap_tolerance=100):
+		if len(latlngs_) < 2:
+			raise Exception()
+		posaddrses = [self.multisnap(latlng, snap_tolerance) for latlng in latlngs_]
+		if len(latlngs_) == 2:
+			return self.find_paths(latlngs_[0], posaddrses[0], latlngs_[1], posaddrses[1])
+		elif len(latlngs_) == 3:
+			r = []
+			for posaddr1 in posaddrses[1]:
+				distnpaths_01 = self.find_paths(latlngs_[0], posaddrses[0], latlngs_[1], [posaddr1])
+				distnpaths_12 = self.find_paths(latlngs_[1], [posaddr1], latlngs_[2], posaddrses[2])
+				r += [(dist01+dist12, path01+path12) for (dist01,path01), (dist12,path12) in product(distnpaths_01, distnpaths_12)]
+			r.sort(key=lambda e: e[0])
+			return r
+		else:
+			pass
 
-	# return a list of Vertex, length 0, 1, or 2.
-	def get_bounding_vertexes(self, posaddr_):
+	def get_pts_between(self, posaddr1_, posaddr2_):
+		assert posaddr1_.linesegaddr.polylineidx == posaddr2_.linesegaddr.polylineidx
+		plineidx = posaddr1_.linesegaddr.polylineidx
+		pos1_ptidx = posaddr1_.linesegaddr.ptidx
+		pos2_ptidx = posaddr2_.linesegaddr.ptidx
+		if pos1_ptidx == pos2_ptidx:
+			return []
+		elif pos1_ptidx < pos2_ptidx:
+			return self.polylines[plineidx][pos1_ptidx+1:pos2_ptidx+1]
+		else:
+			return sliceii(self.polylines[plineidx], pos1_ptidx, pos2_ptidx+1)
+
+	# return a list of Vertex, length 0, 1, or 2.  
+	# If returned list has length of 2: first elem will be the 'low' vertex (by point index on the polyline), 
+	# 	second elem will be the 'high' vertex. 
+	# If always_return_both_ is True: then the returned list will always have a length of 2, and one or both elements might be None. 
+	# 
+	# If posaddr_ has a pals of 0.0 and it is right on top of a vertex, then we will act like the pals is eg. 0.00001, 
+	# and return the bounding vertexes for that.  This makes some code elsewhere easier to write. 
+	def get_bounding_vertexes(self, posaddr_, always_return_both_=False):
 		assert isinstance(posaddr_, PosAddr)
 		ptaddr = posaddr_.linesegaddr
-		if posaddr_.pals == 0.0:
-			vertexes_on_polyline = self.polylineidx_to_ptidx_to_vertex[ptaddr.polylineidx].values()
-			if len(vertexes_on_polyline) > 0:
-				vert = min(vertexes_on_polyline, \
-						key=lambda vert: self.get_dist_between_points(ptaddr.polylineidx, ptaddr.ptidx, vert.get_ptidx(ptaddr.polylineidx)))
-				return [vert]
-			else:
-				return []
+		ptidxes_with_a_vert = self.polylineidx_to_ptidx_to_vertex.get(ptaddr.polylineidx, {}).keys()
+		if len(ptidxes_with_a_vert) == 0:
+			return ([None, None] if always_return_both_ else [])
 		else:
-			ptidxes_with_a_vert = self.polylineidx_to_ptidx_to_vertex.get(ptaddr.polylineidx, {}).keys()
-			if len(ptidxes_with_a_vert) == 0:
-				return []
+			lo_vert_ptidx = max2(ptidx for ptidx in ptidxes_with_a_vert if ptidx <= ptaddr.ptidx)
+			hi_vert_ptidx = min2(ptidx for ptidx in ptidxes_with_a_vert if ptidx > ptaddr.ptidx)
+			lo_vert = self.polylineidx_to_ptidx_to_vertex[ptaddr.polylineidx].get(lo_vert_ptidx, None)
+			hi_vert = self.polylineidx_to_ptidx_to_vertex[ptaddr.polylineidx].get(hi_vert_ptidx, None)
+			if always_return_both_:
+				return [lo_vert, hi_vert]
 			else:
-				lo_vert_ptidx = max2(ptidx for ptidx in ptidxes_with_a_vert if ptidx <= ptaddr.ptidx)
-				hi_vert_ptidx = min2(ptidx for ptidx in ptidxes_with_a_vert if ptidx > ptaddr.ptidx)
-				lo_vert = self.polylineidx_to_ptidx_to_vertex[ptaddr.polylineidx].get(lo_vert_ptidx, None)
-				hi_vert = self.polylineidx_to_ptidx_to_vertex[ptaddr.polylineidx].get(hi_vert_ptidx, None)
 				return [v for v in [lo_vert, hi_vert] if v is not None]
 
 	def get_latlng(self, posaddr_):
@@ -319,43 +390,59 @@ class SnapGraph(object):
 		refpt = self.get_point(posaddr_.linesegaddr)
 		return refpt.dist_m(posaddr_latlng)
 
-	# Thanks to http://en.wikipedia.org/wiki/Dijkstra's_algorithm 
-	def find_path_by_vertexes(self, srcvertex_, destvertex_, out_visited_vertexes=None):
-		class VertexInfo(object):
-			def __init__(self):
-				self.dist = float('inf')
-				self.visited = False
-				self.previous = None
+	# Returns shortest path, as one (dist, path) ((float, Path)) pair.   If no path is possible, both dist and path will be None. 
+	# We pass a fancy 'get connected vertexes' function to dijkstra, to support path finding from somewhere along an edge 
+	# (which dijkstra doesn't do) but pretending like we've inserted a temporary vertex at the start and dest positions. 
+	# In the code below, 'vvert' is short for 'virtual vertex' which is a term I made up for this function, 
+	# to describe something that is a vertex in the graph theory sense and from the dijkstra function's perspective, 
+	# but is not necessarily one of our Vertex objects.  A virtual vertex could be a Vertex, or it could be a PosAddr. 
+	def find_path_by_posaddrs(self, startposaddr_, destposaddr_, out_visited_vertexes=None):
+		assert isinstance(startposaddr_, PosAddr) and isinstance(destposaddr_, PosAddr)
 
-		info = dict((vertex, VertexInfo()) for vertex in self.get_vertexes())
-		info[srcvertex_].dist = 0.0
-		q = set([srcvertex_])
-		while len(q) > 0:
-			u = min((vertex for vertex, info in info.iteritems() if not info.visited), key=lambda vertex: info[vertex].dist)
-			if u is destvertex_:
-				break
-			q.remove(u)
-			info[u].visited = True
-			for v, vdist in self.vertex_to_connectedvertex_n_dists[u]:
-				alt = info[u].dist + vdist
-				if alt < info[v].dist and not info[v].visited:
-					info[v].dist = alt
-					info[v].previous = u
-					q.add(v)
+		all_vverts = self.get_vertexes() + [startposaddr_, destposaddr_]
 
-		if out_visited_vertexes is not None:
-			out_visited_vertexes[:] = [vert for vert, vertinfo in info.iteritems() if vertinfo.visited]
-
-		if info[destvertex_].dist == float('inf'):
-			return (None, None)
+		startpos_bounding_vertexes = self.get_bounding_vertexes(startposaddr_, True)
+		destpos_bounding_vertexes = self.get_bounding_vertexes(destposaddr_, True)
+		shared_bounding_vertexes = set(startpos_bounding_vertexes) & set(destpos_bounding_vertexes)
+		def get_connected_vertexndists(vvert__):
+			if (len(shared_bounding_vertexes) == 2):
+				startpos_is_lo = (cmp(startposaddr_, destposaddr_) < 0)
+				if vvert__ in (startposaddr_, destposaddr_):	
+					vert = startpos_bounding_vertexes[(not startpos_is_lo) ^ (vvert__ is destposaddr_)]
+					thisposaddr, otherposaddr = (startposaddr_, destposaddr_)[::-1 if vvert__ is destposaddr_ else 1]
+					r = ([(vert, self.get_dist(thisposaddr, vert))] if vert is not None else [])
+					r += [(otherposaddr, self.get_dist_between_posaddrs(thisposaddr, otherposaddr))]
+				else:
+					assert isinstance(vvert__, Vertex)
+					r = self.vertex_to_connectedvertex_n_dists[vvert__]
+					if vvert__ in startpos_bounding_vertexes:
+						r = [(v,d) for v,d in r if v not in shared_bounding_vertexes]
+						posaddr = (startposaddr_, destposaddr_)[(not startpos_is_lo) ^ (vvert__ is startpos_bounding_vertexes[0])]
+						r += [(posaddr, self.get_dist(posaddr, vvert__))]
+			else:
+				if vvert__ is startposaddr_:	
+					r = [(vert,self.get_dist(startposaddr_, vert)) for vert in startpos_bounding_vertexes if vert is not None]
+				elif vvert__ is destposaddr_:
+					r = [(vert,self.get_dist(destposaddr_, vert)) for vert in destpos_bounding_vertexes if vert is not None]
+				else:
+					assert isinstance(vvert__, Vertex)
+					r = self.vertex_to_connectedvertex_n_dists[vvert__]
+					if (len(shared_bounding_vertexes) == 1) and (vvert__ is anyelem(shared_bounding_vertexes)):
+						r = [(v,d) for v,d in r if v not in startpos_bounding_vertexes + destpos_bounding_vertexes]
+						r += [(posaddr, self.get_dist(posaddr, vvert__)) for posaddr in (startposaddr_, destposaddr_)]
+					elif vvert__ in startpos_bounding_vertexes:
+						r = [(v,d) for v,d in r if v not in startpos_bounding_vertexes] + [(startposaddr_,self.get_dist(startposaddr_, vvert__))]
+					elif vvert__ in destpos_bounding_vertexes:
+						r = [(v,d) for v,d in r if v not in destpos_bounding_vertexes] + [(destposaddr_,self.get_dist(destposaddr_, vvert__))]
+			return r
+			
+		r = dijkstra(startposaddr_, destposaddr_, all_vverts, get_connected_vertexndists, 
+				out_visited_vertexes=out_visited_vertexes)
+		if r[0] is not None:
+			assert r[1] is not None
+			return (r[0], Path(r[1], self))
 		else:
-			path = []
-			u = destvertex_
-			while info[u].previous is not None:
-				path.insert(0, u)
-				u = info[u].previous
-			path.insert(0, srcvertex_)
-			return (info[destvertex_].dist, path)
+			return r
 
 	def get_vertex(self, id_):
 		return first(self.get_vertexes(), lambda vertex: vertex.id == id_)
@@ -452,6 +539,11 @@ class SnapGraph(object):
 			r += posaddr1_dist_to_refpt
 			r -= posaddr2_dist_to_refpt
 		return r
+
+	def get_dist(self, posaddr_, vertex_):
+		ptaddr_of_vertex_on_posaddrs_pline = vertex_.get_ptaddr(posaddr_.linesegaddr.polylineidx)
+		posaddr_of_vertex = PosAddr(ptaddr_of_vertex_on_posaddrs_pline, 0.0)
+		return self.get_dist_between_posaddrs(posaddr_, posaddr_of_vertex)
 
 	def get_addr_to_vertex(self, disttolerance_):
 		latlngid_to_ontop_latlngids = self.get_graph_latlngid_to_ontop_latlngids(disttolerance_)
@@ -570,18 +662,28 @@ class SnapGraph(object):
 		return self.polylines[linesegaddr_.polylineidx][linesegaddr_.ptidx]
 
 	# returns: list of PosAddr, sorted by dist to target_ in increasing order. 
-	# There are three stages to this.  The first finds all of the possible lineseg snaps.  Simple.  
-	# The second reduces that list of lineseg snaps to probably one per polyline.  The reason for doing this is because 
+	# There are three stages to this.  The first stage finds all of the possible lineseg snaps.  Simple.  
+	# 
+	# The second stage reduces that list of lineseg snaps to probably one per polyline.  The reason for doing this is because 
 	# for most cases, several consecutive linesegs will be within the search radius, and we'll see a lot of useless 
-	# snaps with a pals of 0 or 1.  These are not useful.  So we get the closest ones only AKA local minima (by dist to target).
-	# The third case reduces the list more, in a similar way, but looking across polylines.  This deals best with the scenario of 
-	# many short streets (polylines) in a small area.  So before this stage there would tend to be many snaps at one extreme 
+	# snaps with a pals of 0 or 1.  These are not useful.  So we get the closest ones to our target only, 
+	# AKA the local minima by dist to target.
+	# 
+	# The third stage (which is optional and might not be a good idea) reduces 
+	# the list more, in a similar way, but looking across polylines.  This deals 
+	# best with the scenario of many short streets (polylines) in a small area.  
+	# So before this stage there would tend to be many snaps at one extreme 
 	# end of each of these polylines - which will be at a vertex which connects that polyline to the one that the target is 
 	# closest to.  (Or there might be a polyline or two in between - same issue.)   So we look at connected groups of polylines.  
-	# There is a chance that we could throw out some useful results in this stage.  Also, there is nothing special about the 
-	# heading difference chosen.  This code will do you a disservice if you use it on an unusual layout, such as polylines 
+	# There is a chance that we could throw out some useful results in this stage.  
+	# There is something special about the heading difference chosen - it is the same as the approximate smallest angle between two 
+	# streets that I could find.  (Jarvis & Mt. Pleasant.)  I would explain this more but I don't have the energy right now.
+	# This code will do you a disservice if you use it on an unusual layout, such as polylines 
 	# with a long skinny 'U' shape.  But the graphs that we use aren't like that. 
-	def multisnap(self, target_, searchradius_):
+	# The third stage caused a problem in the scenario of a T intersection where the vertical part of the T extends a little 
+	# too high, past the horizontal part.  See doc/comment-multisnap-t-intersection-reduce-pitfall.png.   
+	# I think I'll disable this third stage for now. 
+	def multisnap(self, target_, searchradius_, reducepts=False):
 		assert searchradius_ is not None
 		linesegaddr_to_lssr = {}
 		for linesegaddr in self.get_nearby_linesegaddrs(GridSquare(target_), searchradius_):
@@ -602,18 +704,21 @@ class SnapGraph(object):
 				lssr = plines_lssrs[idx]
 				posaddr_to_dist[PosAddr(linesegaddr, lssr.pals)] = lssr.dist
 
-		are_posaddrs_connected = lambda pa1, pa2: self.are_plines_connected(pa1.linesegaddr.polylineidx, pa2.linesegaddr.polylineidx)
-		connected_posaddr_groups = get_maximal_connected_groups(posaddr_to_dist.keys(), are_posaddrs_connected)
-		r = []
-		for connected_posaddr_group in connected_posaddr_groups:
-			connected_posaddr_group.sort(key=lambda posaddr: posaddr_to_dist[posaddr])
-			r_for_connected_group = []
-			for candidate_posaddr in connected_posaddr_group:
-				candidate_heading = target_.heading(self.get_latlng(candidate_posaddr))
-				if not any(geom.diff_headings(candidate_heading, target_.heading(self.get_latlng(other_posaddr))) < 85 \
-						for other_posaddr in r_for_connected_group):
-					r_for_connected_group.append(candidate_posaddr)
-			r += r_for_connected_group
+		if reducepts:
+			are_posaddrs_connected = lambda pa1, pa2: self.are_plines_connected(pa1.linesegaddr.polylineidx, pa2.linesegaddr.polylineidx)
+			connected_posaddr_groups = get_maximal_connected_groups(posaddr_to_dist.keys(), are_posaddrs_connected)
+			r = []
+			for connected_posaddr_group in connected_posaddr_groups:
+				connected_posaddr_group.sort(key=lambda posaddr: posaddr_to_dist[posaddr])
+				r_for_connected_group = []
+				for candidate_posaddr in connected_posaddr_group:
+					candidate_heading = target_.heading(self.get_latlng(candidate_posaddr))
+					if not any(geom.diff_headings(candidate_heading, target_.heading(self.get_latlng(other_posaddr))) < 35 \
+							for other_posaddr in r_for_connected_group):
+						r_for_connected_group.append(candidate_posaddr)
+				r += r_for_connected_group
+		else:
+			r = posaddr_to_dist.keys()
 
 		r.sort(key=lambda posaddr: posaddr_to_dist[posaddr])
 		return r
@@ -1094,6 +1199,48 @@ def get_supercover_first_octant_only(gridsquare1_, gridsquare2_):
 
 	return r
 	
+# Returns shortest path, as one (dist, path) pair.   
+# If no path is possible, both 'dist' and the Path will be None. 
+# 'path' is a list of vertexes. 
+# Thanks to http://en.wikipedia.org/wiki/Dijkstra's_algorithm 
+def dijkstra(srcvertex_, destvertex_, all_vertexes_, get_connected_vertexndists_, out_visited_vertexes=None):
+	assert srcvertex_ in all_vertexes_ and destvertex_ in all_vertexes_
+
+	class VertexInfo(object):
+		def __init__(self):
+			self.dist = float('inf')
+			self.visited = False
+			self.previous = None
+
+	info = dict((vertex, VertexInfo()) for vertex in all_vertexes_)
+	info[srcvertex_].dist = 0.0
+	q = set([srcvertex_])
+	while len(q) > 0:
+		u = min((vertex for vertex, info in info.iteritems() if not info.visited), key=lambda vertex: info[vertex].dist)
+		if u is destvertex_:
+			break
+		q.remove(u)
+		info[u].visited = True
+		for v, vdist in get_connected_vertexndists_(u):
+			alt = info[u].dist + vdist
+			if alt < info[v].dist and not info[v].visited:
+				info[v].dist = alt
+				info[v].previous = u
+				q.add(v)
+
+	if out_visited_vertexes is not None:
+		out_visited_vertexes[:] = [vert for vert, vertinfo in info.iteritems() if vertinfo.visited]
+
+	if info[destvertex_].dist == float('inf'):
+		return (None, None)
+	else:
+		path = []
+		u = destvertex_
+		while info[u].previous is not None:
+			path.insert(0, u)
+			u = info[u].previous
+		path.insert(0, srcvertex_)
+		return (info[destvertex_].dist, path)
 
 if __name__ == '__main__':
 

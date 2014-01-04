@@ -857,16 +857,18 @@ function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
 			icon: new google.maps.MarkerImage(get_vehicle_url(vid_, size, heading_, static_aot_moving_), 
 					null, null, new google.maps.Point(size/2, size/2)),
 			visible: false, 
-			clickable: false,
+			clickable: SHOW_DEV_CONTROLS,
 			zIndex: 5
 		});
+	if(SHOW_DEV_CONTROLS) {
+		add_solo_vid_click_listener(marker, vid_);
+		add_vid_mouseover_infowin(marker, size, vid_);
+	}
 	if(!TEST_INVISIBLE) {
 		if((static_aot_moving_ && g_show_static_vehicles) || (!static_aot_moving_ && g_show_moving_vehicles)) {
 			marker.setVisible(true);
 		}
 	}
-	add_vid_mouseover_infowin(marker, size, vid_);
-	//add_solo_vid_click_listener(marker, vid_);
 	return marker;
 }
 
