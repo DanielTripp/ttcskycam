@@ -814,27 +814,28 @@ def sliceii(list_, idx1_, idx2_):
 # 
 # ... into code like this: 
 # 
-# for e, isfirst, islast in enumfirstlast(values):
+# for i, e, isfirst, islast in enumerate2(values):
 # 	if isfirst:
 # 		print 'BEGIN...', e
 # 	elif islast:
 # 		print e, '... END'
 # 	else:
 # 		print e
-
-def enumfirstlast(iterable_):
+def enumerate2(iterable_):
 	it = iter(iterable_)
 	try:
 		e = it.next()
 		isfirst = True
+		i = 0
 		try:
 			while True:
 				next_e = it.next()
-				yield (e, isfirst, False)
+				yield (i, e, isfirst, False)
+				i += 1
 				isfirst = False
 				e = next_e
 		except StopIteration:
-			yield (e, isfirst, True)
+			yield (i, e, isfirst, True)
 	except StopIteration:
 		pass
 
