@@ -255,7 +255,7 @@ class Path(object):
 				r += [self.pathsteps[-2].pos()] + sliceii(self.snapgraph.polylines[dest_plineidx], last_vert_ptidx, dest_ptidx)[1:]
 		if len(self.pathsteps) >= 2:
 			r += [self.snapgraph.get_latlng(destposaddr)]
-		return r
+		return uniq(r)
 
 	def __str__(self):
 		return self.pathsteps.__str__()
