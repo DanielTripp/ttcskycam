@@ -116,10 +116,21 @@ class Vertex(object):
 		self.id = Vertex.next_id
 		Vertex.next_id += 1
 		self.snapgraph = snapgraph_
-		self.ptaddrs = set()
+		self.ptaddrs = set() # starts off as a set, but will be a sorted list after this object is completely built. 
+		self.on_finished_constructing_was_called = False
+
+	def on_finished_constructing(self):
+		self.on_finished_constructing_was_called = True
+		# We want 'ptaddrs' to have a predictable iteration order across different calls in the same program run 
+		# so that pos() will return the same thing every time, which is a little bit important for Path.latlngs(). 
+		# (Otherwise the polyline that it returns could have some minor but odd things going on around certain corners.) 
+		# Also, we want 'ptaddrs' to have a predictable iteration order across different calls in DIFFERENT program runs, 
+		# because for my own debugging needs, I want outputs to be 100% reproducible. 
+		self.ptaddrs = sorted(self.ptaddrs)
 
 	def pos(self):
-		return self.snapgraph.get_point(anyelem(self.ptaddrs))
+		assert self.on_finished_constructing_was_called
+		return self.snapgraph.get_point(self.ptaddrs[0])
 
 	def get_ptaddr(self, polylineidx_):
 		ptaddrs = [ptaddr for ptaddr in self.ptaddrs if ptaddr.polylineidx == polylineidx_]
@@ -222,26 +233,28 @@ class Path(object):
 		r = [self.snapgraph.get_latlng(startposaddr)]
 		if len(self.pathsteps) == 2:
 			r += self.snapgraph.get_pts_between(startposaddr, destposaddr)
-		if len(self.pathsteps) >= 3:
-			start_plineidx = startposaddr.linesegaddr.polylineidx
-			start_ptidx = startposaddr.linesegaddr.ptidx
-			first_vert_ptidx = self.pathsteps[1].get_ptidx(start_plineidx)
-			start_ptidx += (1 if start_ptidx < first_vert_ptidx else 0)
-			r += sliceii(self.snapgraph.polylines[start_plineidx], start_ptidx, first_vert_ptidx)
-		if len(self.pathsteps) >= 4:
-			verts = self.pathsteps[1:-1]
-			for vert1, vert2 in hopscotch(verts):
-				plineidx = vert1.get_shortest_common_plineidx(vert2)
-				vert1_ptidx = vert1.get_ptidx(plineidx)
-				vert2_ptidx = vert2.get_ptidx(plineidx)
-				r += sliceii(self.snapgraph.polylines[plineidx], vert1_ptidx, vert2_ptidx)
-		if len(self.pathsteps) >= 3:
-			dest_plineidx = destposaddr.linesegaddr.polylineidx
-			dest_ptidx = destposaddr.linesegaddr.ptidx
-			last_vert_ptidx = self.pathsteps[-2].get_ptidx(dest_plineidx)
-			dest_ptidx += (1 if dest_ptidx < last_vert_ptidx else 0)
-			r += sliceii(self.snapgraph.polylines[dest_plineidx], last_vert_ptidx, dest_ptidx)
-		r += [self.snapgraph.get_latlng(destposaddr)]
+		else:
+			if len(self.pathsteps) >= 3:
+				start_plineidx = startposaddr.linesegaddr.polylineidx
+				start_ptidx = startposaddr.linesegaddr.ptidx
+				first_vert_ptidx = self.pathsteps[1].get_ptidx(start_plineidx)
+				start_ptidx += (1 if start_ptidx < first_vert_ptidx else 0)
+				r += sliceii(self.snapgraph.polylines[start_plineidx], start_ptidx, first_vert_ptidx)[:-1] + [self.pathsteps[1].pos()]
+			if len(self.pathsteps) >= 4:
+				verts = self.pathsteps[1:-1]
+				for vert1, vert2 in hopscotch(verts):
+					plineidx = vert1.get_shortest_common_plineidx(vert2)
+					vert1_ptidx = vert1.get_ptidx(plineidx)
+					vert2_ptidx = vert2.get_ptidx(plineidx)
+					r += [vert1.pos()] + sliceii(self.snapgraph.polylines[plineidx], vert1_ptidx, vert2_ptidx)[1:-1] + [vert2.pos()]
+			if len(self.pathsteps) >= 3:
+				dest_plineidx = destposaddr.linesegaddr.polylineidx
+				dest_ptidx = destposaddr.linesegaddr.ptidx
+				last_vert_ptidx = self.pathsteps[-2].get_ptidx(dest_plineidx)
+				dest_ptidx += (1 if dest_ptidx < last_vert_ptidx else 0)
+				r += [self.pathsteps[-2].pos()] + sliceii(self.snapgraph.polylines[dest_plineidx], last_vert_ptidx, dest_ptidx)[1:]
+		if len(self.pathsteps) >= 2:
+			r += [self.snapgraph.get_latlng(destposaddr)]
 		return r
 
 	def __str__(self):
@@ -569,6 +582,9 @@ class SnapGraph(object):
 			vertex = ptaddr_to_vertex[ptaddr]
 			if len(vertex.get_looping_polylineidxes()) > 0:
 				del ptaddr_to_vertex[ptaddr]
+
+		for vertex in ptaddr_to_vertex.values():
+			vertex.on_finished_constructing()
 
 		return dict(ptaddr_to_vertex)
 
