@@ -17,12 +17,15 @@
 		<script type="text/javascript" src="js/infobox_packed.js"></script>
     <script type="text/javascript">
 
+var MULTISNAP_RADIUS = 100;
+var RADIUS_OF_EARTH_METERS = 6367.44465*1000;
+
 var g_static_graph_objects = [];
 var g_path_objects = [];
 var g_start_marker = null, g_dest_marker = null;
 var g_connected_vertex_map_objects = [];
-var g_multisnap_markers = [];
-var g_found_polyline = null;
+var g_multisnap_objects = [];
+var g_found_polyline = null, g_found_vertex = null;
 
 function initialize() {
 
@@ -33,64 +36,114 @@ function initialize() {
 			icon: 'http://www.google.com/mapfiles/markerA.png', draggable: true});
 	g_dest_marker  = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.6545922, -79.4086401), 
 			icon: 'http://www.google.com/mapfiles/markerB.png', draggable: true});
-	google.maps.event.addListener(g_start_marker, 'click', forget_path_objects);
-	google.maps.event.addListener(g_dest_marker, 'click', forget_path_objects);
-	google.maps.event.addListener(g_start_marker, 'dragend', on_path_marker_dragged);
-	google.maps.event.addListener(g_dest_marker, 'dragend', on_path_marker_dragged);
+	google.maps.event.addListener(g_start_marker, 'click', clear_or_reget_paths);
+	google.maps.event.addListener(g_dest_marker, 'click', clear_or_reget_paths);
+	google.maps.event.addListener(g_start_marker, 'dragend', get_paths_from_server);
+	google.maps.event.addListener(g_dest_marker, 'dragend', get_paths_from_server);
 
 	google.maps.event.addListener(g_map, 'click', on_map_clicked);
+	google.maps.event.addListener(g_map, 'zoom_changed', function() {
+		if(is_selected('arrows_checkbox')) {
+			get_paths_from_server();
+		}
+	});
 
-	add_delayed_event_listener(g_map, 'bounds_changed', on_bounds_changed, 750);
+	add_delayed_event_listener(g_map, 'bounds_changed', refresh_graph_visuals, 750);
 
 	$('#plineidx_field').keydown(function (e) {
 		if(e.keyCode == 13) {
 			$('#plineidx_button').trigger('click');
 		}
 	});
+	$('#vertid_field').keydown(function (e) {
+		if(e.keyCode == 13) {
+			$('#vertid_button').trigger('click');
+		}
+	});
+}
+
+function clear_or_reget_paths() {
+	if(g_path_objects.length > 0) {
+		forget_path_objects();
+	} else {
+		get_paths_from_server();
+	}
+}
+
+function get_sgname() {
+	return radio_val('sgname');
 }
 
 function on_map_clicked(mouseevent_) {
-	forget_multisnap_markers();
-	set_contents('p_multisnap_latlng', '');
-	callpy('browse_snapgraph.multisnap', mouseevent_.latLng, 
-		{success: function(latlngs__) {
-			set_contents('p_multisnap_latlng', sprintf('Multisnap:&nbsp;&nbsp;&nbsp;(%.8f,%.8f)', mouseevent_.latLng.lat(), mouseevent_.latLng.lng()));
-			latlngs__.forEach(function(latlng) {
+	forget_multisnap_objects();
+	set_contents('p_multisnap_info', 'Multisnap: ...');
+	callpy('browse_snapgraph.multisnap', get_sgname(), mouseevent_.latLng, MULTISNAP_RADIUS, is_selected('multisnap_reducepts_checkbox'), 
+		{success: function(latlng_n_posaddrstrs__) {
+			var infostr = sprintf('Multisnap: arg: geom.LatLng(%.8f,%.8f) <br>%d result(s):', 
+					mouseevent_.latLng.lat(), mouseevent_.latLng.lng(), latlng_n_posaddrstrs__.length);
+			latlng_n_posaddrstrs__.forEach(function(latlng_n_posaddrstr) {
+				var latlng = latlng_n_posaddrstr[0], posaddrstr = latlng_n_posaddrstr[1];
 				var marker = new google.maps.Marker({map: g_map, position: google_LatLng(latlng), draggable: false});
-				g_multisnap_markers.push(marker);
+				g_multisnap_objects.push(marker);
+				if(is_selected('multisnap_show_infowindows')) {
+					var infowin = new google.maps.InfoWindow({content: posaddrstr, disableAutoPan: true});
+					infowin.open(g_map, marker);
+					g_multisnap_objects.push(infowin);
+				}
+				infostr += sprintf('<br>(%.8f,%.8f) %s', latlng[0], latlng[1], posaddrstr);
 			});
-			g_multisnap_markers.forEach(function(marker) {
-				google.maps.event.addListener(marker, 'click', forget_multisnap_markers);
+			set_contents('p_multisnap_info', infostr);
+			g_multisnap_objects.push(new google.maps.Marker({map: g_map, position: mouseevent_.latLng, draggable: false, 
+					icon: 'http://labs.google.com/ridefinder/images/mm_20_red.png', clickable: false}));
+			g_multisnap_objects.push(new google.maps.Circle({map: g_map, center: mouseevent_.latLng, radius: MULTISNAP_RADIUS, 
+					fillOpacity: 0, zIndex: 1, clickable: false}));
+
+			g_multisnap_objects.forEach(function(marker) {
+				google.maps.event.addListener(marker, 'click', forget_multisnap_objects);
 			});
 		}
 	});
 }
 
-function forget_multisnap_markers() {
-	g_multisnap_markers.forEach(function(marker) {
-		marker.setMap(null);
+function forget_multisnap_objects() {
+	g_multisnap_objects.forEach(function(obj) {
+		if(obj.close != undefined) {
+			obj.close();
+		} else {
+			obj.setMap(null);
+		}
 	});
-	g_multisnap_markers = [];
+	g_multisnap_objects = [];
 }
 
-function on_path_marker_dragged() {
-	set_marker_latlngs_contents();
-
+function get_paths_from_server() {
 	forget_path_objects();
-	callpy('browse_snapgraph.find_paths', g_start_marker.getPosition(), g_dest_marker.getPosition(), 
-		{success: function(paths__) {
-			if(paths__.length > 0) {
-				var shortest_path_pline = new google.maps.Polyline({map: g_map, path: google_LatLngs(paths__[0]), zIndex: 12, 
-						strokeColor: 'rgb(200,200,200)', strokeWeight: 6, clickable: false});
-				g_path_objects.push(shortest_path_pline);
-				for(var i=1; i<paths__.length; i++) {
-					var path_pline = new google.maps.Polyline({map: g_map, path: google_LatLngs(paths__[i]), zIndex: 11, 
-							strokeColor: 'rgb(100,100,100)', strokeWeight: 6, clickable: false});
-					g_path_objects.push(path_pline);
+	if(!is_selected('paths_checkbox')) {
+		set_contents('p_marker_latlngs', 'Paths: disabled.');
+	} else {
+		var start = g_start_marker.getPosition(), dest = g_dest_marker.getPosition();
+		set_contents('p_marker_latlngs', sprintf('Path markers:&nbsp;&nbsp;&nbsp;&nbsp;(%.8f,%.8f)&nbsp;&nbsp;&nbsp;&nbsp;(%.8f,%.8f)', 
+				start.lat(), start.lng(), dest.lat(), dest.lng()));
+
+		callpy('browse_snapgraph.find_paths', get_sgname(), start, dest, 
+			{success: function(paths__) {
+				if(paths__.length > 0) {
+					var path_0_latlngs = google_LatLngs(paths__[0]);
+					var shortest_path_pline = new google.maps.Polyline({map: g_map, path: path_0_latlngs, zIndex: 12, 
+							strokeColor: 'rgb(100,100,100)', strokeWeight: 6, clickable: false, strokeOpacity: 1, 
+							icons: (is_selected('arrows_checkbox') ? make_polyline_arrow_icons(g_map.getZoom(), path_0_latlngs) : null)});
+					g_path_objects.push(shortest_path_pline);
+					for(var i=1; i<paths__.length; i++) {
+						var path_i_latlngs = google_LatLngs(paths__[i]);
+						var path_pline = new google.maps.Polyline({map: g_map, path: path_i_latlngs, zIndex: 11, 
+								strokeColor: 'rgb(200,200,200)', strokeWeight: 6, clickable: false, strokeOpacity: 1, 
+								icons: (is_selected('arrows_checkbox') ? make_polyline_arrow_icons(g_map.getZoom(), path_i_latlngs) : null)});
+						g_path_objects.push(path_pline);
+					}
 				}
-			}
-		} 
-		});
+			} 
+			});
+	}
 }
 
 function forget_found_polyline() {
@@ -100,20 +153,21 @@ function forget_found_polyline() {
 	}
 }
 
-function set_marker_latlngs_contents() {
-	var start = g_start_marker.getPosition(), dest = g_dest_marker.getPosition();
-	set_contents('p_marker_latlngs', sprintf('Path markers:&nbsp;&nbsp;&nbsp;&nbsp;(%.8f,%.8f)&nbsp;&nbsp;&nbsp;&nbsp;(%.8f,%.8f)', 
-			start.lat(), start.lng(), dest.lat(), dest.lng()));
+function forget_found_vertex() {
+	if(g_found_vertex != null) {
+		g_found_vertex.setMap(null);
+		g_found_vertex = null;
+	}
 }
 
-function on_bounds_changed() {
-	if(g_map.getZoom() < 16) {
+function refresh_graph_visuals() {
+	if((get_sgname() == 'streets' && g_map.getZoom() < 16) || (get_sgname() == 'tracks' && g_map.getZoom() < 13)) {
 		console.log('Zoom in more.');
 		forget_static_graph_objects();
 		return;
 	}
 	var map_sw = g_map.getBounds().getSouthWest(), map_ne = g_map.getBounds().getNorthEast();
-	callpy('browse_snapgraph.get_infos_for_box', map_sw, map_ne, 
+	callpy('browse_snapgraph.get_infos_for_box', get_sgname(), map_sw, map_ne, 
 		{success: function(r_) {
 			forget_static_graph_objects();
 			var plineidx_to_pline = r_['plineidx_to_pline'], vertexid_to_info = r_['vertexid_to_info'];
@@ -121,9 +175,11 @@ function on_bounds_changed() {
 				var pline_pts = plineidx_to_pline[plineidx];
 				make_pline(parseInt(plineidx, 10), pline_pts);
 			}
-			for(var vertexid in vertexid_to_info) {
-				var vertinfo = vertexid_to_info[vertexid];
-				make_vert_circle(vertinfo);
+			if(is_selected('show_points_and_vertexes_checkbox')) {
+				for(var vertexid in vertexid_to_info) {
+					var vertinfo = vertexid_to_info[vertexid];
+					make_vert_circle(vertinfo);
+				}
 			}
 			g_static_graph_objects.push(new google.maps.Rectangle({map: g_map, bounds: g_map.getBounds(), fillOpacity: 0, clickable: false, 
 					strokeWeight: 0.5}));
@@ -136,7 +192,8 @@ function on_bounds_changed() {
 
 function make_vert_circle(vertinfo_) {
 	var vertpos = google_LatLng(vertinfo_.pos);
-	var circle = new google.maps.Circle({map: g_map, center: vertpos, radius: 20, 
+	var radius = 20;
+	var circle = new google.maps.Circle({map: g_map, center: vertpos, radius: radius, 
 			fillOpacity: 0, zIndex: 10});
 	add_hover_listener(circle, function(latlng__) { 
 			var infowin_content = sprintf('Vertex %d - (%.8f,%.8f)<br>', vertinfo_.id, vertpos.lat(), vertpos.lng());
@@ -144,8 +201,10 @@ function make_vert_circle(vertinfo_) {
 				infowin_content += sprintf('pline %d pt %d, ', ptaddr[0], ptaddr[1]);
 			});
 			infowin_content = infowin_content.substring(0, infowin_content.length-2) + '<br>';
+			var infowin_pos = new google.maps.LatLng(vertpos.lat() + 60*(radius/RADIUS_OF_EARTH_METERS), vertpos.lng()); 
+					// ^^ that 60 is a fudge factor.  I don't know why it's necessary. 
 			var infowin = new google.maps.InfoWindow({content: infowin_content,
-					position: latlng__, disableAutoPan: true, zIndex: 1});
+					position: infowin_pos, disableAutoPan: true, zIndex: 1});
 			infowin.open(g_map);
 			return infowin;
 		}, 250);
@@ -161,13 +220,13 @@ function make_vert_circle(vertinfo_) {
 			g_connected_vertex_map_objects.push(infowin);
 			infowin.open(g_map);
 
-			var connected_vert_latlngs = callpy_sync('browse_snapgraph.get_connected_vert_latlngs', vertinfo_.id);
+			var connected_vert_latlngs = callpy_sync('browse_snapgraph.get_connected_vert_latlngs', get_sgname(), vertinfo_.id);
 			connected_vert_latlngs.forEach(function(latlng) {
 				var color = 'rgb(75,75,75)';
 				g_connected_vertex_map_objects.push(new google.maps.Circle({map: g_map, center: google_LatLng(latlng), radius: 30, 
 						fillColor: color, fillOpacity: 1, strokeWeight: 0, zIndex: 2}));
 				g_connected_vertex_map_objects.push(new google.maps.Polyline({map: g_map, path: [google_LatLng(latlng), vertpos], 
-						strokeColor: color, strokeWeight: 15, zIndex: 3}));
+						strokeColor: color, strokeWeight: 15, zIndex: 3, strokeOpacity: 0.6}));
 			});
 
 			google.maps.event.addListener(infowin, 'closeclick', forget_connected_vertex_map_objects);
@@ -185,27 +244,35 @@ function forget_connected_vertex_map_objects() {
 function make_pline(plineidx_, pline_pts_) {
 	var glatlngs = google_LatLngs(pline_pts_);
 	var pline = new google.maps.Polyline({map: g_map, path: glatlngs, strokeColor: get_polyline_color(glatlngs), 
-			strokeWeight: 6, zIndex: 2});
+			strokeWeight: 6, zIndex: 2, strokeOpacity: 0.6});
+	google.maps.event.addListener(pline, 'click', function() { find_pline(plineidx_, false); });
 	add_hover_listener(pline, function(latlng__) { 
+			var map_height_lat= g_map.getBounds().getNorthEast().lat() - g_map.getBounds().getSouthWest().lat();
+			var pos = new google.maps.LatLng(latlng__.lat() + map_height_lat*0.03, latlng__.lng());
 			var infowin = new google.maps.InfoWindow({content: sprintf('pline %d', plineidx_), 
-					position: latlng__, disableAutoPan: true});
+					position: pos, disableAutoPan: true});
 			infowin.open(g_map);
 			return infowin;
 		}, 250);
 	g_static_graph_objects.push(pline);
 
-	for(var i in pline_pts_) {
-		var pline_pt = pline_pts_[i];
-		make_pline_pt_circle(plineidx_, parseInt(i, 10), pline_pt);
+	if(is_selected('show_points_and_vertexes_checkbox')) {
+		for(var i in pline_pts_) {
+			var pline_pt = pline_pts_[i];
+			make_pline_pt_circle(plineidx_, parseInt(i, 10), pline_pt);
+		}
 	}
 }
 
 function make_pline_pt_circle(plineidx_, ptidx_, pt_) {
-	var circle = new google.maps.Circle({map: g_map, center: google_LatLng(pt_), radius: 10, 
+	var circle_pos = google_LatLng(pt_);
+	var circle = new google.maps.Circle({map: g_map, center: circle_pos, radius: 10, 
 			fillOpacity: 0.4, strokeOpacity: 0, zIndex: 9});
 	add_hover_listener(circle, function(latlng__) { 
+			var map_height_lat = g_map.getBounds().getNorthEast().lat() - g_map.getBounds().getSouthWest().lat();
+			var pos = new google.maps.LatLng(circle_pos.lat() + map_height_lat*0.03, circle_pos.lng());
 			var infowin = new google.maps.InfoWindow({content: sprintf('pline %d, pt %d', plineidx_, ptidx_), 
-					position: latlng__});
+					position: pos});
 			infowin.open(g_map);
 			return infowin;
 		}, 250);
@@ -249,29 +316,55 @@ function get_polyline_color_hash(polyline_latlngs_) {
 	return Math.round(Math.abs(r));
 }
 
-function on_plineidx_button_clicked() {
+function find_pline(plineidx_, pan_to_) {
 	forget_found_polyline();
-	var plineidx = parseInt(get_value('plineidx_field'));
-	callpy('browse_snapgraph.get_pline_latlngs', plineidx, 
+	callpy('browse_snapgraph.get_pline_latlngs', get_sgname(), plineidx_, 
 		{success: function(latlngs__) {
 			if(latlngs__ === null) {
 				alert('Polyline not found.');
 			} else {
 				g_found_polyline = new google.maps.Polyline({map: g_map, path: google_LatLngs(latlngs__), zIndex: 1, 
-						strokeWeight: 50, strokeColor: 'rgb(255,230,0)'}); // max strokeWeight might be 32. 
+						strokeWeight: 50, strokeColor: 'rgb(255,230,0)', strokeOpacity: 0.6}); // max strokeWeight might be 32. 
 				google.maps.event.addListener(g_found_polyline, 'click', forget_found_polyline);
-
-				var closest_point = null, closest_point_dist = 0;
-				var closest_i = -1;// tdr 
-				for(var i=0; i<latlngs__.length; i++) {
-					var latlng = google_LatLng(latlngs__[i]);
-					var cur_pt_dist = dist_m(latlng, g_map.getCenter());
-					if(closest_point === null || closest_point_dist > cur_pt_dist) {
-						closest_point = latlng;
-						closest_point_dist = cur_pt_dist;
+				if(pan_to_) {
+					var closest_point = null, closest_point_dist = 0;
+					for(var i=0; i<latlngs__.length; i++) {
+						var latlng = google_LatLng(latlngs__[i]);
+						var cur_pt_dist = dist_m(latlng, g_map.getCenter());
+						if(closest_point === null || closest_point_dist > cur_pt_dist) {
+							closest_point = latlng;
+							closest_point_dist = cur_pt_dist;
+						}
 					}
+					g_map.panTo(closest_point);
 				}
-				g_map.setCenter(closest_point);
+			}
+		}
+	});
+	
+}
+
+function on_sgname_changed() {
+	refresh_graph_visuals();
+	forget_path_objects();
+	forget_multisnap_objects();
+	forget_found_polyline();
+	forget_found_vertex();
+}
+
+function on_vertid_button_clicked() {
+	forget_found_vertex();
+	var vertid = parseInt(get_value('vertid_field'));
+	callpy('browse_snapgraph.get_vert_pos', get_sgname(), vertid, 
+		{success: function(latlng__) {
+			if(latlng__ === null) {
+				alert('Vertex ID not found.');
+			} else {
+				var latlng = google_LatLng(latlng__);
+				g_found_vertex = new google.maps.Circle({map: g_map, center: latlng, zIndex: 1, 
+						radius: 200, fillColor: 'rgb(255,230,0)', fillOpacity: 0.6, strokeOpacity: 0});
+				google.maps.event.addListener(g_found_vertex, 'click', forget_found_vertex);
+				g_map.panTo(latlng);
 			}
 		}
 	});
@@ -284,10 +377,28 @@ function on_plineidx_button_clicked() {
   <body onload="initialize()" >
 		<div id="map_canvas" style="width:100%; height:100%"></div>
 		<br>
-		Find polyline by index:<input type="text" size="10" name="plineidx_field" id="plineidx_field" value="790"/> <input type="button" id="plineidx_button" onclick="on_plineidx_button_clicked()" value="Ok" /> <br>
+		Find polyline by index:<input type="text" size="10" name="plineidx_field" id="plineidx_field" value="790"/> <input type="button" id="plineidx_button" onclick="find_pline(parseInt(get_value('plineidx_field')), true)" value="Ok" /> 
+		/////// Find vertex by ID:<input type="text" size="10" name="vertid_field" id="vertid_field" value="0"/> <input type="button" id="vertid_button" onclick="on_vertid_button_clicked()" value="Ok" /> <br>
+		<input id="streets_button" type="radio" name="sgname" value="streets" onclick="on_sgname_changed()"  />
+		<label for="streets_button">streets</label>
+		<input id="tracks_button" type="radio" name="sgname" value="tracks" onclick="on_sgname_changed()" checked />
+		<label for="tracks_button">tracks</label>
+		 ////////
+		<input type="checkbox" id="show_points_and_vertexes_checkbox" checked="checked" onclick="refresh_graph_visuals()" />
+		<label for="show_points_and_vertexes_checkbox">Show points and vertexes</label> /////
+		 ////////
+		<input type="checkbox" id="paths_checkbox" checked onclick="get_paths_from_server()" />
+		<label for="paths_checkbox">Do paths</label>
+		<input type="checkbox" id="arrows_checkbox" name="arrows_checkbox" checked onclick="get_paths_from_server()"/>
+		<label for="arrows_checkbox">Show arrows on paths</label>
+		 ////////
+		<input type="checkbox" id="multisnap_show_infowindows" />
+		<label for="multisnap_show_infowindows">Multisnap: show infowindows</label> , 
+		<input type="checkbox" id="multisnap_reducepts_checkbox" />
+		<label for="multisnap_reducepts_checkbox">Multisnap: reduce points</label>
 		<p id="p_error"/>
+		<p id="p_marker_latlngs">Path markers: ...</p>
+		<p id="p_multisnap_info"/>
 		<p id="p_loading_urls"/>
-		<p id="p_marker_latlngs"/>
-		<p id="p_multisnap_latlng"/>
   </body>
 </html>
