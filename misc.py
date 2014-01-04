@@ -787,7 +787,8 @@ def get_maximal_connected_groups(list_, is_connected_func_):
 
 def sliceii(list_, idx1_, idx2_):
 	assert isinstance(list_, Sequence)
-	assert idx1_ in range(len(list_)) and idx2_ in range(len(list_)) # -ve or too-high indexes not supported, due to laziness. 
+	assert idx1_ in range(len(list_)) and idx2_ in range(len(list_)) # -ve or too-high indexes are not supported here, 
+	                                                                 # due to laziness by me. 
 	if idx1_ < idx2_:
 		return list_[idx1_:idx2_+1]
 	else:
@@ -797,12 +798,48 @@ def sliceii(list_, idx1_, idx2_):
 			r.append(list_[i])
 			i -= 1
 		return r
-		
+
+# Like python's built-in 'enumerate' function, but instead of yielding a numerical list index along with each element, 
+# this yields two booleans indicating whether the elment is the first or last element of the list. 
+# 
+# So with this function, you could turn code like this: 
+# 
+# for i, e in enumerate(values):
+# 	if i == 0:
+# 		print 'BEGIN...', e
+# 	elif i == len(values) - 1:
+# 		print e, '... END'
+# 	else:
+# 		print e
+# 
+# ... into code like this: 
+# 
+# for e, isfirst, islast in enumfirstlast(values):
+# 	if isfirst:
+# 		print 'BEGIN...', e
+# 	elif islast:
+# 		print e, '... END'
+# 	else:
+# 		print e
+
+def enumfirstlast(iterable_):
+	it = iter(iterable_)
+	try:
+		e = it.next()
+		isfirst = True
+		try:
+			while True:
+				next_e = it.next()
+				yield (e, isfirst, False)
+				isfirst = False
+				e = next_e
+		except StopIteration:
+			yield (e, isfirst, True)
+	except StopIteration:
+		pass
 
 if __name__ == '__main__':
 
-
 	pass
-
 
 
