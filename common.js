@@ -270,6 +270,8 @@ function callpy_url(module_and_funcname_, func_args_) {
 				new_argval.push(e);
 			});
 			argval = new_argval;
+		} else if($.isArray(argval) && argval.length > 0 && argval[0] instanceof google.maps.LatLng) {
+			argval = argval.map(function(e) { return [e.lat(), e.lng()]; });
 		}
 		var argval_json = window.JSON.stringify(argval);
 		paramstr += "&arg"+i+"="+encode_url_paramval(argval_json);

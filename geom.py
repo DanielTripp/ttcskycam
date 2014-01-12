@@ -108,9 +108,19 @@ class LatLng:
 			raise Exception("Can't normalize a vector with length of zero.")
 		return self.scale(1.0/dist_m)
 
+	def _key(self):
+		return (self.lat, self.lng)
+
 	def __eq__(self, other_):
 		assert isinstance(other_, LatLng)
-		return self.lat == other_.lat and self.lng == other_.lng
+		return self._key() == other_._key()
+
+	def __ne__(self, other_):
+		assert isinstance(other_, LatLng)
+		return self._key() != other_._key()
+
+	def __cmp__(self, other_):
+		return cmp(self._key(), other_._key())
 
 	def __hash__(self):
 		return int(self.lat*100000 + self.lng*100000)

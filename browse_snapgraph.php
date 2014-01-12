@@ -22,7 +22,7 @@ var RADIUS_OF_EARTH_METERS = 6367.44465*1000;
 
 var g_static_graph_objects = [];
 var g_path_objects = [];
-var g_start_marker = null, g_dest_marker = null;
+var g_path_markers = [];
 var g_connected_vertex_map_objects = [];
 var g_multisnap_objects = [];
 var g_found_polyline = null, g_found_vertex = null;
@@ -32,19 +32,17 @@ function initialize() {
 	init_map();
 	g_map.setZoom(17);
 
-	g_start_marker = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.6540022, -79.4124381), 
-			icon: 'http://www.google.com/mapfiles/markerA.png', draggable: true});
-	g_dest_marker  = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.6545922, -79.4086401), 
-			icon: 'http://www.google.com/mapfiles/markerB.png', draggable: true});
-	google.maps.event.addListener(g_start_marker, 'click', clear_or_reget_paths);
-	google.maps.event.addListener(g_dest_marker, 'click', clear_or_reget_paths);
-	google.maps.event.addListener(g_start_marker, 'dragend', get_paths_from_server);
-	google.maps.event.addListener(g_dest_marker, 'dragend', get_paths_from_server);
+	add_path_marker(new google.maps.LatLng(43.6540022, -79.4124381));
+	add_path_marker(new google.maps.LatLng(43.6545922, -79.4086401));
 
 	google.maps.event.addListener(g_map, 'click', on_map_clicked);
+	google.maps.event.addListener(g_map, 'rightclick', function(mouseevent_) { 
+			add_path_marker(mouseevent_.latLng); 
+			get_path_from_server();
+		});
 	google.maps.event.addListener(g_map, 'zoom_changed', function() {
 		if(is_selected('arrows_checkbox')) {
-			get_paths_from_server();
+			get_path_from_server();
 		}
 	});
 
@@ -62,11 +60,29 @@ function initialize() {
 	});
 }
 
-function clear_or_reget_paths() {
+function add_path_marker(latlng_) {
+	var marker = new google.maps.Marker({map: g_map, position: latlng_, 
+			icon: 'http://www.google.com/mapfiles/marker_grey.png', draggable: true});
+	google.maps.event.addListener(marker, 'click', clear_or_reget_path);
+	google.maps.event.addListener(marker, 'dragend', get_path_from_server);
+	google.maps.event.addListener(marker, 'rightclick', function() { 
+			for(var i=0; i<g_path_markers.length; i++) {
+				if(g_path_markers[i] == marker) {
+					g_path_markers.splice(i, 1);
+					marker.setMap(null);
+					break;
+				}
+			}
+			get_path_from_server();
+		});
+	g_path_markers.push(marker);
+}
+
+function clear_or_reget_path() {
 	if(g_path_objects.length > 0) {
 		forget_path_objects();
 	} else {
-		get_paths_from_server();
+		get_path_from_server();
 	}
 }
 
@@ -116,34 +132,38 @@ function forget_multisnap_objects() {
 	g_multisnap_objects = [];
 }
 
-function get_paths_from_server() {
+function get_path_from_server() {
 	forget_path_objects();
-	if(!is_selected('paths_checkbox')) {
+	if(!is_selected('path_checkbox')) {
 		set_contents('p_marker_latlngs', 'Paths: disabled.');
+	} else if(g_path_markers.length < 2) {
+		set_contents('p_marker_latlngs', 'Paths: need at least two markers.');
 	} else {
-		var start = g_start_marker.getPosition(), dest = g_dest_marker.getPosition();
-		set_contents('p_marker_latlngs', sprintf('Path markers:&nbsp;&nbsp;&nbsp;&nbsp;(%.8f,%.8f)&nbsp;&nbsp;&nbsp;&nbsp;(%.8f,%.8f)', 
-				start.lat(), start.lng(), dest.lat(), dest.lng()));
-
-		callpy('browse_snapgraph.find_paths', get_sgname(), start, dest, 
-			{success: function(paths__) {
-				if(paths__.length > 0) {
-					var path_0_latlngs = google_LatLngs(paths__[0]);
-					var shortest_path_pline = new google.maps.Polyline({map: g_map, path: path_0_latlngs, zIndex: 12, 
-							strokeColor: 'rgb(100,100,100)', strokeWeight: 6, clickable: false, strokeOpacity: 1, 
-							icons: (is_selected('arrows_checkbox') ? make_polyline_arrow_icons(g_map.getZoom(), path_0_latlngs) : null)});
-					g_path_objects.push(shortest_path_pline);
-					for(var i=1; i<paths__.length; i++) {
-						var path_i_latlngs = google_LatLngs(paths__[i]);
-						var path_pline = new google.maps.Polyline({map: g_map, path: path_i_latlngs, zIndex: 11, 
-								strokeColor: 'rgb(200,200,200)', strokeWeight: 6, clickable: false, strokeOpacity: 1, 
-								icons: (is_selected('arrows_checkbox') ? make_polyline_arrow_icons(g_map.getZoom(), path_i_latlngs) : null)});
+		set_path_text_display();
+		callpy('browse_snapgraph.find_multipath', get_sgname(), g_path_markers.map(function(marker) { return marker.getPosition(); } ), 
+				{success: function(path__) {
+					if(path__ == null) {
+						set_contents('p_marker_latlngs', get_contents('p_marker_latlngs')+' - <b>NO PATH POSSIBLE</b>');
+					} else {
+						var path_latlngs = google_LatLngs(path__);
+						var path_pline = new google.maps.Polyline({map: g_map, path: path_latlngs, zIndex: 12, 
+								strokeColor: 'rgb(100,100,100)', strokeWeight: 6, clickable: false, strokeOpacity: 1, 
+								icons: (is_selected('arrows_checkbox') ? make_polyline_arrow_icons(g_map.getZoom(), path_latlngs) : null)});
 						g_path_objects.push(path_pline);
 					}
-				}
-			} 
+				} 
 			});
 	}
+}
+
+function set_path_text_display() {
+	var contents = 'Path markers: ';
+	g_path_markers.forEach(function(marker) {
+		var latlng = marker.getPosition();
+		contents += sprintf('(%.8f,%.8f), ', latlng.lat(), latlng.lng());
+	});
+	contents = contents.substring(0, contents.length-2);
+	set_contents('p_marker_latlngs', contents);
 }
 
 function forget_found_polyline() {
@@ -387,10 +407,10 @@ function on_vertid_button_clicked() {
 		<input type="checkbox" id="show_points_and_vertexes_checkbox" checked="checked" onclick="refresh_graph_visuals()" />
 		<label for="show_points_and_vertexes_checkbox">Show points and vertexes</label> /////
 		 ////////
-		<input type="checkbox" id="paths_checkbox" checked onclick="get_paths_from_server()" />
-		<label for="paths_checkbox">Do paths</label>
-		<input type="checkbox" id="arrows_checkbox" name="arrows_checkbox" checked onclick="get_paths_from_server()"/>
-		<label for="arrows_checkbox">Show arrows on paths</label>
+		<input type="checkbox" id="path_checkbox" checked onclick="get_path_from_server()" />
+		<label for="path_checkbox">Do path</label>
+		<input type="checkbox" id="arrows_checkbox" name="arrows_checkbox" checked onclick="get_path_from_server()"/>
+		<label for="arrows_checkbox">Show arrows on path</label>
 		 ////////
 		<input type="checkbox" id="multisnap_show_infowindows" />
 		<label for="multisnap_show_infowindows">Multisnap: show infowindows</label> , 

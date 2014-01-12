@@ -19,6 +19,10 @@ LATREF = 43.62696696859263; LNGREF = -79.4579391022553
 # in meters
 DEFAULT_GRAPH_VERTEX_DIST_TOLERANCE = 0.5
 
+# I got this '3' by trial and error.  It's not a precise issue, at least not at my level of understanding.  
+# I tried different values for this until I got the results that I wanted. 
+PATHS_GPS_ERROR_FACTOR=3
+
 def lat_to_gridlat(lat_):
 	return fdiv(lat_ - LATREF, LATSTEP)
 
@@ -141,6 +145,9 @@ class Vertex(object):
 					% (self, polylineidx_, ptaddrs, self.ptaddrs, plineidx_to_pts))
 		return ptaddrs[0]
 
+	def get_posaddr(self, plineidx_):
+		return PosAddr(self.get_ptaddr(plineidx_), 0.0)
+
 	def get_ptidx(self, polylineidx_):
 		return self.get_ptaddr(polylineidx_).ptidx
 
@@ -189,14 +196,15 @@ class Vertex(object):
 class PosAddr(object):
 
 	def __init__(self, linesegaddr_, pals_):
-		assert isinstance(linesegaddr_, PtAddr) and isinstance(pals_, float)
+		assert (isinstance(linesegaddr_, PtAddr) or is_seq_like(linesegaddr_, (0, 0))) and isinstance(pals_, float)
+		linesegaddr = (linesegaddr_ if isinstance(linesegaddr_, PtAddr) else PtAddr(linesegaddr_[0], linesegaddr_[1]))
 		assert 0.0 <= pals_ <= 1.0
 		if pals_ == 1.0: # Normalizing so that self.pals will be between 0.0 and 1.0 inclusive / exclusive.  
 			# Saves us from writing code to that effect elsewhere. 
-			self.linesegaddr = PtAddr(linesegaddr_.polylineidx, linesegaddr_.ptidx+1)
+			self.linesegaddr = PtAddr(linesegaddr.polylineidx, linesegaddr.ptidx+1)
 			self.pals = 0.0
 		else:
-			self.linesegaddr = linesegaddr_
+			self.linesegaddr = linesegaddr
 			self.pals = pals_
 		assert 0.0 <= self.pals < 1.0
 
@@ -219,42 +227,63 @@ class PosAddr(object):
 	def __repr__(self):
 		return self.__str__()
 
+# Vocabulary: a Path has one or more 'segments'.  
+# 	A 'segment' is a list of 'steps' (1 or more).  
+#		A 'step' is a PosAddr or a Vertex. 
 class Path(object):
 	
-	def __init__(self, pathsteps_, snapgraph_):
-		assert len(pathsteps_) >= 1 and (isinstance(e, PosAddr) for e in (pathsteps_[0], pathsteps_[-1]))
-		assert (isinstance(e, Vertex) for e in pathsteps_[1:-1])
+	def __init__(self, segments_, snapgraph_):
+		assert isinstance(segments_, Sequence)
+		for segment in segments_:
+			assert self.is_segment_valid(segment)
 		assert isinstance(snapgraph_, SnapGraph)
-		self.pathsteps = pathsteps_
+		self.segments = segments_
 		self.snapgraph = snapgraph_
 
+	@staticmethod
+	def is_segment_valid(segment_):
+		if not (len(segment_) >= 1 and (isinstance(e, PosAddr) for e in (segment_[0], segment_[-1]))):
+			return False
+		if not ((isinstance(e, PosAddr) or isinstance(e, Vertex) for e in segment_)):
+			return False
+		if len(segment_) >= 3:
+			if not (isinstance(segment_[1], Vertex) and isinstance(segment_[-2], Vertex)):
+				return False
+			for step1, step2 in hopscotch(segment_):
+				if isinstance(step1, PosAddr) and isinstance(step2, PosAddr):
+					return False
+		return True
+
 	def latlngs(self):
-		startposaddr = self.pathsteps[0]; destposaddr = self.pathsteps[-1]
-		r = [self.snapgraph.get_latlng(startposaddr)]
-		if len(self.pathsteps) == 2:
-			r += self.snapgraph.get_pts_between(startposaddr, destposaddr)
-		else:
-			if len(self.pathsteps) >= 3:
-				start_plineidx = startposaddr.linesegaddr.polylineidx
-				start_ptidx = startposaddr.linesegaddr.ptidx
-				first_vert_ptidx = self.pathsteps[1].get_ptidx(start_plineidx)
-				start_ptidx += (1 if start_ptidx < first_vert_ptidx else 0)
-				r += sliceii(self.snapgraph.polylines[start_plineidx], start_ptidx, first_vert_ptidx)[:-1] + [self.pathsteps[1].pos()]
-			if len(self.pathsteps) >= 4:
-				verts = self.pathsteps[1:-1]
-				for vert1, vert2 in hopscotch(verts):
-					plineidx = vert1.get_shortest_common_plineidx(vert2)
-					vert1_ptidx = vert1.get_ptidx(plineidx)
-					vert2_ptidx = vert2.get_ptidx(plineidx)
-					r += [vert1.pos()] + sliceii(self.snapgraph.polylines[plineidx], vert1_ptidx, vert2_ptidx)[1:-1] + [vert2.pos()]
-			if len(self.pathsteps) >= 3:
-				dest_plineidx = destposaddr.linesegaddr.polylineidx
-				dest_ptidx = destposaddr.linesegaddr.ptidx
-				last_vert_ptidx = self.pathsteps[-2].get_ptidx(dest_plineidx)
-				dest_ptidx += (1 if dest_ptidx < last_vert_ptidx else 0)
-				r += [self.pathsteps[-2].pos()] + sliceii(self.snapgraph.polylines[dest_plineidx], last_vert_ptidx, dest_ptidx)[1:]
-		if len(self.pathsteps) >= 2:
-			r += [self.snapgraph.get_latlng(destposaddr)]
+		allsteps = sum(self.segments, [])
+		startposaddr = allsteps[0]; destposaddr = allsteps[-1]
+		r = []
+		for step1, step2 in hopscotch(allsteps):
+			if isinstance(step1, PosAddr):
+				r += [self.snapgraph.get_latlng(step1)] 
+			if isinstance(step1, PosAddr) and isinstance(step2, Vertex):
+				plineidx = step1.linesegaddr.polylineidx
+				step1_ptidx = step1.linesegaddr.ptidx
+				vert_ptidx = step2.get_ptidx(plineidx)
+				step1_ptidx += (1 if step1_ptidx < vert_ptidx else 0)
+				r += sliceii(self.snapgraph.polylines[plineidx], step1_ptidx, vert_ptidx)[:-1] + [step2.pos()]
+			elif isinstance(step1, Vertex) and isinstance(step2, Vertex):
+				plineidx = step1.get_shortest_common_plineidx(step2)
+				step1_ptidx = step1.get_ptidx(plineidx)
+				step2_ptidx = step2.get_ptidx(plineidx)
+				r += [step1.pos()] + sliceii(self.snapgraph.polylines[plineidx], step1_ptidx, step2_ptidx)[1:-1] + [step2.pos()]
+			elif isinstance(step1, Vertex) and isinstance(step2, PosAddr):
+				plineidx = step2.linesegaddr.polylineidx
+				step2_ptidx = step2.linesegaddr.ptidx
+				vert_ptidx = step1.get_ptidx(plineidx)
+				step2_ptidx += (1 if step2_ptidx < vert_ptidx else 0)
+				r += [step1.pos()] + sliceii(self.snapgraph.polylines[plineidx], vert_ptidx, step2_ptidx)[1:]
+			elif isinstance(step1, PosAddr) and isinstance(step2, PosAddr):
+				r += self.snapgraph.get_pts_between(step1, step2)
+			else:
+				raise Exception()
+			if isinstance(step2, PosAddr):
+				r += [self.snapgraph.get_latlng(step2)] 
 		return uniq(r)
 
 	def __str__(self):
@@ -263,15 +292,6 @@ class Path(object):
 	def __repr__(self):
 		return self.__str__()
 
-	def __add__(self, other):
-		assert self.snapgraph == other.snapgraph
-		if self.pathsteps[-1] == other.pathsteps[0]:
-			r_pathsteps = self.pathsteps + other.pathsteps[1:]
-		else:
-			r_pathsteps = self.pathsteps + other.pathsteps
-		r = Path(r_pathsteps, self.snapgraph)
-		return r
-
 # This can be pickled or memcached. 
 class SnapGraph(object):
 
@@ -279,11 +299,12 @@ class SnapGraph(object):
 	# 	intersect other line segments.  We will not join polylines or remove any points. 
 	# arg forpaths_disttolerance: Two points need to be less than this far apart for us to consider them 
 	# 	coincident AKA the same point, for our path-graph purposes. 
-	def __init__(self, polylines_, forpaths=True, forpaths_disttolerance=DEFAULT_GRAPH_VERTEX_DIST_TOLERANCE):
+	def __init__(self, polylines_, forsnaps=True, forpaths=True, forpaths_disttolerance=DEFAULT_GRAPH_VERTEX_DIST_TOLERANCE):
 		assert isinstance(polylines_[0][0], geom.LatLng)
 		self.latstep = LATSTEP; self.lngstep = LNGSTEP; self.latref = LATREF; self.lngref = LNGREF
 		self.polylines = polylines_
-		self.init_gridsquare_to_linesegaddrs()
+		if forsnaps:
+			self.init_gridsquare_to_linesegaddrs()
 		if forpaths:
 			self.init_path_structures(forpaths_disttolerance)
 			self.init_gridsquare_to_linesegaddrs() # rebuilding it because for those 
@@ -312,17 +333,13 @@ class SnapGraph(object):
 		if not(start_posaddrs and dest_posaddrs):
 			return []
 		else:
-			posaddr_to_bounding_vertexes = {}
-			for posaddr in set(start_posaddrs + dest_posaddrs):
-				posaddr_to_bounding_vertexes[posaddr] = self.get_bounding_vertexes(posaddr)
 			dists_n_paths = []
 			for start_posaddr, dest_posaddr in product(start_posaddrs, dest_posaddrs):
-				# Multiplying these by 3 because otherwise some strange choices will be made for shortest path 
+				# Multiplying these by a certain factor because otherwise some strange choices will be made for shortest path 
 				# when going around corners.  I don't know how to explain this in comments, without pictures. 
-				# Anwyay I got the 3 by trial and error. 
-				start_latlng_to_posaddr_dist = self.get_latlng(start_posaddr).dist_m(startlatlng_)*3
-				dest_latlng_to_posaddr_dist = self.get_latlng(dest_posaddr).dist_m(destlatlng_)*3
-				start_latlng_to_posaddr_dist = dest_latlng_to_posaddr_dist = 0
+				start_latlng_to_posaddr_dist = self.get_latlng(start_posaddr).dist_m(startlatlng_)*PATHS_GPS_ERROR_FACTOR
+				dest_latlng_to_posaddr_dist = self.get_latlng(dest_posaddr).dist_m(destlatlng_)*PATHS_GPS_ERROR_FACTOR
+				#start_latlng_to_posaddr_dist = dest_latlng_to_posaddr_dist = 0 # disabling this, temporarily or permanently? 
 				dist, path = self.find_path_by_posaddrs(start_posaddr, dest_posaddr, out_visited_vertexes)
 				if dist is not None:
 					dist += start_latlng_to_posaddr_dist + dest_latlng_to_posaddr_dist
@@ -330,23 +347,87 @@ class SnapGraph(object):
 			dists_n_paths.sort(key=lambda e: e[0])
 			return dists_n_paths
 
-	# return list of (dist, Path) pairs.  Dist is a float, in meters.   List is sorted in ascending order of dist. 
-	def find_multipaths(self, latlngs_, snap_tolerance=100):
+	# return A (dist, Path) pair, or (None, None) if no path is possible.  'dist' is a float, in meters.   
+	def find_multipath(self, latlngs_, posaddrses=None, snap_tolerance=100):
 		if len(latlngs_) < 2:
 			raise Exception()
-		posaddrses = [self.multisnap(latlng, snap_tolerance) for latlng in latlngs_]
+		our_posaddrses = ([self.multisnap(latlng, snap_tolerance) for latlng in latlngs_] if posaddrses is None else posaddrses)
+		assert len(our_posaddrses) == len(latlngs_)
 		if len(latlngs_) == 2:
-			return self.find_paths(latlngs_[0], posaddrses[0], latlngs_[1], posaddrses[1])
-		elif len(latlngs_) == 3:
-			r = []
-			for posaddr1 in posaddrses[1]:
-				distnpaths_01 = self.find_paths(latlngs_[0], posaddrses[0], latlngs_[1], [posaddr1])
-				distnpaths_12 = self.find_paths(latlngs_[1], [posaddr1], latlngs_[2], posaddrses[2])
-				r += [(dist01+dist12, path01+path12) for (dist01,path01), (dist12,path12) in product(distnpaths_01, distnpaths_12)]
-			r.sort(key=lambda e: e[0])
-			return r
+			dists_n_segments = self.find_paths(latlngs_[0], our_posaddrses[0], latlngs_[1], our_posaddrses[1])
+			if len(dists_n_segments) > 0:
+				return (dists_n_segments[0][0], Path([dists_n_segments[0][1]], self))
+			else:
+				return (None, None)
 		else:
-			pass
+			r_dist = 0
+			r_segments = []
+			for idx_a, latlng_a, idx_b, latlng_b, idx_c, latlng_c in hopscotch_enumerate(latlngs_, 3):
+				posaddrs_a = our_posaddrses[idx_a]; posaddrs_b = our_posaddrses[idx_b]; posaddrs_c = our_posaddrses[idx_c]
+				if idx_a == 0:
+					dists_n_segments_ab = self.find_paths(latlng_a, posaddrs_a, latlng_b, posaddrs_b)
+				dists_n_segments_bc = self.find_paths(latlng_b, posaddrs_b, latlng_c, posaddrs_c)
+				combined_dists_n_segments = []
+				for dist_n_segment_ab, dist_n_segment_bc in product(dists_n_segments_ab, dists_n_segments_bc):
+					if dist_n_segment_ab[1][-1] == dist_n_segment_bc[1][0]:
+						combined_dists_n_segments.append((dist_n_segment_ab, dist_n_segment_bc))
+				if len(combined_dists_n_segments) == 0:
+					r_segments = None # Not path possible for this part.  No path is possible at all. 
+					break
+				chosen_dists_n_segments = sorted(combined_dists_n_segments, \
+						key=lambda e: self.get_combined_cost(e[0], e[1], snap_tolerance))[0]
+				chosen_segment_ab = chosen_dists_n_segments[0][1]
+				r_segments.append(chosen_segment_ab)
+				r_dist += chosen_dists_n_segments[0][0]
+				chosen_posaddr_b = chosen_segment_ab[-1]
+				# Saving these for the next time around this loop: 
+				dists_n_segments_ab = [e for e in dists_n_segments_bc if e[1][0] == chosen_posaddr_b]
+				if idx_c == len(latlngs_)-1:
+					chosen_pathsteps_bc = chosen_dists_n_segments[1][1]
+					r_segments.append(chosen_pathsteps_bc)
+					r_dist += chosen_dists_n_segments[1][0]
+			return ((r_dist, Path(r_segments, self)) if r_segments is not None else (None, None))
+
+	def get_combined_cost(self, distnsegment1_, distnsegment2_, snap_tolerance_):
+		return distnsegment1_[0] + distnsegment2_[0] + self.get_doubleback_cost(distnsegment1_, distnsegment2_, snap_tolerance_)
+
+	# Trying to strongly discourage choosing of a path that doubles back.  Can't add something silly like 9999999 because I 
+	# suspect that every now and then, a vehicle will double back.  (At least it will appear to, on for example our simplified 
+	# graph of streetcar tracks.)   The only reason that a doublebacking path would be incorrectly chosen is because our use of 
+	# PATHS_GPS_ERROR_FACTOR sometimes causes us to choose a posaddr that is close to the sample latlng and suggests a doubleback 
+	# over a posaddr that is a little farther from the sample latlng and does not suggest a doubleback.  
+	# So this code fudges for that.  I don't know how to describe the thinking without pictures.
+	def get_doubleback_cost(self, distnsegment1_, distnsegment2_, snap_tolerance_):
+		assert Path.is_segment_valid(distnsegment1_[1]) and Path.is_segment_valid(distnsegment2_[1])
+		doubleback_steps = get_common_prefix(distnsegment1_[1][::-1], distnsegment2_[1])
+		doubleback_dist = self.get_length_of_pathsegment(doubleback_steps)
+		if doubleback_dist > 0:
+			return (distnsegment1_[0]+distnsegment2_[0])*(PATHS_GPS_ERROR_FACTOR*snap_tolerance_/doubleback_dist)
+		else:
+			return 0.0
+
+	# This function is lenient.  segment_ doesn't have to quite be a valid path segment.  
+	# Usually path segments must have a PosAddr (not a Vertex) as the first and last steps.  segment_ doesn't. 
+	def get_length_of_pathsegment(self, segment_):
+		r = 0.0
+		for step1, step2 in hopscotch(segment_):
+			r += self.get_dist(step1, step2)
+		return r
+
+	# Return 0 or 1. 
+	@classmethod
+	def get_pline_dir(cls, segment_, last_aot_first_pline_):
+		assert Path.is_segment_valid(segment_)
+		steps = (segment_[-1:-3:-1] if last_aot_first_pline_ else segment_[0:2])
+		posaddr1 = segment_[0]
+		if isinstance(segment_[1], PosAddr):
+			posaddr2 = segment_[1]
+		else:
+			assert isinstance(segment_[1], Vertex)
+			posaddr2 = segment_[1].get_posaddr(posaddr1.linesegaddr.polylineidx)
+		assert posaddr1.linesegaddr.polylineidx == posaddr2.linesegaddr.polylineidx
+		cmp_result = cmp((posaddr1.linesegaddr.ptidx, posaddr1.pals), (posaddr2.linesegaddr.ptidx, posaddr2.pals))
+		return (0 if cmp_result >= 0 else 1)
 
 	def get_pts_between(self, posaddr1_, posaddr2_):
 		assert posaddr1_.linesegaddr.polylineidx == posaddr2_.linesegaddr.polylineidx
@@ -403,7 +484,7 @@ class SnapGraph(object):
 		refpt = self.get_point(posaddr_.linesegaddr)
 		return refpt.dist_m(posaddr_latlng)
 
-	# Returns shortest path, as one (dist, path) ((float, Path)) pair.   If no path is possible, both dist and path will be None. 
+	# Returns shortest path, as one (dist, pathsteps) ((float, list<PosAddr|Vertex>)) pair.   If no path is possible, both dist and path will be None. 
 	# We pass a fancy 'get connected vertexes' function to dijkstra, to support path finding from somewhere along an edge 
 	# (which dijkstra doesn't do) but pretending like we've inserted a temporary vertex at the start and dest positions. 
 	# In the code below, 'vvert' is short for 'virtual vertex' which is a term I made up for this function, 
@@ -451,11 +532,7 @@ class SnapGraph(object):
 			
 		r = dijkstra(startposaddr_, destposaddr_, all_vverts, get_connected_vertexndists, 
 				out_visited_vertexes=out_visited_vertexes)
-		if r[0] is not None:
-			assert r[1] is not None
-			return (r[0], Path(r[1], self))
-		else:
-			return r
+		return r
 
 	def get_vertex(self, id_):
 		return first(self.get_vertexes(), lambda vertex: vertex.id == id_)
@@ -538,7 +615,8 @@ class SnapGraph(object):
 		return abs(self.polylineidx_to_ptidx_to_mapl[polylineidx_][endptidx_] - self.polylineidx_to_ptidx_to_mapl[polylineidx_][startptidx_])
 
 	def get_dist_between_posaddrs(self, posaddr1_, posaddr2_):
-		assert posaddr1_.linesegaddr.polylineidx == posaddr2_.linesegaddr.polylineidx
+		if posaddr1_.linesegaddr.polylineidx != posaddr2_.linesegaddr.polylineidx:
+			raise Exception()
 		plineidx = posaddr1_.linesegaddr.polylineidx
 		r = self.get_dist_between_points(plineidx, posaddr1_.linesegaddr.ptidx, posaddr2_.linesegaddr.ptidx)
 		posaddr1_dist_to_refpt = self.get_dist_to_reference_point(posaddr1_)
@@ -553,10 +631,23 @@ class SnapGraph(object):
 			r -= posaddr2_dist_to_refpt
 		return r
 
-	def get_dist(self, posaddr_, vertex_):
-		ptaddr_of_vertex_on_posaddrs_pline = vertex_.get_ptaddr(posaddr_.linesegaddr.polylineidx)
-		posaddr_of_vertex = PosAddr(ptaddr_of_vertex_on_posaddrs_pline, 0.0)
-		return self.get_dist_between_posaddrs(posaddr_, posaddr_of_vertex)
+	# Each arg can be either a PosAddr or a Vertex.  
+	# This is meant for use in simple code dealing with paths so, if it's two vertexes, they must be (directly) connected. 
+	# If it's a posaddr and a vertex, then we're more lenient.  There can be other vertexes in between but they 
+	# must be on the same polyline.  
+	# Likewise with two posaddrs.  They must be on the same polyline. 
+	def get_dist(self, arg1_, arg2_):
+		assert (isinstance(arg, PosAddr) or isinstance(arg, Vertex) for arg in (arg1_, arg2_))
+		arg1isvert = isinstance(arg1_, Vertex); arg2isvert = isinstance(arg2_, Vertex)
+		if not arg1isvert and not arg2isvert:
+			return self.get_dist_between_posaddrs(arg1_, arg2_)
+		elif arg1isvert and arg2isvert:
+			return min([x[1] for x in self.vertex_to_connectedvertex_n_dists[arg1_] if x[0] == arg2_])
+		else:
+			posaddr, vertex = (arg1_, arg2_)[::1 if arg2isvert else -1]
+			ptaddr_of_vertex_on_posaddrs_pline = vertex.get_ptaddr(posaddr.linesegaddr.polylineidx)
+			posaddr_of_vertex = PosAddr(ptaddr_of_vertex_on_posaddrs_pline, 0.0)
+			return self.get_dist_between_posaddrs(posaddr, posaddr_of_vertex)
 
 	def get_addr_to_vertex(self, disttolerance_):
 		latlngid_to_ontop_latlngids = self.get_graph_latlngid_to_ontop_latlngids(disttolerance_)
@@ -918,9 +1009,6 @@ class SnapGraph(object):
 		plineidx_to_pline = dict((plineidx, self.polylines[plineidx]) for plineidx in plineidxes)
 		return {'vertexid_to_info': dict((vert.id, vert.to_json_dict()) for vert in vertexes), 
 				'plineidx_to_pline': plineidx_to_pline}
-		#self.polylineidx_to_ptidx_to_vertex.get(
-		#self.vertex_to_connectedvertex_n_dists
-		#plines = [self.polylines[plineidx] for plineidx in plineidexes]
 
 	def get_plineidxes_for_box(self, sw_, ne_):
 		assert all(isinstance(x, geom.LatLng) for x in [sw_, ne_])
@@ -932,6 +1020,24 @@ class SnapGraph(object):
 				for linesegaddr in self.gridsquare_to_linesegaddrs.get(gridsquare, []):
 					r.add(linesegaddr.polylineidx)
 		return r
+
+	def mapl_to_latlonnheading(self, plineidx_, mapl_):
+		if mapl_ < 0:
+			return None
+		ptidx_to_mapl = self.polylineidx_to_ptidx_to_mapl[plineidx_]
+		# Writing this code this way because we might need to handle a mapl_ that 
+		# is a little greater than the max mapl of this route.  Hopefully not too 
+		# much - maybe a couple of meters?  I'm not sure.
+		for i in range(1, len(ptidx_to_mapl)):
+			if ptidx_to_mapl[i] >= mapl_:
+				break
+		prevpt = self.polylines[plineidx_][i-1]; curpt = self.polylines[plineidx_][i]
+		prevmapl = ptidx_to_mapl[i-1]; curmapl = ptidx_to_mapl[i]
+		pt = curpt.subtract(prevpt).scale((mapl_-prevmapl)/float(curmapl-prevmapl)).add(prevpt)
+		return (pt, prevpt.heading(curpt))
+
+	def get_pline_len(self, plineidx_):
+		return self.polylineidx_to_ptidx_to_mapl[plineidx_][-1]
 
 def get_adjusted_addrs_from_polyline_split(polylineidx_, newptidx_, addrs_):
 	assert isinstance(polylineidx_, int) and isinstance(newptidx_, int)
