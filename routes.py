@@ -324,6 +324,8 @@ class RouteInfo:
 					dir_to_routepts[direction] = self.calc_simplified_routepts(direction, datazoom)
 			self.datazoom_to_dir_to_routeptaddr_to_mofr[datazoom] = self.calc_dir_to_routeptaddr_to_mofr(datazoom)
 
+	# We could almost use snapgraph's function for doing this sort of thing, and have a snapgraph for each datazoom, but 
+	# that wouldn't work because at each higher datazoom, the route becomes shorter. 
 	def calc_dir_to_routeptaddr_to_mofr(self, datazoom_):
 		dir_to_routeptaddr_to_mofr = [[], []]
 		for direction in (0, 1):
