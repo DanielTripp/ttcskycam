@@ -552,14 +552,14 @@ function on_submit_contents_clicked() {
 		<input type="checkbox" id="polyline_checkbox" name="polyline_checkbox" checked onclick="redraw_objects()"/>
 		<label for="polyline_checkbox">Polylines</label>
 
+		<input type="checkbox" id="arrows_checkbox" name="arrows_checkbox" checked onclick="redraw_objects()"/>
+		<label for="arrows_checkbox">Arrows</label>
+
 		<input type="checkbox" id="grid_checkbox" name="grid_checkbox" onclick="on_grid_checkbox_clicked()"/>
 		<label for="grid_checkbox">Grid</label>
 
 		<input type="checkbox" id="colors_checkbox" name="colors_checkbox" onclick="redraw_objects()"/>
 		<label for="colors_checkbox">Colors</label>
-
-		<input type="checkbox" id="arrows_checkbox" name="arrows_checkbox" checked onclick="redraw_objects()"/>
-		<label for="arrows_checkbox">Arrows</label>
 
 		<p id="p_zoom"/>
 		<p id="p_dists"/>
