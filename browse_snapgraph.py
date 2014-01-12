@@ -20,10 +20,9 @@ def get_infos_for_box(sgname_, sw_, ne_):
 def get_connected_vert_latlngs(sgname_, vertid_):
 	return [vert.pos() for vert in sg(sgname_).get_connected_vertexes(vertid_)]
 
-def find_paths(sgname_, start_latlng_, dest_latlng_):
-	dists_n_paths = sg(sgname_).find_paths(start_latlng_, None, dest_latlng_, None)
-	paths = [x[1] for x in dists_n_paths]
-	return [path.latlngs() for path in paths]
+def find_multipath(sgname_, latlngs_):
+	path = sg(sgname_).find_multipath(latlngs_)[1]
+	return (path.latlngs() if path is not None else None)
 
 def multisnap(sgname_, latlng_, radius_, reducepts_):
 	posaddrs = sg(sgname_).multisnap(latlng_, radius_, reducepts=reducepts_)

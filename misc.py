@@ -60,48 +60,33 @@ def m_to_str(m_):
 	return '%.2f minutes' % (m_/(1000*60.0))
 
 # eg. given [1, 2, 3, 4], this yields (1, 2), then (2, 3), then (3, 4) 
-def hopscotch(iterable_):
+def hopscotch(iterable_, n=2):
+	assert n >= 2
 	it = iter(iterable_)
 	try:
-		e1 = it.next()
-		e2 = it.next()
+		e = ()
+		for i in range(n):
+			e += (it.next(),)
 		while True:
-			yield (e1, e2)
-			e3 = it.next()
-			e1 = e2
-			e2 = e3
+			yield e
+			e = e[1:] + (it.next(),)
 	except StopIteration:
 		pass
 
 # eg. given ['a', 'b', 'c', 'd'], this yields (0, 'a', 1, 'b'), then (1, 'b', 2, 'c'), then (2, 'c', 3, 'd')
-def hopscotch_enumerate(iterable_):
+def hopscotch_enumerate(iterable_, n=2):
+	assert n >= 2
 	it = iter(iterable_)
 	try:
-		e1 = it.next()
-		e2 = it.next()
-		i = 0
+		e = ()
+		for i in range(n):
+			e += (i, it.next())
+		i = n
 		while True:
-			yield (i, e1, i+1, e2)
-			e3 = it.next()
-			e1 = e2
-			e2 = e3
+			yield e
+			e = e[2:] + (i, it.next(),)
 			i += 1
 	except StopIteration:
-		pass
-
-# like hopscotch but generalized. 
-def windowiter(iterable_, n_):
-	assert n_ >= 1
-	it = iter(iterable_)
-	try:
-		elems = []
-		for i in range(n_):
-			elems.append(it.next())
-		while True:
-			yield tuple(elems)
-			del elems[0]
-			elems.append(it.next())
- 	except StopIteration:
 		pass
 
 # This is the counterpart to common.js - encode_url_paramval(). 
@@ -838,6 +823,30 @@ def enumerate2(iterable_):
 			yield (i, e, isfirst, True)
 	except StopIteration:
 		pass
+
+# Convenient for asserts or polymorphic function arguments, in some simple situations.  
+# (I think polymorphic is the right word for this.  I'm not sure.) 
+# 
+# This let's you write something like this: 
+# 	if is_seq_like(arg, (0, 0.0)): 
+# 		... 
+# instead of this: 
+# 	if isinstance(arg, Sequence) and len(arg) == 2 \
+# 			and type(arg[0]) == int and type(arg[1]) == float: 
+# 		...
+def is_seq_like(candidate_, reference_seq_):
+	assert isinstance(reference_seq_, Sequence)
+	if not (isinstance(candidate_, Sequence) and (len(candidate_) == len(reference_seq_))):
+		return False
+	else:
+		for candidate_elem, reference_elem in zip(candidate_, reference_seq_):
+			if type(candidate_elem) is not type(reference_elem):
+				return False
+		return True
+
+# Thanks to http://stackoverflow.com/questions/11263172/what-is-the-pythonic-way-to-find-the-longest-common-prefix-of-a-list-of-lists 
+def get_common_prefix(seq1_, seq2_):
+	return [i[0] for i in takewhile(lambda elems: len(set(elems)) == 1, izip(seq1_, seq2_))]
 
 if __name__ == '__main__':
 
