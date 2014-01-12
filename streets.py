@@ -109,7 +109,7 @@ def get_streetname_to_polylines_from_shapefile_directly():
 
 @picklestore.decorate
 def get_snapgraph():
-	return snapgraph.SnapGraph(get_polylines(), forpaths=True, disttolerance=RDP_SIMPLIFY_EPSILON_METERS+1)
+	return snapgraph.SnapGraph(get_polylines(), forpaths=True, forpaths_disttolerance=RDP_SIMPLIFY_EPSILON_METERS+1)
 
 def heading(linesegaddr_, referencing_lineseg_aot_point_):
 	return snapgraph().heading(linesegaddr_, referencing_lineseg_aot_point_)
