@@ -160,7 +160,7 @@ class Vertex(object):
 		return r
 
 	def __cmp__(self, other):
-		return cmp(self.id, other.id)
+		return cmp(self.__class__.__name__, other.__class__.__name__) or cmp(self.id, other.id)
 
 	def __hash__(self):
 		return self.id
@@ -222,7 +222,7 @@ class PosAddr(object):
 		return (self.linesegaddr, self.pals)
 
 	def __cmp__(self, other):
-		return cmp(self._key(), other._key())
+		return cmp(self.__class__.__name__, other.__class__.__name__) or cmp(self._key(), other._key())
 
 	def __repr__(self):
 		return self.__str__()
@@ -499,29 +499,36 @@ class SnapGraph(object):
 		destpos_bounding_vertexes = self.get_bounding_vertexes(destposaddr_, True)
 		shared_bounding_vertexes = set(startpos_bounding_vertexes) & set(destpos_bounding_vertexes)
 		def get_connected_vertexndists(vvert__):
-			if (len(shared_bounding_vertexes) == 2):
+			if (len(shared_bounding_vertexes) == 2) and (startposaddr_.linesegaddr.polylineidx == destposaddr_.linesegaddr.polylineidx):
 				startpos_is_lo = (cmp(startposaddr_, destposaddr_) < 0)
 				if vvert__ in (startposaddr_, destposaddr_):	
-					vert = startpos_bounding_vertexes[(not startpos_is_lo) ^ (vvert__ is destposaddr_)]
-					thisposaddr, otherposaddr = (startposaddr_, destposaddr_)[::-1 if vvert__ is destposaddr_ else 1]
+					vert = startpos_bounding_vertexes[(not startpos_is_lo) ^ (vvert__ == destposaddr_)]
+					thisposaddr, otherposaddr = (startposaddr_, destposaddr_)[::-1 if vvert__ == destposaddr_ else 1]
 					r = ([(vert, self.get_dist(thisposaddr, vert))] if vert is not None else [])
+					try: # tdr
+						if thisposaddr.linesegaddr.polylineidx != otherposaddr.linesegaddr.polylineidx:
+							print thisposaddr, otherposaddr
+							print self.get_lineseg(thisposaddr.linesegaddr)
+							print self.get_lineseg(otherposaddr.linesegaddr)
+					except Exception, e: # tdr
+						print e # tdr
 					r += [(otherposaddr, self.get_dist_between_posaddrs(thisposaddr, otherposaddr))]
 				else:
 					assert isinstance(vvert__, Vertex)
 					r = self.vertex_to_connectedvertex_n_dists[vvert__]
 					if vvert__ in startpos_bounding_vertexes:
 						r = [(v,d) for v,d in r if v not in shared_bounding_vertexes]
-						posaddr = (startposaddr_, destposaddr_)[(not startpos_is_lo) ^ (vvert__ is startpos_bounding_vertexes[0])]
+						posaddr = (startposaddr_, destposaddr_)[(not startpos_is_lo) ^ (vvert__ == startpos_bounding_vertexes[0])]
 						r += [(posaddr, self.get_dist(posaddr, vvert__))]
 			else:
-				if vvert__ is startposaddr_:	
+				if vvert__ == startposaddr_:	
 					r = [(vert,self.get_dist(startposaddr_, vert)) for vert in startpos_bounding_vertexes if vert is not None]
-				elif vvert__ is destposaddr_:
+				elif vvert__ == destposaddr_:
 					r = [(vert,self.get_dist(destposaddr_, vert)) for vert in destpos_bounding_vertexes if vert is not None]
 				else:
 					assert isinstance(vvert__, Vertex)
 					r = self.vertex_to_connectedvertex_n_dists[vvert__]
-					if (len(shared_bounding_vertexes) == 1) and (vvert__ is anyelem(shared_bounding_vertexes)):
+					if (len(shared_bounding_vertexes) == 1) and (vvert__ == anyelem(shared_bounding_vertexes)):
 						r = [(v,d) for v,d in r if v not in startpos_bounding_vertexes + destpos_bounding_vertexes]
 						r += [(posaddr, self.get_dist(posaddr, vvert__)) for posaddr in (startposaddr_, destposaddr_)]
 					elif vvert__ in startpos_bounding_vertexes:
@@ -1339,7 +1346,7 @@ def dijkstra(srcvertex_, destvertex_, all_vertexes_, get_connected_vertexndists_
 	q = set([srcvertex_])
 	while len(q) > 0:
 		u = min((vertex for vertex, info in info.iteritems() if not info.visited), key=lambda vertex: info[vertex].dist)
-		if u is destvertex_:
+		if u == destvertex_:
 			break
 		q.remove(u)
 		info[u].visited = True
