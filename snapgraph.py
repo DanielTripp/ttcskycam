@@ -480,9 +480,13 @@ class SnapGraph(object):
 		return r
 
 	def get_dist_to_reference_point(self, posaddr_):
-		posaddr_latlng = self.get_latlng(posaddr_)
-		refpt = self.get_point(posaddr_.linesegaddr)
-		return refpt.dist_m(posaddr_latlng)
+		if posaddr_.pals == 0.0:
+			return 0.0
+		else:
+			ptidx_to_mapl = self.polylineidx_to_ptidx_to_mapl[posaddr_.linesegaddr.polylineidx]
+			ptidx = posaddr_.linesegaddr.ptidx
+			dist_between_bounding_pts = ptidx_to_mapl[ptidx+1] - ptidx_to_mapl[ptidx]
+			return dist_between_bounding_pts*posaddr_.pals
 
 	# Returns shortest path, as one (dist, pathsteps) ((float, list<PosAddr|Vertex>)) pair.   If no path is possible, both dist and path will be None. 
 	# We pass a fancy 'get connected vertexes' function to dijkstra, to support path finding from somewhere along an edge 
@@ -537,7 +541,12 @@ class SnapGraph(object):
 						r = [(v,d) for v,d in r if v not in destpos_bounding_vertexes] + [(destposaddr_,self.get_dist(destposaddr_, vvert__))]
 			return r
 			
-		r = dijkstra(startposaddr_, destposaddr_, all_vverts, get_connected_vertexndists, 
+		def heuristic(vvert1__, vvert2__):
+			def get_latlng(vvert___):
+				return (vvert___.pos() if isinstance(vvert___, Vertex) else self.get_latlng(vvert___))
+			return get_latlng(vvert1__).dist_m(get_latlng(vvert2__))
+
+		r = a_star(startposaddr_, destposaddr_, all_vverts, get_connected_vertexndists, heuristic, 
 				out_visited_vertexes=out_visited_vertexes)
 		return r
 
@@ -1370,6 +1379,43 @@ def dijkstra(srcvertex_, destvertex_, all_vertexes_, get_connected_vertexndists_
 			u = info[u].previous
 		path.insert(0, srcvertex_)
 		return (info[destvertex_].dist, path)
+
+# The A* path-finding algorithm.  Thanks to http://en.wikipedia.org/wiki/A*_search_algorithm
+# This version assumes, and exploits, a monotonic heuristic function. 
+def a_star(srcvertex_, destvertex_, all_vertexes_, get_connected_vertexndists_, heuristic_cost_estimate_, out_visited_vertexes=None):
+	closedset = set() # The set of nodes already evaluated.
+	openset = set([srcvertex_]) # The set of tentative nodes to be evaluated, initially containing the start node
+	came_from = {} # The map of navigated nodes.
+
+	# Cost from start along best known path:
+	g_score = {srcvertex_: 0}
+	# Estimated total cost from srcvertex_ to destvertex_ through y:
+	f_score = {srcvertex_: g_score[srcvertex_] + heuristic_cost_estimate_(srcvertex_, destvertex_)}
+
+	while len(openset) > 0:
+		current = min(openset, key=lambda v: f_score[v])
+		if current == destvertex_:
+			path = [destvertex_]
+			while path[0] in came_from:
+				path.insert(0, came_from[path[0]])
+			return (g_score[destvertex_], path)
+ 
+		openset.remove(current)
+		closedset.add(current)
+		for neighbor, current_to_neighbor_edge_dist in get_connected_vertexndists_(current):
+			if neighbor in closedset:
+				continue
+			tentative_g_score = g_score[current] + current_to_neighbor_edge_dist
+
+			if (neighbor not in openset) or (tentative_g_score < g_score[neighbor]):
+				came_from[neighbor] = current
+				g_score[neighbor] = tentative_g_score
+				f_score[neighbor] = g_score[neighbor] + heuristic_cost_estimate_(neighbor, destvertex_)
+				if neighbor not in openset:
+					openset.add(neighbor)
+
+	return (None, None)
+
 
 if __name__ == '__main__':
 
