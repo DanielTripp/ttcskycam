@@ -5,6 +5,13 @@ from itertools import *
 import pprint, math, geom, bisect
 from misc import *
 
+# Some vocabulary: 
+# A Vertex is a vertex in the graph theory sense. 
+# A PosAddr represents a location on an edge of the graph.  It is represented in terms of a line segment address and a 
+# 	percentage along that line segment. 
+# A 'location' has no corresponding class, but is used in some function arguments to describe an object which could be a 
+# 	vertex or a posaddr. 
+
 LATSTEP = 0.00175; LNGSTEP = 0.0025
 
 if 1: # TODO: deal with this.  make up mind.
@@ -327,34 +334,33 @@ class SnapGraph(object):
 			self.init_polylineidx_to_ptidx_to_mapl()
 
 	# return list of (dist, Path) pairs.  Dist is a float, in meters.   List is sorted in ascending order of dist. 
-	def find_paths(self, startlatlng_, startposaddrs_, destlatlng_, destposaddrs_, snap_tolerance=100, out_visited_vertexes=None):
-		start_posaddrs = (startposaddrs_ if startposaddrs_ is not None else self.multisnap(startlatlng_, snap_tolerance))
-		dest_posaddrs = (destposaddrs_ if destposaddrs_ is not None else self.multisnap(destlatlng_, snap_tolerance))
-		if not(start_posaddrs and dest_posaddrs):
+	def find_paths(self, startlatlng_, startlocs_, destlatlng_, destlocs_, snap_tolerance=100, out_visited_vertexes=None):
+		start_locs = (startlocs_ if startlocs_ is not None else self.multisnap(startlatlng_, snap_tolerance))
+		dest_locs = (destlocs_ if destlocs_ is not None else self.multisnap(destlatlng_, snap_tolerance))
+		if not(start_locs and dest_locs):
 			return []
 		else:
 			dists_n_paths = []
-			for start_posaddr, dest_posaddr in product(start_posaddrs, dest_posaddrs):
+			for start_loc, dest_loc in product(start_locs, dest_locs):
 				# Multiplying these by a certain factor because otherwise some strange choices will be made for shortest path 
 				# when going around corners.  I don't know how to explain this in comments, without pictures. 
-				start_latlng_to_posaddr_dist = self.get_latlng(start_posaddr).dist_m(startlatlng_)*PATHS_GPS_ERROR_FACTOR
-				dest_latlng_to_posaddr_dist = self.get_latlng(dest_posaddr).dist_m(destlatlng_)*PATHS_GPS_ERROR_FACTOR
-				#start_latlng_to_posaddr_dist = dest_latlng_to_posaddr_dist = 0 # disabling this, temporarily or permanently? 
-				dist, path = self.find_path_by_posaddrs(start_posaddr, dest_posaddr, out_visited_vertexes)
+				start_latlng_to_loc_dist = self.get_latlng(start_loc).dist_m(startlatlng_)*PATHS_GPS_ERROR_FACTOR
+				dest_latlng_to_loc_dist = self.get_latlng(dest_loc).dist_m(destlatlng_)*PATHS_GPS_ERROR_FACTOR
+				dist, path = self.find_path_by_locs(start_loc, dest_loc, out_visited_vertexes)
 				if dist is not None:
-					dist += start_latlng_to_posaddr_dist + dest_latlng_to_posaddr_dist
+					dist += start_latlng_to_loc_dist + dest_latlng_to_loc_dist
 					dists_n_paths.append((dist, path))
 			dists_n_paths.sort(key=lambda e: e[0])
 			return dists_n_paths
 
 	# return A (dist, Path) pair, or (None, None) if no path is possible.  'dist' is a float, in meters.   
-	def find_multipath(self, latlngs_, posaddrses=None, snap_tolerance=100):
+	def find_multipath(self, latlngs_, locses=None, snap_tolerance=100):
 		if len(latlngs_) < 2:
 			raise Exception()
-		our_posaddrses = ([self.multisnap(latlng, snap_tolerance) for latlng in latlngs_] if posaddrses is None else posaddrses)
-		assert len(our_posaddrses) == len(latlngs_)
+		our_locses = ([self.multisnap(latlng, snap_tolerance) for latlng in latlngs_] if locses is None else locses)
+		assert len(our_locses) == len(latlngs_)
 		if len(latlngs_) == 2:
-			dists_n_segments = self.find_paths(latlngs_[0], our_posaddrses[0], latlngs_[1], our_posaddrses[1])
+			dists_n_segments = self.find_paths(latlngs_[0], our_locses[0], latlngs_[1], our_locses[1])
 			if len(dists_n_segments) > 0:
 				return (dists_n_segments[0][0], Path([dists_n_segments[0][1]], self))
 			else:
@@ -363,10 +369,10 @@ class SnapGraph(object):
 			r_dist = 0
 			r_segments = []
 			for idx_a, latlng_a, idx_b, latlng_b, idx_c, latlng_c in hopscotch_enumerate(latlngs_, 3):
-				posaddrs_a = our_posaddrses[idx_a]; posaddrs_b = our_posaddrses[idx_b]; posaddrs_c = our_posaddrses[idx_c]
+				locs_a = our_locses[idx_a]; locs_b = our_locses[idx_b]; locs_c = our_locses[idx_c]
 				if idx_a == 0:
-					dists_n_segments_ab = self.find_paths(latlng_a, posaddrs_a, latlng_b, posaddrs_b)
-				dists_n_segments_bc = self.find_paths(latlng_b, posaddrs_b, latlng_c, posaddrs_c)
+					dists_n_segments_ab = self.find_paths(latlng_a, locs_a, latlng_b, locs_b)
+				dists_n_segments_bc = self.find_paths(latlng_b, locs_b, latlng_c, locs_c)
 				combined_dists_n_segments = []
 				for dist_n_segment_ab, dist_n_segment_bc in product(dists_n_segments_ab, dists_n_segments_bc):
 					if dist_n_segment_ab[1][-1] == dist_n_segment_bc[1][0]:
@@ -379,9 +385,9 @@ class SnapGraph(object):
 				chosen_segment_ab = chosen_dists_n_segments[0][1]
 				r_segments.append(chosen_segment_ab)
 				r_dist += chosen_dists_n_segments[0][0]
-				chosen_posaddr_b = chosen_segment_ab[-1]
+				chosen_loc_b = chosen_segment_ab[-1]
 				# Saving these for the next time around this loop: 
-				dists_n_segments_ab = [e for e in dists_n_segments_bc if e[1][0] == chosen_posaddr_b]
+				dists_n_segments_ab = [e for e in dists_n_segments_bc if e[1][0] == chosen_loc_b]
 				if idx_c == len(latlngs_)-1:
 					chosen_pathsteps_bc = chosen_dists_n_segments[1][1]
 					r_segments.append(chosen_pathsteps_bc)
@@ -394,8 +400,8 @@ class SnapGraph(object):
 	# Trying to strongly discourage choosing of a path that doubles back.  Can't add something silly like 9999999 because I 
 	# suspect that every now and then, a vehicle will double back.  (At least it will appear to, on for example our simplified 
 	# graph of streetcar tracks.)   The only reason that a doublebacking path would be incorrectly chosen is because our use of 
-	# PATHS_GPS_ERROR_FACTOR sometimes causes us to choose a posaddr that is close to the sample latlng and suggests a doubleback 
-	# over a posaddr that is a little farther from the sample latlng and does not suggest a doubleback.  
+	# PATHS_GPS_ERROR_FACTOR sometimes causes us to choose a loc that is close to the sample latlng and suggests choosing a  
+	# doubleback over a loc that is a little farther from the sample latlng and does not suggest a doubleback.  
 	# So this code fudges for that.  I don't know how to describe the thinking without pictures.
 	def get_doubleback_cost(self, distnsegment1_, distnsegment2_, snap_tolerance_):
 		assert Path.is_segment_valid(distnsegment1_[1]) and Path.is_segment_valid(distnsegment2_[1])
@@ -464,15 +470,22 @@ class SnapGraph(object):
 			else:
 				return [v for v in [lo_vert, hi_vert] if v is not None]
 
-	def get_latlng(self, posaddr_):
-		assert isinstance(posaddr_, PosAddr)
-		assert posaddr_.pals < 1.0 # i.e. has been normalized.  Probably not a big deal.   
-		if posaddr_.pals == 0.0:
-			return self.get_point(posaddr_.linesegaddr)
+	def get_latlng(self, loc_):
+		if isinstance(loc_, PosAddr):
+			assert loc_.pals < 1.0 # i.e. has been normalized.  Probably not a big deal.   
+			if loc_.pals == 0.0:
+				return self.get_point(loc_.linesegaddr)
+			else:
+				pt1 = self.get_point(loc_.linesegaddr)
+				pt2 = self.get_point(PtAddr(loc_.linesegaddr.polylineidx, loc_.linesegaddr.ptidx+1))
+				return pt1.avg(pt2, loc_.pals)
+		elif isinstance(loc_, Vertex):
+			return loc_.pos()
 		else:
-			pt1 = self.get_point(posaddr_.linesegaddr)
-			pt2 = self.get_point(PtAddr(posaddr_.linesegaddr.polylineidx, posaddr_.linesegaddr.ptidx+1))
-			return pt1.avg(pt2, posaddr_.pals)
+			raise Exception()
+
+	def get_latlngs(self, locs_):
+		return [self.get_latlng(loc) for loc in locs_]
 
 	def get_mapl(self, posaddr_):
 		r = self.polylineidx_to_ptidx_to_mapl[posaddr_.linesegaddr.polylineidx][posaddr_.linesegaddr.ptidx]
@@ -494,51 +507,57 @@ class SnapGraph(object):
 	# In the code below, 'vvert' is short for 'virtual vertex' which is a term I made up for this function, 
 	# to describe something that is a vertex in the graph theory sense and from the dijkstra function's perspective, 
 	# but is not necessarily one of our Vertex objects.  A virtual vertex could be a Vertex, or it could be a PosAddr. 
-	def find_path_by_posaddrs(self, startposaddr_, destposaddr_, out_visited_vertexes=None):
-		assert isinstance(startposaddr_, PosAddr) and isinstance(destposaddr_, PosAddr)
+	def find_path_by_locs(self, startloc_, destloc_, out_visited_vertexes=None):
+		assert isloc(startloc_) and isloc(destloc_)
 
-		all_vverts = self.get_vertexes() + [startposaddr_, destposaddr_]
+		all_vverts = self.get_vertexes() + [loc for loc in (startloc_, destloc_) if isinstance(loc, PosAddr)]
 
-		startpos_bounding_vertexes = self.get_bounding_vertexes(startposaddr_, True)
-		destpos_bounding_vertexes = self.get_bounding_vertexes(destposaddr_, True)
+		startisvert = isinstance(startloc_, Vertex); destisvert = isinstance(destloc_, Vertex)
+		startpos_bounding_vertexes = (self.get_bounding_vertexes(startloc_, True) if not startisvert else [])
+		destpos_bounding_vertexes = (self.get_bounding_vertexes(destloc_, True) if not destisvert else [])
 		shared_bounding_vertexes = set(startpos_bounding_vertexes) & set(destpos_bounding_vertexes)
 		def get_connected_vertexndists(vvert__):
-			if (len(shared_bounding_vertexes) == 2) and (startposaddr_.linesegaddr.polylineidx == destposaddr_.linesegaddr.polylineidx):
-				startpos_is_lo = (cmp(startposaddr_, destposaddr_) < 0)
-				if vvert__ in (startposaddr_, destposaddr_):	
-					vert = startpos_bounding_vertexes[(not startpos_is_lo) ^ (vvert__ == destposaddr_)]
-					thisposaddr, otherposaddr = (startposaddr_, destposaddr_)[::-1 if vvert__ == destposaddr_ else 1]
+			if (len(shared_bounding_vertexes) == 2) and (startloc_.linesegaddr.polylineidx == destloc_.linesegaddr.polylineidx):
+				startpos_is_lo = (cmp(startloc_, destloc_) < 0)
+				if vvert__ in (startloc_, destloc_):	
+					vert = startpos_bounding_vertexes[(not startpos_is_lo) ^ (vvert__ == destloc_)]
+					thisposaddr, otherposaddr = (startloc_, destloc_)[::-1 if vvert__ == destloc_ else 1]
 					r = ([(vert, self.get_dist(thisposaddr, vert))] if vert is not None else [])
-					try: # tdr
-						if thisposaddr.linesegaddr.polylineidx != otherposaddr.linesegaddr.polylineidx:
-							print thisposaddr, otherposaddr
-							print self.get_lineseg(thisposaddr.linesegaddr)
-							print self.get_lineseg(otherposaddr.linesegaddr)
-					except Exception, e: # tdr
-						print e # tdr
 					r += [(otherposaddr, self.get_dist_between_posaddrs(thisposaddr, otherposaddr))]
 				else:
 					assert isinstance(vvert__, Vertex)
 					r = self.vertex_to_connectedvertex_n_dists[vvert__]
 					if vvert__ in startpos_bounding_vertexes:
 						r = [(v,d) for v,d in r if v not in shared_bounding_vertexes]
-						posaddr = (startposaddr_, destposaddr_)[(not startpos_is_lo) ^ (vvert__ == startpos_bounding_vertexes[0])]
+						posaddr = (startloc_, destloc_)[(not startpos_is_lo) ^ (vvert__ == startpos_bounding_vertexes[0])]
 						r += [(posaddr, self.get_dist(posaddr, vvert__))]
 			else:
-				if vvert__ == startposaddr_:	
-					r = [(vert,self.get_dist(startposaddr_, vert)) for vert in startpos_bounding_vertexes if vert is not None]
-				elif vvert__ == destposaddr_:
-					r = [(vert,self.get_dist(destposaddr_, vert)) for vert in destpos_bounding_vertexes if vert is not None]
+				def default():
+					return self.vertex_to_connectedvertex_n_dists[vvert__]
+				if vvert__ == startloc_:	
+					if startisvert:
+						r = default()
+						if not destisvert and startloc_ in destpos_bounding_vertexes:
+							r = [(v,d) for v,d in r if v not in destpos_bounding_vertexes] + [(destloc_,self.get_dist(startloc_,destloc_))]
+					else:
+						r = [(vert,self.get_dist(startloc_, vert)) for vert in startpos_bounding_vertexes if vert is not None]
+				elif vvert__ == destloc_:
+					if destisvert:
+						r = default()
+						if not startisvert and destloc_ in startpos_bounding_vertexes:
+							r = [(v,d) for v,d in r if v not in startpos_bounding_vertexes] + [(startloc_,self.get_dist(startloc_,destloc_))]
+					else:
+						r = [(vert,self.get_dist(destloc_, vert)) for vert in destpos_bounding_vertexes if vert is not None]
 				else:
 					assert isinstance(vvert__, Vertex)
-					r = self.vertex_to_connectedvertex_n_dists[vvert__]
+					r = default()
 					if (len(shared_bounding_vertexes) == 1) and (vvert__ == anyelem(shared_bounding_vertexes)):
 						r = [(v,d) for v,d in r if v not in startpos_bounding_vertexes + destpos_bounding_vertexes]
-						r += [(posaddr, self.get_dist(posaddr, vvert__)) for posaddr in (startposaddr_, destposaddr_)]
+						r += [(posaddr, self.get_dist(posaddr, vvert__)) for posaddr in (startloc_, destloc_)]
 					elif vvert__ in startpos_bounding_vertexes:
-						r = [(v,d) for v,d in r if v not in startpos_bounding_vertexes] + [(startposaddr_,self.get_dist(startposaddr_, vvert__))]
+						r = [(v,d) for v,d in r if v not in startpos_bounding_vertexes] + [(startloc_,self.get_dist(startloc_, vvert__))]
 					elif vvert__ in destpos_bounding_vertexes:
-						r = [(v,d) for v,d in r if v not in destpos_bounding_vertexes] + [(destposaddr_,self.get_dist(destposaddr_, vvert__))]
+						r = [(v,d) for v,d in r if v not in destpos_bounding_vertexes] + [(destloc_,self.get_dist(destloc_, vvert__))]
 			return r
 			
 		def heuristic(vvert1__, vvert2__):
@@ -546,14 +565,20 @@ class SnapGraph(object):
 				return (vvert___.pos() if isinstance(vvert___, Vertex) else self.get_latlng(vvert___))
 			return get_latlng(vvert1__).dist_m(get_latlng(vvert2__))
 
-		r = a_star(startposaddr_, destposaddr_, all_vverts, get_connected_vertexndists, heuristic, 
+		r = a_star(startloc_, destloc_, all_vverts, get_connected_vertexndists, heuristic, 
 				out_visited_vertexes=out_visited_vertexes)
+
+		if __debug__ and r[0] is not None:
+			dist_from_latlngs = geom.dist_m_polyline(Path([r[1]], self).latlngs())
+			assert abs(r[0] - dist_from_latlngs) < 1
+			
 		return r
 
 	def get_vertex(self, id_):
 		return first(self.get_vertexes(), lambda vertex: vertex.id == id_)
 
 	def init_path_structures(self, disttolerance_):
+		self.paths_disttolerance = disttolerance_
 		self.init_polylineidx_to_ptidx_to_vertex(disttolerance_)
 		self.init_polylineidx_to_ptidx_to_mapl()
 		self.init_vertex_to_connectedvertex_n_dists()
@@ -784,7 +809,7 @@ class SnapGraph(object):
 	def get_point(self, linesegaddr_):
 		return self.polylines[linesegaddr_.polylineidx][linesegaddr_.ptidx]
 
-	# returns: list of PosAddr, sorted by dist to target_ in increasing order. 
+	# returns: list of (PosAddr or Vertex), sorted by dist to target_ in increasing order. 
 	# There are three stages to this.  The first stage finds all of the possible lineseg snaps.  Simple.  
 	# 
 	# The second stage reduces that list of lineseg snaps to probably one per polyline.  The reason for doing this is because 
@@ -843,8 +868,22 @@ class SnapGraph(object):
 		else:
 			r = posaddr_to_dist.keys()
 
-		r.sort(key=lambda posaddr: posaddr_to_dist[posaddr])
+		vert_to_dist = {}
+		for pos in r:
+			for vert in self.get_bounding_vertexes(pos):
+				dist = vert.pos().dist_m(target_) 
+				if dist <= searchradius_:
+					vert_to_dist[vert] = dist
+
+		verts = vert_to_dist.keys()
+		r = [pos for pos in r if all(self.get_latlng(pos).dist_m(vert.pos()) > 5 for vert in verts)]
+		r += verts
+		r.sort(key=lambda loc: posaddr_to_dist[loc] if isinstance(loc, PosAddr) else vert_to_dist[loc])
 		return r
+
+	def is_there_a_vertex_at(self, pos_):
+		assert isinstance(pos_, PosAddr)
+		return pos_.pals == 0.0 and pos_.linesegaddr.ptidx in self.polylineidx_to_ptidx_to_vertex[pos_.linesegaddr.polylineidx]
 
 	def are_plines_connected(self, plineidx1_, plineidx2_):
 		return plineidx2_ in self.plineidx_to_connected_plineidxes[plineidx1_]
@@ -1416,6 +1455,8 @@ def a_star(srcvertex_, destvertex_, all_vertexes_, get_connected_vertexndists_, 
 
 	return (None, None)
 
+def isloc(obj_):
+	return isinstance(obj_, Vertex) or isinstance(obj_, PosAddr)
 
 if __name__ == '__main__':
 
