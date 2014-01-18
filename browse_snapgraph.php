@@ -46,7 +46,12 @@ function initialize() {
 		}
 	});
 
-	add_delayed_event_listener(g_map, 'bounds_changed', refresh_graph_visuals, 750);
+	add_delayed_event_listener(g_map, 'bounds_changed', refresh_graph_visuals, 300);
+
+	// Hack because around January 15 2013, Chrome sometimes stopped displaying the graph visuals until we jog the 
+	// map a little, or alt-tab, or zoom, or something like that.   Oddly enough, it looks like changing the delay 
+	// above from 500 to 300 fixes it too.  Well this fixes it again. 
+	//setTimeout("g_map.panTo(new google.maps.LatLng(g_map.getCenter().lat(), g_map.getCenter().lng()+0.00001));", 1000);
 
 	$('#plineidx_field').keydown(function (e) {
 		if(e.keyCode == 13) {
@@ -60,18 +65,29 @@ function initialize() {
 	});
 }
 
+function get_path_marker_icon_url(i_) {
+	return sprintf('http://www.google.com/mapfiles/marker_grey%s.png', 
+			String.fromCharCode('A'.charCodeAt(0) + i_));
+}
+
 function add_path_marker(latlng_) {
 	var marker = new google.maps.Marker({map: g_map, position: latlng_, 
-			icon: 'http://www.google.com/mapfiles/marker_grey.png', draggable: true});
+			icon: get_path_marker_icon_url(g_path_markers.length), draggable: true});
 	google.maps.event.addListener(marker, 'click', clear_or_reget_path);
 	google.maps.event.addListener(marker, 'dragend', get_path_from_server);
-	google.maps.event.addListener(marker, 'rightclick', function() { 
+	google.maps.event.addListener(marker, 'rightclick', function() {
+			console.log('before', g_path_markers.length);
 			for(var i=0; i<g_path_markers.length; i++) {
 				if(g_path_markers[i] == marker) {
 					g_path_markers.splice(i, 1);
 					marker.setMap(null);
 					break;
 				}
+			}
+			console.log('after', g_path_markers.length);
+			for(var i=0; i<g_path_markers.length; i++) {
+				//console.log(i);
+				g_path_markers[i].setIcon(get_path_marker_icon_url(i))
 			}
 			get_path_from_server();
 		});
@@ -201,8 +217,8 @@ function refresh_graph_visuals() {
 					make_vert_circle(vertinfo);
 				}
 			}
-			g_static_graph_objects.push(new google.maps.Rectangle({map: g_map, bounds: g_map.getBounds(), fillOpacity: 0, clickable: false, 
-					strokeWeight: 0.5}));
+			g_static_graph_objects.push(new google.maps.Rectangle({map: g_map, bounds: g_map.getBounds(), fillOpacity: 0, 
+					clickable: false, strokeWeight: 0.5}));
 		}, 
 		error: function() {
 			console.log('error');
