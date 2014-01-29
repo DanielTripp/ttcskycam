@@ -274,7 +274,7 @@ function get_latlngs_from_string(str_) {
 				var filelines = str_.split('\n');
 				for(var filelinei in filelines) {
 					var fileline = filelines[filelinei];
-					var regex = /.*?(43\.\d+).*?(-79\.\d+).*/g;
+					var regex = /.*?[^:](43\.\d+).*?(-79\.\d+).*/g;
 					var match = regex.exec(fileline);
 					if(match != null) {
 					  var lat = parseFloat(match[1], 10);
