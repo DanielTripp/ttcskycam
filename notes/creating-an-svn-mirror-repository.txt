@@ -1,0 +1,20 @@
+mkdir ~/svn-mirror
+
+svnadmin create repos
+
+create this file: ~/svn-mirror/repos/hooks/pre-revprop-change
+with these contents:
+
+#!/bin/sh
+USER="$3"
+if [ "$USER" = "svnsync" ]; then exit 0; fi
+echo "Only the svnsync user can change revprops" >&2
+exit 1
+
+chmod u=rwx,g=rwx,o=rx  ~/svn-mirror/repos/hooks/pre-revprop-change
+
+svnsync initialize --username svnsync file:///home/dt/svn-mirror/repos  https://173.230.189.111/svn/ttc/trunk
+	(then enter svnsync password.  then 'dt' for username.  then dt's password.)
+
+svnsync sync file:///home/dt/svn-mirror/repos
+
