@@ -63,6 +63,18 @@ class VehicleInfo:
 		self._widemofr = widemofr_
 		self.is_dir_tag_corrected = False
 
+	def _key(self):
+		return (self.dir_tag, self.heading, self.vehicle_id, self.latlng, self.predictable, self.fudgeroute, self.route_tag, self.secs_since_report, self.time_retrieved, self.time, self._mofr, self._widemofr, self.is_dir_tag_corrected)
+
+	def __eq__(self, other_):
+		return isinstance(other_, VehicleInfo) and (self._key() == other_._key())
+
+	def __hash__(self):
+		return hash(self._key())
+
+	def __cmp__(self, other_):
+		return cmp(self.__class__.__name__, other_.__class__.__name__) or cmp(self.time, other_.time)
+
 	def calc_time(self):
 		self.time = self.time_retrieved - self.secs_since_report*1000
 
@@ -101,7 +113,7 @@ class VehicleInfo:
 			assert len(routestr) == 6 # Not that it's a big deal if it's greater than 6.  It's just that I would like to know, 
 				# and probably rewrite this function, to make sure that the values it returns are always the same length, 
 				# so that when I print out a list of them, every field lines up in the same columns. 
-		return '%s  r=%-6s, vid=%s, dir: %s%-12s, (%.8f,%.8f), h=%3d, mofr=%5d%s%5d%s' \
+		return '%s  r=%-6s, vid=%s, dir: %s%-12s, (%.7f,%.7f), h=%3d, mofr=%5d%s%5d%s' \
 			% (self.timestr, routestr, self.vehicle_id, ('*' if self.is_dir_tag_corrected else ' '), self.dir_tag,
 			   self.latlng.lat, self.latlng.lng, self.heading, self.mofr, ('!' if self.mofr!=self.widemofr else ' '), self.widemofr,
 			   ('' if self.predictable else ' UNPREDICTABLE'))
@@ -179,7 +191,7 @@ def makevi1(**kwargs):
 	return r
 
 def makevi(pos_, timestr_, *args_):
-	yyyymmdd = '2007-02-15'
+	yyyymmdd = '2020-01-01'
 	if re.match(r'\d\d:\d\d', timestr_) or re.match(r'\d\d:\d\d:\d\d', timestr_):
 		time_em = str_to_em('%s %s' % (yyyymmdd, timestr_))
 	elif re.match(r'\d\d\d\d-\d\d-\d\d \d\d:\d\d.*', timestr_):

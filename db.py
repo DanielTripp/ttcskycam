@@ -28,7 +28,7 @@ create index reports_idx_3 on reports ( time desc, time_inserted_str desc ) ;
 
 import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket, datetime, calendar, math
 from collections import defaultdict, Sequence
-import vinfo, geom, traffic, routes, yards, tracks, predictions, mc, c, util
+import vinfo, geom, traffic, routes, yards, tracks, streets, snapgraph, predictions, mc, c, util
 from misc import *
 
 HOSTMONIKER_TO_IP = {'theorem': '72.2.4.176', 'black': '24.52.231.206', 'u': 'localhost'}
@@ -38,6 +38,8 @@ VI_COLS = ' dir_tag, heading, vehicle_id, lat, lon, predictable, fudgeroute, rou
 PREDICTION_COLS = ' fudgeroute, configroute, stoptag, time_retrieved, time_of_prediction, vehicle_id, is_departure, block, dirtag, triptag, branch, affected_by_layover, is_schedule_based, delayed'
 
 WRITE_MOFRS = os.path.exists('WRITE_MOFRS')
+
+DISABLE_GRAPH_PATHS = False
 
 g_conn = None
 g_forced_hostmoniker = None
@@ -619,16 +621,23 @@ def interp_by_time(vilist_, be_clever_, current_conditions_, dir_=None, datazoom
 	interptimes = list(lrange(starttime, endtime+1, 60*1000))
 	time_to_out_vis = dict((interptime, []) for interptime in interptimes)
 	for vid in vids:
-		vis = [vi for vi in vilist_ if vi.vehicle_id == vid]
+		vis = [vi for vi in vilist_ if vi.vehicle_id == vid][::-1]
+		assert is_sorted(vis, key=lambda vi: vi.time)
+		vi_to_grade, vi_to_path = get_grade_stretch_info(vis, be_clever_, log_)
 		for interptime in interptimes:
-			lolo_vi, lo_vi, hi_vi = get_nearest_time_vis(vis, vid, interptime)
+			lolo_vi, lo_vi, hi_vi, lolo_idx, lo_idx, hi_idx = get_nearest_time_vis(vis, interptime)
 			i_vi = None
 			if lo_vi and hi_vi:
 				if (min(interptime - lo_vi.time, hi_vi.time - interptime) > 3*60*1000) or dirs_disagree(dir_, hi_vi.dir_tag_int)\
 						or dirs_disagree(lo_vi.dir_tag_int, dir_) or (lo_vi.fudgeroute != hi_vi.fudgeroute):
 					continue
-				ratio = (interptime - lo_vi.time)/float(hi_vi.time - lo_vi.time)
-				i_latlon, i_heading, i_mofr = interp_latlonnheadingnmofr(lo_vi, hi_vi, ratio, datazoom_, be_clever_, vis)
+				time_ratio = (interptime - lo_vi.time)/float(hi_vi.time - lo_vi.time)
+				lo_grade = vi_to_grade[lo_vi]; hi_grade = vi_to_grade[hi_vi]
+				if (lo_grade, hi_grade) in (('g', 'g'), ('g', 'r'), ('r', 'g')):
+					i_latlon, i_heading, i_mofr = interp_with_path_latlonnheadingnmofr(
+							lo_vi, hi_vi, time_ratio, lo_idx, vis, vi_to_grade, vi_to_path, log_)
+				else:
+					i_latlon, i_heading, i_mofr = interp_latlonnheadingnmofr(lo_vi, hi_vi, time_ratio, datazoom_, be_clever_)
 				i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, i_heading, vid, i_latlon.lat, i_latlon.lng,
 										 lo_vi.predictable and hi_vi.predictable,
 										 lo_vi.fudgeroute, lo_vi.route_tag, 0, interptime, interptime, i_mofr, None)
@@ -636,20 +645,203 @@ def interp_by_time(vilist_, be_clever_, current_conditions_, dir_=None, datazoom
 				if current_conditions_:
 					if (interptime - lo_vi.time > 3*60*1000) or dirs_disagree(dir_, lo_vi.dir_tag_int):
 						continue
-					latlng, heading = get_latlonnheadingnmofr_from_lo_sample(lolo_vi, lo_vi, datazoom_, be_clever_, vis)[:2]
+					if vi_to_grade[lo_vi] == 'g':
+						latlng, heading = vi_to_path[lo_vi].get_piece(-1).mapl_to_latlonnheading('max')
+					else:
+						latlng, heading = get_latlonnheadingnmofr_from_lo_sample(lolo_vi, lo_vi, datazoom_, be_clever_)[:2]
 					i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, heading, vid, latlng.lat, latlng.lng,
 							lo_vi.predictable, lo_vi.fudgeroute, lo_vi.route_tag, 0, interptime, interptime, lo_vi.mofr, lo_vi.widemofr)
 
 			if i_vi:
 				time_to_out_vis[interptime].append(i_vi)
 				if log_:
-					printerr('lo: %s' % lo_vi)
+					printerr('vid %s, interp result for %s' % (vid, em_to_str_hms(interptime)))
+					printerr('\tlo: %s' % lo_vi)
 					if hi_vi:
-						printerr('hi: %s' % hi_vi)
-					printerr('==> %s' % i_vi)
-					printerr()
+						printerr('\thi: %s' % hi_vi)
+					printerr('\t==> %s' % i_vi)
 
 	return massage_to_list(time_to_out_vis, starttime, endtime, log_=log_)
+
+def interp_with_path_latlonnheadingnmofr(lo_vi_, hi_vi_, time_ratio_, lo_idx_, vis_, vi_to_grade_, vi_to_path_, log_):
+	assert lo_vi_.vehicle_id == hi_vi_.vehicle_id
+	lo_grade = vi_to_grade_[lo_vi_]
+	path = vi_to_path_[lo_vi_ if lo_grade == 'g' else hi_vi_]
+	pieceidx = get_piece_idx(vis_, lo_idx_, vi_to_grade_)
+	i_latlng, i_heading = get_latlonnheading_from_path(path, pieceidx, time_ratio_)
+	i_mofr = None
+	if log_:
+		printerr('vid %s path interp between [%s,%s]:' % (lo_vi_.vehicle_id, lo_vi_.latlng, hi_vi_.latlng))
+		printerr('\ttime_ratio=%.2f, pieceidx=%d' % (time_ratio_, pieceidx))
+		printerr('\tpiece=%s' % path.latlngs(pieceidx))
+		printerr('\tresult=%s' % i_latlng)
+	return (i_latlng, i_heading, i_mofr)
+
+def get_latlonnheading_from_path(path_, pieceidx_, time_ratio_):
+	piece = path_.get_piece(pieceidx_)
+	mapl = piece.length_m() * time_ratio_
+	return piece.mapl_to_latlonnheading(mapl)
+
+def get_piece_idx(vis_, lo_idx_, vi_to_grade_):
+	r = 0
+	for i in range(lo_idx_, -1, -1):
+		if vi_to_grade_[vis_[i]] != 'g':
+			break
+		r += 1
+	return r
+
+def get_grade_stretch_info(vis_, be_clever_, log_):
+	assert len(set(vi.vehicle_id for vi in vis_)) == 1
+	assert is_sorted(vis_, key=lambda vi: vi.time)
+
+	if not be_clever_:
+		return (defaultdict(lambda: 'o'), {})
+
+	# In meters.  This is more or less a maximum GPS error - that is, the maximum 
+	# distance that there could be between a lat/lng sample and where that 
+	# vehicle really is.  I think that this is in the right ballpark but the 
+	# thinking here (and nearby) probably isn't as clear as it should be.  For 
+	# example, I haven't considered here the maximum distance between where I 
+	# think a road or streetcar track is and where it really is.  Or the vertex 
+	# distance tolerance that was used when building the vertex list for each 
+	# instance of SnapGraph - that is, the maximum distance apart two line or 
+	# points can be while still being considered to intersect.  Neither have I 
+	# considered the maximum distance that can be introduced between a polyline 
+	# and it's RDP-simplified version.
+	# 150 meters might seem high but I observed 140 before - vid 4114, 2014-01-31 11:14:47.
+	T = 150 
+
+	vi_to_offroute = dict((vi, vi.mofr == -1) for vi in vis_)
+	if 0:
+		for stretch in get_maximal_sublists3(vis_, lambda vi: vi_to_offroute[vi]):
+			if not vi_to_offroute[stretch[0]]:
+				mofrs = set(vi.mofr for vi in stretch)
+				min_mofr = min(mofrs); max_mofr = max(mofrs)
+				for vi in stretch:
+					if vi.mofr - min_mofr < T or max_mofr - vi.mofr < T:
+						vi_to_offroute[vi] = True
+
+	if 0: # tdr 
+		try: # tdr
+			print 'x ----'
+			for vi, offroute in iteritemssorted(vi_to_offroute): # tdr 
+				print 'x', vi, '---', offroute # tdr
+			print 'x ----'
+		except Exception, e: # tdr
+			print e # tdr
+
+	stretches = get_maximal_sublists3(vis_, lambda vi: vi_to_offroute[vi])
+	for stretchi in range(len(stretches)):
+		stretch = stretches[stretchi]
+		if not vi_to_offroute[stretch[0]]:
+			if stretchi > 0:
+				ref_mofr = stretch[0].mofr
+				vi_to_offroute[stretch[0]] = True
+				for vi in stretch[1:]:
+					if abs(vi.mofr - ref_mofr) < T:
+						vi_to_offroute[vi] = True
+					else:
+						break
+			if stretchi < len(stretches) - 1:
+				ref_mofr = stretch[-1].mofr
+				vi_to_offroute[stretch[-1]] = True
+				for vi in stretch[-2::-1]:
+					if abs(vi.mofr - ref_mofr) < T:
+						vi_to_offroute[vi] = True
+					else:
+						break
+			
+	if 0: # tdr 
+		try: # tdr
+			print 'x ----'
+			for vi, offroute in iteritemssorted(vi_to_offroute): # tdr 
+				print 'x', vi, '---', offroute # tdr
+			print 'x ----'
+		except Exception, e: # tdr
+			print e # tdr
+
+	stretches = get_maximal_sublists3(vis_, lambda vi: vi_to_offroute[vi])
+	for stretchi in range(len(stretches)):
+		stretch = stretches[stretchi]
+		if not vi_to_offroute[stretch[0]]:
+			mofrs = [vi.mofr for vi in stretch]
+			mofr_span = max(mofrs) - min(mofrs)
+			if mofr_span < T:
+				for vi in stretch:
+					vi_to_offroute[vi] = True
+
+	vi_to_grade = dict((vi, 'o' if vi_to_offroute[vi] else 'r') for vi in vis_)
+
+	if DISABLE_GRAPH_PATHS:
+		return (vi_to_grade, {})
+
+	if 0: # tdr
+		return (vi_to_grade, {})
+
+	if 0: # tdr 
+		try: # tdr
+			print 'x ----'
+			for vi, offroute in iteritemssorted(vi_to_offroute): # tdr 
+				print 'x', vi, '---', offroute # tdr
+			print 'x ----'
+		except Exception, e: # tdr
+			print e # tdr
+
+		try: # tdr
+			if 1:
+				for vi in vis_:
+					print 'grade:', vi, vi_to_grade[vi]
+				print '---'
+		except Exception, e: # tdr
+			print e # tdr
+
+	vi_to_locs = {}
+	sg = (tracks.get_snapgraph() if vis_[0].is_a_streetcar() else streets.get_snapgraph())
+	for i, vi in enumerate(vis_):
+		if vi_to_grade[vi] == 'o':
+			locs = sg.multisnap(vi.latlng, T)
+			if len(locs) > 0:
+				vi_to_locs[vi] = locs
+				vi_to_grade[vi] = 'g'
+
+	def get_grade(stretch__):
+		return vi_to_grade[stretch__[0]]
+
+	vi_to_path = {}
+	stretches = get_maximal_sublists3(vis_, lambda vi: vi_to_grade[vi])
+	for stretchi, stretch in enumerate(stretches):
+		if get_grade(stretch) == 'g':
+			latlngs = [vi.latlng for vi in stretch]
+			locses = [vi_to_locs[vi] for vi in stretch]
+			if stretchi > 0 and get_grade(stretches[stretchi-1]) == 'r':
+				latlng = stretches[stretchi-1][-1].latlng
+				latlngs.insert(0, latlng)
+				locses.insert(0, sg.multisnap(latlng, T))
+			if stretchi < len(stretches)-1 and get_grade(stretches[stretchi+1]) == 'r':
+				latlng = stretches[stretchi+1][0].latlng
+				latlngs.append(latlng)
+				locses.append(sg.multisnap(latlng, T))
+			dist, path = sg.find_multipath(latlngs, locses, T)
+			assert dist is not None and path is not None
+			for vi in stretch:
+				vi_to_path[vi] = path
+
+	if 0: # tdr 
+		try: # tdr
+			if 1:
+				for vi in vis_:
+					print 'grade:', vi, vi_to_grade[vi]
+			sys.exit(1)
+		except Exception, e: # tdr
+			print e # tdr
+
+	if log_:
+		printerr('Grades for vid %s:' % vis_[0].vehicle_id)
+		for vi in vis_:
+			printerr('\t%s / %s: %s' % (vi.timestr, vi.latlng, vi_to_grade[vi]))
+
+	return (vi_to_grade, vi_to_path)
+		
 
 # Either arg could be None (i.e. blank dir_tag).  For this we consider None to 'agree' with 0 or 1.
 def dirs_disagree(dir1_, dir2_):
@@ -662,10 +854,10 @@ def dirs_disagree(dir1_, dir2_):
 # lolo_vi_ may seem unnecessary here because of the ratio of 1.0, but it is used to find the heading 
 # if tracks are being used - will be a choice between X and X + 180.  If we have only one sample (lo_vi_) then common sense 
 # says that there's no way that we can figure out that heading.  
-def get_latlonnheadingnmofr_from_lo_sample(lolo_vi_, lo_vi_, datazoom_, be_clever_, raw_vilist_for_hint_):
+def get_latlonnheadingnmofr_from_lo_sample(lolo_vi_, lo_vi_, datazoom_, be_clever_):
 	assert lo_vi_ is not None
 	if lolo_vi_ is not None:
-		return interp_latlonnheadingnmofr(lolo_vi_, lo_vi_, 1.0, datazoom_, be_clever_, raw_vilist_for_hint_)
+		return interp_latlonnheadingnmofr(lolo_vi_, lo_vi_, 1.0, datazoom_, be_clever_)
 	else:
 		# We would do something like this:
 		#return interp_latlonnheadingnmofr(lo_vi_, lo_vi_, 1.0, datazoom_, be_clever_)
@@ -675,27 +867,18 @@ def get_latlonnheadingnmofr_from_lo_sample(lolo_vi_, lo_vi_, datazoom_, be_cleve
 		raise Exception()
 
 		
-# be_clever_ - means use routes if mofrs are valid, else use 'tracks' if a streetcar.
-# raw_vilist_for_hint_ is to help us return the correct heading in the case of a vehicle being stuck on tracks
-# (i.e. not on route i.e. mofr==-1).  Usually the difference in latlng between vi1_ and vi2_ is enough for us to determine
-# the heading of the vehicle, but if the vehicle is standing still then we have to work for it more.  For on-route vehicles
-# the dirtag helps us with this - i.e. the routes.mofr_to_latlonnheading() call - but for tracks that doesn't help.
-# So this argument is to inform us the last heading we figured for this vehicle, and that will help us choose between
-# the two tracks headings at the current location (i.e. X and X + 180) almost as well as the heading between vi1_ and vi2_ would,
-# (if vi1_ and vi2_ weren't too close to each other to be useful.)
-#
-# note [1]: For a location anywhere on a track, we have two possible headings for vehicles on that track -
-# X and X + 180 degrees.  With this code we choose which one we want by choosing the one that is closest to the tracks-ignorant
-# heading indicated by the latlng diff of the two raw samples we're interpolating between.
+# Interpolates via mofrs if possible, or off-route simple interpolation. 
 # 
+# be_clever_ - means use routes if mofrs are valid.
+#
 # note 23906728947234: slight lie about making mofr -1 here.  I used to set it to None, so that later whenever someone 
 # used vi.mofr on this object (which would probably be during serialization to JSON), 
 # vinfo.VehicleInfo would calculate it from the latlng.  It could be a valid mofr.  Something interpolated half-way between 
 # eg. a position 500 meters to one side of a route and 500 meters to the other could be a valid mofr.  But it doesn't mean 
 # much and more importantly - nobody is looking at this interpolated mofr - neither human nor code.  
 # So even though None would be more honest, I'm setting it to -1 for a slight performance increase (about 5% of a full 
-# reports generation run, I think).
-def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, datazoom_, be_clever_, raw_vilist_for_hint_=None):
+# reports generation run, as it stands now).
+def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, datazoom_, be_clever_):
 	assert isinstance(vi1_, vinfo.VehicleInfo) and isinstance(vi2_, vinfo.VehicleInfo) and (vi1_.vehicle_id == vi2_.vehicle_id)
 	assert vi1_.time < vi2_.time and (datazoom_ is None or datazoom_ in c.VALID_DATAZOOMS)
 	r = None
@@ -710,27 +893,6 @@ def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, datazoom_, be_clever_, raw_vi
 			if dir_tag_int == None:
 				raise Exception('Could not determine dir_tag_int of %s' % (str(vi2_)))
 			r = routes.mofr_to_latlonnheading(froute, interp_mofr, dir_tag_int, datazoom_) + (interp_mofr,)
-		elif vi1_.is_a_streetcar():
-			vi1_tracks_snap_result = tracks.snap(vi1_.latlng); vi2_tracks_snap_result = tracks.snap(vi2_.latlng)
-			assert vi1_tracks_snap_result is not None and vi2_tracks_snap_result is not None # A tracks snap always succeeds. 
-			# ^^ these snap results don't seem to be used.  latlngs from them should probably be used as inputs 
-			# to the interped tracks snap below.  Should fix that some time. 
-			simple_interped_loc = vi1_.latlng.avg(vi2_.latlng, ratio_)
-			interped_loc_snap_posaddr = tracks.snap(simple_interped_loc)
-			assert interped_loc_snap_posaddr is not None # Again, a tracks snap always succeeds. 
-			line_aot_pt = interped_loc_snap_posaddr.pals != 0.0
-			tracks_based_heading = tracks.heading(interped_loc_snap_posaddr.linesegaddr, line_aot_pt)
-			ref_heading = vi1_.latlng.heading(vi2_.latlng)
-			# We've got to find the general direction this vehicle is going, and I don't trust a location difference of < 50 metres, 
-			# so let's keep looking back in time until we have a difference greater than 50 metres: 
-			if vi1_.latlng.dist_m(vi2_.latlng) < 50 and (raw_vilist_for_hint_ is not None): 
-				for vi in [vi for vi in raw_vilist_for_hint_ if vi.vehicle_id == vi2_.vehicle_id and vi.time < vi2_.time]:
-					if vi.latlng.dist_m(vi2_.latlng) > 50:
-						ref_heading = vi.latlng.heading(vi2_.latlng)
-						break
-			if geom.diff_headings(tracks_based_heading, ref_heading) > 90: # see note [1] above
-				tracks_based_heading = geom.normalize_heading(tracks_based_heading+180)
-			r = (tracks.get_latlng(interped_loc_snap_posaddr), tracks_based_heading, -1) # see note 23906728947234 
 
 	if r is None:
 		vi1_latlng = vi1_.latlng; vi2_latlng = vi2_.latlng
@@ -798,24 +960,32 @@ def massage_to_list(time_to_vis_, start_time_, end_time_, log_=False):
 	return r
 
 # return (lolo, lo, hi).  lo and hi bound t_ by time.  lolo is one lower than lo.
-def get_nearest_time_vis(vilist_, vid_, t_):
-	assert type(t_) == long
-	vis = [vi for vi in vilist_ if vi.vehicle_id == vid_]
-	if len(vis) == 0:
-		return (None, None, None)
-	assert is_sorted(vis, reverse=True, key=lambda vi: vi.time)
+def get_nearest_time_vis(vis_, t_):
+	assert (type(t_) == long) and (len(set(vi.vehicle_id for vi in vis_)) == 1)
+	if len(vis_) == 0:
+		return (None, None, None, -1, -1, -1)
+	assert is_sorted(vis_, key=lambda vi: vi.time)
 	r_lo = None; r_hi = None
-	for hi_idx in range(len(vis)-1):
-		lo_idx = hi_idx+1
-		hi = vis[hi_idx]; lo = vis[lo_idx]
+	for hi_idx in range(len(vis_)-1, 0, -1):
+		lo_idx = hi_idx-1
+		hi = vis_[hi_idx]; lo = vis_[lo_idx]
 		if hi.time > t_ >= lo.time:
-			return ((vis[lo_idx+1] if lo_idx < len(vis)-1 else None), lo, hi)
-	if t_ >= vis[0].time:
-		return (vis[1] if len(vis) >= 2 else None, vis[0], None)
-	elif t_ < vis[-1].time:
-		 return (None, None, vis[-1])
+			if lo_idx > 0:
+				return (vis_[lo_idx-1], lo, hi, lo_idx-1, lo_idx, hi_idx)
+			else:
+				return (None, lo, hi, -1, lo_idx, hi_idx)
+	if t_ >= vis_[-1].time:
+		if len(vis_) >= 2:
+			lolo_idx = len(vis_)-2; lo_idx = len(vis_)-1
+			return (vis_[lolo_idx], vis_[lo_idx], None, lolo_idx, lo_idx, -1)
+		else:
+			lo_idx = len(vis_)-1
+			return (None, vis_[lo_idx], None, -1, lo_idx, -1)
+	elif t_ < vis_[-1].time:
+		 hi_idx = len(vis_)-1
+		 return (None, None, vis_[hi_idx], -1, -1, hi_idx)
 	else:
-		return (None, None, None)
+		return (None, None, None, -1, -1, -1)
 
 # returns a list of 2-tuples - (fore VehicleInfo, stand VehicleInfo)
 # list probably has max_ elements.
@@ -1102,7 +1272,7 @@ def insert_reports_into_memcache(froute_, dir_, time_, reporttype_to_datazoom_to
 @trans
 def insert_demo_locations(froute_, demo_report_timestr_, vid_, locations_):
 	if len(locations_) != 31: raise Exception('Got %d locations.  Want 31.' % (len(locations_)))
-	if not demo_report_timestr_.startswith('2007-'): raise Exception()
+	if not demo_report_timestr_.startswith('2020-'): raise Exception()
 	demo_report_time = str_to_em(demo_report_timestr_)
 	for locationi, location in enumerate(locations_):
 		t = demo_report_time - 1000*60*30 + 1000*60*locationi
@@ -1121,10 +1291,10 @@ def demo_froute_to_croute(froute_):
 
 @trans
 def delete_demo_locations(froute_, demo_report_timestr_):
-	if not demo_report_timestr_.startswith('2007-'): raise Exception()
+	if not demo_report_timestr_.startswith('2020-'): raise Exception()
 	demo_time = str_to_em(demo_report_timestr_)
-	delete_min_time = demo_time - 1000*60*31
-	delete_max_time = demo_time + 1000*60
+	delete_min_time = demo_time - 1000*60*60
+	delete_max_time = demo_time + 1000*60*60
 	curs = conn().cursor()
 	croute = demo_froute_to_croute(froute_)
 	curs.execute('delete from ttc_vehicle_locations where route_tag = %s and time_retrieved between %s and %s', \
@@ -1143,7 +1313,7 @@ def close_connection():
 
 if __name__ == '__main__':
 
-
 	conn()
+	print psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT
 
 

@@ -143,14 +143,18 @@ class Vertex(object):
 		assert self.on_finished_constructing_was_called
 		return self.snapgraph.get_point(self.ptaddrs[0])
 
-	def get_ptaddr(self, polylineidx_):
-		ptaddrs = [ptaddr for ptaddr in self.ptaddrs if ptaddr.polylineidx == polylineidx_]
-		if len(ptaddrs) != 1:
-			plineidxes = [ptaddr.polylineidx for ptaddr in self.ptaddrs]
-			plineidx_to_pts = dict((plineidx, self.snapgraph.polylines[plineidx]) for plineidx in plineidxes)
-			raise Exception('Problem around %s, polyline %d (%s) - %s, %s' \
-					% (self, polylineidx_, ptaddrs, self.ptaddrs, plineidx_to_pts))
-		return ptaddrs[0]
+	# arg polylineidx_: None ==> first polyline appearing in this vertex.  Whatever 'first' means.  Arbitrary.  Random.  Any.
+	def get_ptaddr(self, polylineidx_=None):
+		if polylineidx_ is None:
+			return self.ptaddrs[0]
+		else:
+			ptaddrs = [ptaddr for ptaddr in self.ptaddrs if ptaddr.polylineidx == polylineidx_]
+			if len(ptaddrs) != 1:
+				plineidxes = [ptaddr.polylineidx for ptaddr in self.ptaddrs]
+				plineidx_to_pts = dict((plineidx, self.snapgraph.polylines[plineidx]) for plineidx in plineidxes)
+				raise Exception('Problem around %s, polyline %d (%s) - %s, %s' \
+						% (self, polylineidx_, ptaddrs, self.ptaddrs, plineidx_to_pts))
+			return ptaddrs[0]
 
 	def get_posaddr(self, plineidx_):
 		return PosAddr(self.get_ptaddr(plineidx_), 0.0)
@@ -180,6 +184,9 @@ class Vertex(object):
 
 	def __repr__(self):
 		return self.__str__()
+
+	def copy(self):
+		return Vertex()
 
 	def to_json_dict(self):
 		return {'id': self.id, 'pos': self.pos(), 
@@ -234,35 +241,37 @@ class PosAddr(object):
 	def __repr__(self):
 		return self.__str__()
 
-# Vocabulary: a Path has one or more 'segments'.  
-# 	A 'segment' is a list of 'steps' (1 or more).  
+	def copy(self):
+		return PosAddr(self.linesegaddr.copy(), self.pals)
+
+# Vocabulary: a Path has one or more 'pieces'.  
+# 	A 'piece' is a list of 'steps' (1 or more).  
 #		A 'step' is a PosAddr or a Vertex. 
 class Path(object):
 	
-	def __init__(self, segments_, snapgraph_):
-		assert isinstance(segments_, Sequence)
-		for segment in segments_:
-			assert self.is_segment_valid(segment)
+	def __init__(self, piecestepses_, snapgraph_, snap_tolerance_):
+		assert isinstance(piecestepses_, Sequence)
+		for piecesteps in piecestepses_:
+			assert self.is_piece_valid(piecesteps)
 		assert isinstance(snapgraph_, SnapGraph)
-		self.segments = segments_
+		self.piecestepses = piecestepses_
+		self.pieces = [None]*len(self.piecestepses)
 		self.snapgraph = snapgraph_
+		self.snap_tolerance = snap_tolerance_
 
 	@staticmethod
-	def is_segment_valid(segment_):
-		if not (len(segment_) >= 1 and (isinstance(e, PosAddr) for e in (segment_[0], segment_[-1]))):
+	def is_piece_valid(steps_):
+		if len(steps_) < 1:
 			return False
-		if not ((isinstance(e, PosAddr) or isinstance(e, Vertex) for e in segment_)):
+		if not ((isinstance(e, PosAddr) or isinstance(e, Vertex) for e in steps_)):
 			return False
-		if len(segment_) >= 3:
-			if not (isinstance(segment_[1], Vertex) and isinstance(segment_[-2], Vertex)):
-				return False
-			for step1, step2 in hopscotch(segment_):
-				if isinstance(step1, PosAddr) and isinstance(step2, PosAddr):
-					return False
 		return True
 
-	def latlngs(self):
-		allsteps = sum(self.segments, [])
+	def latlngs(self, pieceidx_=None):
+		allsteps = (sum(self.piecestepses, []) if pieceidx_ is None else self.piecestepses[pieceidx_])
+		assert len(allsteps) > 0
+		if len(allsteps) == 1:
+			return [self.snapgraph.get_latlng(allsteps[0])]
 		startposaddr = allsteps[0]; destposaddr = allsteps[-1]
 		r = []
 		for step1, step2 in hopscotch(allsteps):
@@ -293,11 +302,88 @@ class Path(object):
 				r += [self.snapgraph.get_latlng(step2)] 
 		return uniq(r)
 
+	def piece_latlngs(self):
+		assert len(self.piecestepses) > 0
+		r = []
+		for piecesteps in self.piecestepses:
+			assert len(piecesteps) >= 2
+			curpiece_firststep = piecesteps[0]
+			r.append(self.snapgraph.get_latlng(curpiece_firststep))
+		lastpiece_laststep = self.piecestepses[-1][-1]
+		r.append(self.snapgraph.get_latlng(lastpiece_laststep))
+		return r
+
+	# arg pieceidx_: supports negative indexes. 
+	def get_piece(self, pieceidx_):
+		r = self.pieces[pieceidx_]
+		if r is None:
+			r = PathPiece(self, pieceidx_, self.snapgraph)
+			self.pieces[pieceidx_] = r
+		return r
+
+	def num_pieces(self):
+		return len(self.piecestepses)
+
 	def __str__(self):
-		return self.pathsteps.__str__()
+		return 'Path(%s)' % (self.piecestepses.__str__())
 
 	def __repr__(self):
 		return self.__str__()
+
+class PathPiece(object):
+
+	def __init__(self, path_, pieceidx_, streetsg_):
+		assert len(path_.piecestepses[pieceidx_]) > 0
+		self.path = path_
+		if len(self.path.piecestepses[pieceidx_]) == 1:
+			self.is_zero_length = True
+			self.zero_length_latlng = path_.latlngs(pieceidx_)[0]
+			self.zero_length_heading = self._get_zero_length_heading(pieceidx_, streetsg_)
+		else:
+			self.is_zero_length = False
+			self.sg = SnapGraph([path_.latlngs(pieceidx_)], forsnaps=False, forpaths=False)
+
+	def _get_zero_length_heading(self, pieceidx_, streetsg_):
+		cur_step = self.path.piecestepses[pieceidx_][0]
+		cur_latlng = streetsg_.get_latlng(cur_step)
+
+		prev_latlng = None
+		for prev_pieceidx in range(pieceidx_-1, -1, -1):
+			prev_piecesteps = self.path.piecestepses[prev_pieceidx]
+			if len(self.path.piecestepses[prev_pieceidx]) > 1:
+				prev_latlng = self.path.latlngs(prev_pieceidx)[-2]
+				break
+
+		if prev_latlng is not None:
+			return prev_latlng.heading(cur_latlng)
+		else:
+			# If we're here then we don't have much to go on.  
+			# This is a guess, and it will be wrong at least half the time. 
+			if isinstance(cur_step, PosAddr):
+				linesegaddr = cur_step.linesegaddr
+			else:
+				assert isinstance(cur_step, Vertex)
+				linesegaddr = cur_step.get_ptaddr()
+			return streetsg_.heading(linesegaddr, True)
+
+	def length_m(self):
+		if self.is_zero_length:
+			return 0.0
+		else:
+			return self.sg.get_pline_len(0)
+
+	# arg mapl_: should be a float between 0.0 and self.length_m() inclusive, or the string 'max'. 
+	def mapl_to_latlonnheading(self, mapl_):
+		if mapl_ == 'max':
+			mapl = self.length_m()
+		else:
+			mapl = mapl_
+		if self.is_zero_length:
+			if mapl != 0.0:
+				raise Exception()
+			return (self.zero_length_latlng, self.zero_length_heading)
+		else:
+			return self.sg.mapl_to_latlonnheading(0, mapl)
 
 # This can be pickled or memcached. 
 class SnapGraph(object):
@@ -360,42 +446,42 @@ class SnapGraph(object):
 		our_locses = ([self.multisnap(latlng, snap_tolerance) for latlng in latlngs_] if locses is None else locses)
 		assert len(our_locses) == len(latlngs_)
 		if len(latlngs_) == 2:
-			dists_n_segments = self.find_paths(latlngs_[0], our_locses[0], latlngs_[1], our_locses[1])
-			if len(dists_n_segments) > 0:
-				return (dists_n_segments[0][0], Path([dists_n_segments[0][1]], self))
+			dists_n_pieces = self.find_paths(latlngs_[0], our_locses[0], latlngs_[1], our_locses[1])
+			if len(dists_n_pieces) > 0:
+				return (dists_n_pieces[0][0], Path([dists_n_pieces[0][1]], self, snap_tolerance))
 			else:
 				return (None, None)
 		else:
 			r_dist = 0
-			r_segments = []
+			r_pieces = []
 			for idx_a, latlng_a, idx_b, latlng_b, idx_c, latlng_c in hopscotch_enumerate(latlngs_, 3):
 				locs_a = our_locses[idx_a]; locs_b = our_locses[idx_b]; locs_c = our_locses[idx_c]
 				if idx_a == 0:
-					dists_n_segments_ab = self.find_paths(latlng_a, locs_a, latlng_b, locs_b)
-				dists_n_segments_bc = self.find_paths(latlng_b, locs_b, latlng_c, locs_c)
-				combined_dists_n_segments = []
-				for dist_n_segment_ab, dist_n_segment_bc in product(dists_n_segments_ab, dists_n_segments_bc):
-					if dist_n_segment_ab[1][-1] == dist_n_segment_bc[1][0]:
-						combined_dists_n_segments.append((dist_n_segment_ab, dist_n_segment_bc))
-				if len(combined_dists_n_segments) == 0:
-					r_segments = None # Not path possible for this part.  No path is possible at all. 
+					dists_n_pieces_ab = self.find_paths(latlng_a, locs_a, latlng_b, locs_b)
+				dists_n_pieces_bc = self.find_paths(latlng_b, locs_b, latlng_c, locs_c)
+				combined_dists_n_pieces = []
+				for dist_n_piece_ab, dist_n_piece_bc in product(dists_n_pieces_ab, dists_n_pieces_bc):
+					if dist_n_piece_ab[1][-1] == dist_n_piece_bc[1][0]:
+						combined_dists_n_pieces.append((dist_n_piece_ab, dist_n_piece_bc))
+				if len(combined_dists_n_pieces) == 0:
+					r_pieces = None # Not path possible for this part.  No path is possible at all. 
 					break
-				chosen_dists_n_segments = sorted(combined_dists_n_segments, \
+				chosen_dists_n_pieces = sorted(combined_dists_n_pieces, \
 						key=lambda e: self.get_combined_cost(e[0], e[1], snap_tolerance))[0]
-				chosen_segment_ab = chosen_dists_n_segments[0][1]
-				r_segments.append(chosen_segment_ab)
-				r_dist += chosen_dists_n_segments[0][0]
-				chosen_loc_b = chosen_segment_ab[-1]
+				chosen_piece_ab = chosen_dists_n_pieces[0][1]
+				r_pieces.append(chosen_piece_ab)
+				r_dist += chosen_dists_n_pieces[0][0]
+				chosen_loc_b = chosen_piece_ab[-1]
 				# Saving these for the next time around this loop: 
-				dists_n_segments_ab = [e for e in dists_n_segments_bc if e[1][0] == chosen_loc_b]
+				dists_n_pieces_ab = [e for e in dists_n_pieces_bc if e[1][0] == chosen_loc_b]
 				if idx_c == len(latlngs_)-1:
-					chosen_pathsteps_bc = chosen_dists_n_segments[1][1]
-					r_segments.append(chosen_pathsteps_bc)
-					r_dist += chosen_dists_n_segments[1][0]
-			return ((r_dist, Path(r_segments, self)) if r_segments is not None else (None, None))
+					chosen_pathsteps_bc = chosen_dists_n_pieces[1][1]
+					r_pieces.append(chosen_pathsteps_bc)
+					r_dist += chosen_dists_n_pieces[1][0]
+			return ((r_dist, Path(r_pieces, self, snap_tolerance)) if r_pieces is not None else (None, None))
 
-	def get_combined_cost(self, distnsegment1_, distnsegment2_, snap_tolerance_):
-		return distnsegment1_[0] + distnsegment2_[0] + self.get_doubleback_cost(distnsegment1_, distnsegment2_, snap_tolerance_)
+	def get_combined_cost(self, distnpiece1_, distnpiece2_, snap_tolerance_):
+		return distnpiece1_[0] + distnpiece2_[0] + self.get_doubleback_cost(distnpiece1_, distnpiece2_, snap_tolerance_)
 
 	# Trying to strongly discourage choosing of a path that doubles back.  Can't add something silly like 9999999 because I 
 	# suspect that every now and then, a vehicle will double back.  (At least it will appear to, on for example our simplified 
@@ -403,37 +489,20 @@ class SnapGraph(object):
 	# PATHS_GPS_ERROR_FACTOR sometimes causes us to choose a loc that is close to the sample latlng and suggests choosing a  
 	# doubleback over a loc that is a little farther from the sample latlng and does not suggest a doubleback.  
 	# So this code fudges for that.  I don't know how to describe the thinking without pictures.
-	def get_doubleback_cost(self, distnsegment1_, distnsegment2_, snap_tolerance_):
-		assert Path.is_segment_valid(distnsegment1_[1]) and Path.is_segment_valid(distnsegment2_[1])
-		doubleback_steps = get_common_prefix(distnsegment1_[1][::-1], distnsegment2_[1])
-		doubleback_dist = self.get_length_of_pathsegment(doubleback_steps)
+	def get_doubleback_cost(self, distnpiece1_, distnpiece2_, snap_tolerance_):
+		assert Path.is_piece_valid(distnpiece1_[1]) and Path.is_piece_valid(distnpiece2_[1])
+		doubleback_steps = get_common_prefix(distnpiece1_[1][::-1], distnpiece2_[1])
+		doubleback_dist = self.get_length_of_pathpiece(doubleback_steps)
 		if doubleback_dist > 0:
-			return (distnsegment1_[0]+distnsegment2_[0])*(PATHS_GPS_ERROR_FACTOR*snap_tolerance_/doubleback_dist)
+			return (distnpiece1_[0]+distnpiece2_[0])*(PATHS_GPS_ERROR_FACTOR*snap_tolerance_/doubleback_dist)
 		else:
 			return 0.0
 
-	# This function is lenient.  segment_ doesn't have to quite be a valid path segment.  
-	# Usually path segments must have a PosAddr (not a Vertex) as the first and last steps.  segment_ doesn't. 
-	def get_length_of_pathsegment(self, segment_):
+	def get_length_of_pathpiece(self, piecesteps_):
 		r = 0.0
-		for step1, step2 in hopscotch(segment_):
+		for step1, step2 in hopscotch(piecesteps_):
 			r += self.get_dist(step1, step2)
 		return r
-
-	# Return 0 or 1. 
-	@classmethod
-	def get_pline_dir(cls, segment_, last_aot_first_pline_):
-		assert Path.is_segment_valid(segment_)
-		steps = (segment_[-1:-3:-1] if last_aot_first_pline_ else segment_[0:2])
-		posaddr1 = segment_[0]
-		if isinstance(segment_[1], PosAddr):
-			posaddr2 = segment_[1]
-		else:
-			assert isinstance(segment_[1], Vertex)
-			posaddr2 = segment_[1].get_posaddr(posaddr1.linesegaddr.polylineidx)
-		assert posaddr1.linesegaddr.polylineidx == posaddr2.linesegaddr.polylineidx
-		cmp_result = cmp((posaddr1.linesegaddr.ptidx, posaddr1.pals), (posaddr2.linesegaddr.ptidx, posaddr2.pals))
-		return (0 if cmp_result >= 0 else 1)
 
 	def get_pts_between(self, posaddr1_, posaddr2_):
 		assert posaddr1_.linesegaddr.polylineidx == posaddr2_.linesegaddr.polylineidx
@@ -561,18 +630,12 @@ class SnapGraph(object):
 			return r
 			
 		def heuristic(vvert1__, vvert2__):
-			def get_latlng(vvert___):
-				return (vvert___.pos() if isinstance(vvert___, Vertex) else self.get_latlng(vvert___))
-			return get_latlng(vvert1__).dist_m(get_latlng(vvert2__))
+			return self.get_latlng(vvert1__).dist_m(self.get_latlng(vvert2__))
 
-		r = a_star(startloc_, destloc_, all_vverts, get_connected_vertexndists, heuristic, 
+		dist, pathsteps = a_star(startloc_, destloc_, all_vverts, get_connected_vertexndists, heuristic, 
 				out_visited_vertexes=out_visited_vertexes)
 
-		if __debug__ and r[0] is not None:
-			dist_from_latlngs = geom.dist_m_polyline(Path([r[1]], self).latlngs())
-			assert abs(r[0] - dist_from_latlngs) < 1
-			
-		return r
+		return (dist, pathsteps)
 
 	def get_vertex(self, id_):
 		return first(self.get_vertexes(), lambda vertex: vertex.id == id_)
