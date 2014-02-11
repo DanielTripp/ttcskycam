@@ -282,7 +282,9 @@ def is_plausible(dist_m_, speed_kmph_):
 	if dist_m_ < 50: # see note [1]
 		return True
 	elif dist_m_ < 1000:
-		return speed_kmph_ < 55
+		# The highest plausible speed that I've seen reported is 59.8 km/h.  This was on Queensway south of High Park, 
+		# for 465 meters, over 28 seconds.   (vid 4210, on 2014-02-10 around 20:17.)
+		return speed_kmph_ < 65 
 	elif dist_m_ < 5000:
 		return speed_kmph_ < 40
 	else:
