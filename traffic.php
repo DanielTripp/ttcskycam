@@ -42,6 +42,8 @@ var DISABLE_GEOLOCATION = true;
 var HARDCODE_DISPLAY_SET = false;
 var HARDCODED_DISPLAY_SET = [['dundas', 0]];
 
+var MAP_SYNC = false;
+
 init_dev_option_values();
 
 // Thanks to http://stackoverflow.com/questions/654112/how-do-you-detect-support-for-vml-or-svg-in-a-browser 
@@ -1226,7 +1228,14 @@ function init_everything_that_depends_on_map() {
 	}
 
 	google.maps.event.addListener(g_map, 'click', on_map_click);
+
+	if(MAP_SYNC) {
+		init_map_sync();
+	}
+
 }
+
+var g_i = 0; // tdr 
 
 function on_map_click(mouseevent_) {
 	var latlng = new LatLng(mouseevent_.latLng.lat(), mouseevent_.latLng.lng());
@@ -2186,7 +2195,6 @@ function init_rendered_aot_arrow_vehicle_icons_buttons() {
 	set_selected((g_use_rendered_aot_arrow_vehicle_icons ? 'rendered_button' : 'arrow_button'), true);
 	set_vehicle_checkbox_imgs_appropriately();
 }
-
 
 
 $(document).ready(initialize);
