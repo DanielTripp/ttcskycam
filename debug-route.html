@@ -10,7 +10,7 @@
 		<script type="text/javascript" src="js/buckets-minified.js"></script>
 		<link type="text/css" href="css/ui-lightness/jquery-ui-1.8.17.custom.css" rel="stylesheet" />
     <script type="text/javascript"
-      src="http://maps.googleapis.com/maps/api/js?sensor=false">
+      src="http://maps.googleapis.com/maps/api/js?sensor=false&v=3.13">
     </script>
 		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
 		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
@@ -77,28 +77,32 @@ function keypress_handler(e) {
 
 function initialize() {
 	init_map();
-	google.maps.event.addListener(g_map, 'click', function(e) {
-		add_route_marker(e.latLng);
-		rebuild_snaptogridcache();
-	});
-	init_snaptest_marker();
 
-	document.onkeypress = keypress_handler;
-	if (document.layers) {
-		document.captureEvents(Event.KEYPRESS); 
-	}
-
-
-/*
-  $('#stoptag_field').keydown(function (e){
-			if(e.keyCode == 13) {
-				$('#stoptag_submit_button').trigger('click');
-			}
+	google.maps.event.addListenerOnce(g_map, 'bounds_changed', function() {
+		google.maps.event.addListener(g_map, 'click', function(e) {
+			add_route_marker(e.latLng);
+			rebuild_snaptogridcache();
 		});
-*/
+		init_snaptest_marker();
 
-	google.maps.event.addListener(g_map, 'zoom_changed', on_zoom_changed);
-	on_zoom_changed();
+		document.onkeypress = keypress_handler;
+		if (document.layers) {
+			document.captureEvents(Event.KEYPRESS); 
+		}
+
+		/*
+			$('#stoptag_field').keydown(function (e){
+					if(e.keyCode == 13) {
+						$('#stoptag_submit_button').trigger('click');
+					}
+				});
+		*/
+
+		google.maps.event.addListener(g_map, 'zoom_changed', on_zoom_changed);
+		on_zoom_changed();
+
+		init_map_sync('map_sync_checkbox', true);
+	});
 
 }
 
@@ -650,7 +654,9 @@ function on_add_marker_button_clicked() {
 			<p id="p_zoom">zoom...</p>
 			<form name="form1">
 				stoptag:<input type="text" size="15" name="stoptag_field" id="stoptag_field" /> 
-				<input type="button" onclick="show_stoptag(this.form.stoptag_field.value)" value="Submit" id="stoptag_submit_button" /><br/>
+				<input type="button" onclick="show_stoptag(this.form.stoptag_field.value)" value="Submit" id="stoptag_submit_button" />
+				///
+				<label><input id="map_sync_checkbox" type="checkbox"/>Map Sync</label><br>
 			</form>
 			<p id="dist">...</p>
 			<p id="snaptest_arg_pt">...</p>

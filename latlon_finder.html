@@ -8,7 +8,7 @@
       body { height: 70%; margin: 0; padding: 0 }
     </style>
     <script type="text/javascript"
-		      src="http://maps.googleapis.com/maps/api/js?sensor=false">
+		      src="http://maps.googleapis.com/maps/api/js?sensor=false&v=3.13">
 					    </script>
 		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
 		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
@@ -23,29 +23,35 @@ function initialize() {
 
 	init_map();
 
-	g_marker = new google.maps.Marker({
-		position: new google.maps.LatLng(43.650757399103135, -79.413822128378385),
-		map: g_map,
-		title:"",
-		draggable: true
+	google.maps.event.addListenerOnce(g_map, 'bounds_changed', function() {
+
+		g_marker = new google.maps.Marker({
+			position: new google.maps.LatLng(43.650757399103135, -79.413822128378385),
+			map: g_map,
+			title:"",
+			draggable: true
+			});
+
+		google.maps.event.addListener(g_marker, 'drag', on_drag);
+
+		google.maps.event.addListener(g_map, 'zoom_changed', on_zoom_changed);
+		google.maps.event.addListener(g_map, 'bounds_changed', on_bounds_changed);
+
+		on_zoom_changed();
+		show_latlng_text();
+
+		$('#search_textfield').keydown(function (e){
+			if(e.keyCode == 13) {
+				$('#search_button').trigger('click');
+			}
 		});
 
-	google.maps.event.addListener(g_marker, 'drag', on_drag);
+		document.getElementById('search_textfield').focus();
+		document.getElementById('search_textfield').select();
 
-	google.maps.event.addListener(g_map, 'zoom_changed', on_zoom_changed);
-	google.maps.event.addListener(g_map, 'bounds_changed', on_bounds_changed);
+		init_map_sync('map_sync_checkbox', true);
 
-	on_zoom_changed();
-	show_latlng_text();
-
-	$('#search_textfield').keydown(function (e){
-		if(e.keyCode == 13) {
-			$('#search_button').trigger('click');
-		}
 	});
-
-	document.getElementById('search_textfield').focus();
-	document.getElementById('search_textfield').select();
 
 }
 
@@ -128,6 +134,8 @@ function pan_to_marker_maybe() {
 		<form name="form1">
 			<input type="text" size="60" name="search_textfield" id="search_textfield" />
 			<input id="search_button" type="button" value="Search" onclick="search(); return false;"/> 
+			///
+			<label><input id="map_sync_checkbox" type="checkbox"/>Map Sync</label>
 			
 			<!-- If I don't put this here, then pressing enter while in the above (important) text field makes the page reload.  
 				I don't know why. --> 

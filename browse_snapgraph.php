@@ -8,7 +8,7 @@
       body { height: 70%; margin: 0; padding: 0 }
     </style>
     <script type="text/javascript"
-		      src="http://maps.googleapis.com/maps/api/js?sensor=false">
+		      src="http://maps.googleapis.com/maps/api/js?sensor=false&v=3.13">
 					    </script>
 		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
 		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
@@ -30,38 +30,43 @@ var g_found_polyline = null, g_found_vertex = null;
 function initialize() {
 
 	init_map();
-	g_map.setZoom(17);
 
-	add_path_marker(new google.maps.LatLng(43.6540022, -79.4124381));
-	add_path_marker(new google.maps.LatLng(43.6545922, -79.4086401));
+	google.maps.event.addListenerOnce(g_map, 'bounds_changed', function() {
+		g_map.setZoom(17);
 
-	google.maps.event.addListener(g_map, 'click', on_map_clicked);
-	google.maps.event.addListener(g_map, 'rightclick', function(mouseevent_) { 
-			add_path_marker(mouseevent_.latLng); 
-			get_path_from_server();
+		add_path_marker(new google.maps.LatLng(43.6540022, -79.4124381));
+		add_path_marker(new google.maps.LatLng(43.6545922, -79.4086401));
+
+		google.maps.event.addListener(g_map, 'click', on_map_clicked);
+		google.maps.event.addListener(g_map, 'rightclick', function(mouseevent_) { 
+				add_path_marker(mouseevent_.latLng); 
+				get_path_from_server();
+			});
+		google.maps.event.addListener(g_map, 'zoom_changed', function() {
+			if(is_selected('arrows_checkbox')) {
+				get_path_from_server();
+			}
 		});
-	google.maps.event.addListener(g_map, 'zoom_changed', function() {
-		if(is_selected('arrows_checkbox')) {
-			get_path_from_server();
-		}
-	});
 
-	add_delayed_event_listener(g_map, 'bounds_changed', refresh_graph_visuals, 300);
+		add_delayed_event_listener(g_map, 'bounds_changed', refresh_graph_visuals, 300);
 
-	// Hack because around January 15 2013, Chrome sometimes stopped displaying the graph visuals until we jog the 
-	// map a little, or alt-tab, or zoom, or something like that.   Oddly enough, it looks like changing the delay 
-	// above from 500 to 300 fixes it too.  Well this fixes it again. 
-	//setTimeout("g_map.panTo(new google.maps.LatLng(g_map.getCenter().lat(), g_map.getCenter().lng()+0.00001));", 1000);
+		// Hack because around January 15 2013, Chrome sometimes stopped displaying the graph visuals until we jog the 
+		// map a little, or alt-tab, or zoom, or something like that.   Oddly enough, it looks like changing the delay 
+		// above from 500 to 300 fixes it too.  Well this fixes it again. 
+		//setTimeout("g_map.panTo(new google.maps.LatLng(g_map.getCenter().lat(), g_map.getCenter().lng()+0.00001));", 1000);
 
-	$('#plineidx_field').keydown(function (e) {
-		if(e.keyCode == 13) {
-			$('#plineidx_button').trigger('click');
-		}
-	});
-	$('#vertid_field').keydown(function (e) {
-		if(e.keyCode == 13) {
-			$('#vertid_button').trigger('click');
-		}
+		$('#plineidx_field').keydown(function (e) {
+			if(e.keyCode == 13) {
+				$('#plineidx_button').trigger('click');
+			}
+		});
+		$('#vertid_field').keydown(function (e) {
+			if(e.keyCode == 13) {
+				$('#vertid_button').trigger('click');
+			}
+		});
+
+		init_map_sync('map_sync_checkbox', true);
 	});
 }
 
@@ -432,6 +437,8 @@ function on_vertid_button_clicked() {
 		<label for="multisnap_show_infowindows">Multisnap: show infowindows</label> , 
 		<input type="checkbox" id="multisnap_reducepts_checkbox" />
 		<label for="multisnap_reducepts_checkbox">Multisnap: reduce points</label>
+		///////
+		<label><input id="map_sync_checkbox" type="checkbox"/>Map Sync</label>
 		<p id="p_error"/>
 		<p id="p_marker_latlngs">Path markers: ...</p>
 		<p id="p_multisnap_info"/>

@@ -42,7 +42,7 @@ var DISABLE_GEOLOCATION = true;
 var HARDCODE_DISPLAY_SET = false;
 var HARDCODED_DISPLAY_SET = [['dundas', 0]];
 
-var MAP_SYNC = false;
+var MAP_SYNC_DEFAULT = false;
 
 init_dev_option_values();
 
@@ -1229,10 +1229,9 @@ function init_everything_that_depends_on_map() {
 
 	google.maps.event.addListener(g_map, 'click', on_map_click);
 
-	if(MAP_SYNC) {
-		init_map_sync();
+	if(SHOW_DEV_CONTROLS) {
+		init_map_sync('map_sync_checkbox', MAP_SYNC_DEFAULT);
 	}
-
 }
 
 var g_i = 0; // tdr 
@@ -2311,16 +2310,18 @@ $(document).ready(initialize);
 			<div id="div_dev_controls">
 				<hr style="border-top:1px solid #ccc" />
 				<div>
-					<font size="-1">
-					<p>Details:</p>
-					<p id="p_vid_checkboxes">&nbsp;</p>
-					</font>
-
 					<input id="current_button" type="radio" name="traffictype" value="current"    onclick="on_traffictype_changed()"  checked="checked"  />
 					<label for="current_button">Now</label>
 					<input id="historical_button" type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()" />
 					<label for="historical_button">Past</label>
 					<input id="datetimepicker_textfield" type="text" name="datetimepicker_textfield" value="" />
+
+					<br>
+					<label><input id="map_sync_checkbox" type="checkbox"/>Map Sync</label>
+
+					<font size="-1">
+					<p id="p_vid_checkboxes">&nbsp;</p>
+					</font>
 				</div>
 			</div>
 		<div style="clear: both">

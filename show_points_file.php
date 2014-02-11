@@ -8,7 +8,7 @@
       body { height: 70%; margin: 0; padding: 0 }
     </style>
     <script type="text/javascript"
-		      src="http://maps.googleapis.com/maps/api/js?sensor=false&v=3">
+		      src="http://maps.googleapis.com/maps/api/js?sensor=false&v=3.13">
 					    </script>
 		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
 		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
@@ -48,6 +48,11 @@ function initialize() {
 
 	init_map();
 
+	google.maps.event.addListenerOnce(g_map, 'bounds_changed', init_everything_that_depends_on_map);
+
+}
+
+function init_everything_that_depends_on_map() {
 	init_spiderfying();
 
 	// Using a delayed listener for the grid redraw because bounds_changed events can happen dozens of times a second while 
@@ -77,6 +82,8 @@ function initialize() {
 		//refresh_from_file();
 		refresh_from_textarea();
 	}
+
+	init_map_sync('map_sync_checkbox', true);
 
 }
 
@@ -555,11 +562,13 @@ function on_submit_contents_clicked() {
 		<input type="checkbox" id="arrows_checkbox" name="arrows_checkbox" checked onclick="redraw_objects()"/>
 		<label for="arrows_checkbox">Arrows</label>
 
-		<input type="checkbox" id="grid_checkbox" name="grid_checkbox" onclick="on_grid_checkbox_clicked()"/>
-		<label for="grid_checkbox">Grid</label>
-
 		<input type="checkbox" id="colors_checkbox" name="colors_checkbox" onclick="redraw_objects()"/>
 		<label for="colors_checkbox">Colors</label>
+///
+		<input type="checkbox" id="grid_checkbox" name="grid_checkbox" onclick="on_grid_checkbox_clicked()"/>
+		<label for="grid_checkbox">Grid</label>
+///
+		<label><input id="map_sync_checkbox" type="checkbox"/>Map Sync</label>
 
 		<p id="p_zoom"/>
 		<p id="p_dists"/>
