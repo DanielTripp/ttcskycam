@@ -79,22 +79,31 @@ function recreate_slider() {
 
 function initialize() {
 	init_map();
-	recreate_slider();
+	google.maps.event.addListenerOnce(g_map, 'bounds_changed', function() {
+		recreate_slider();
 
-	// Using a delayed listener for the grid redraw because bounds_changed events can happen dozens of times a second while 
-	// drag-scrolling the map, and redrawing on every one of those was making that dragging very choppy.  
-	// And I see no utility in redrawing the map more than 10 times per second.  
-	// Furthermore - the idea behind erasing the grid on dragstart is to make scrolling even smoother, because the fewer 
-	// objects are on the map, the smoother the scrolling will be.   (I'm fairly sure that I noticed a difference in 
-	// scrolling smoothness with this erasing but it's not as pronounced as the difference that the delayed listener makes.)
-	google.maps.event.addListener(g_map, 'dragstart', erase_grid);
-	//add_delayed_event_listener(g_map, 'bounds_changed', redraw_grid, 100);
+		// Using a delayed listener for the grid redraw because bounds_changed events can happen dozens of times a second while 
+		// drag-scrolling the map, and redrawing on every one of those was making that dragging very choppy.  
+		// And I see no utility in redrawing the map more than 10 times per second.  
+		// Furthermore - the idea behind erasing the grid on dragstart is to make scrolling even smoother, because the fewer 
+		// objects are on the map, the smoother the scrolling will be.   (I'm fairly sure that I noticed a difference in 
+		// scrolling smoothness with this erasing but it's not as pronounced as the difference that the delayed listener makes.)
+		google.maps.event.addListener(g_map, 'dragstart', erase_grid);
+		//add_delayed_event_listener(g_map, 'bounds_changed', redraw_grid, 100);
 
-	$('#sqlstr_field').keydown(function (e){
-			if(e.keyCode == 13) {
-				$('#submit0_button').trigger('click');
-			}
-		});
+		$('#sqlstr_field').keydown(function (e){
+				if(e.keyCode == 13) {
+					$('#submit0_button').trigger('click');
+				}
+			});
+
+		var sqlstr = localStorage.getItem('debug-vehicle-sqlstr');
+		if(sqlstr != null) {
+			set_value('sqlstr_field', sqlstr);
+		}
+
+		init_map_sync('map_sync_checkbox', true);
+	});
 }
 
 function redraw_grid() {
@@ -294,6 +303,8 @@ function slider_float_to_timeidx(floatval_) {
 }
 
 function run_query1(whereclause_, maxrows_, interpbytime_) {
+	localStorage.setItem('debug-vehicle-sqlstr', whereclause_);
+
 	add_to_loading_urls('sql');
 	try {
 		display_vis(get_sync("debug-vehicle-query1.cgi?whereclause="+encode_url_paramval(whereclause_)+"&maxrows="+maxrows_+"&interpbytime="+interpbytime_));
@@ -360,7 +371,7 @@ function on_play_checkbox_clicked(play_) {
     </script>
   </head>
   <body onload="initialize()">
-		<div id="map_canvas" style="width:80%; height:100%"></div>
+		<div id="map_canvas" style="width:100%; height:100%"></div>
 		<div>
 			<form name="form1">
 				<input type="text" size="130" name="sqlstr_field" id="sqlstr_field" />
@@ -376,6 +387,7 @@ function on_play_checkbox_clicked(play_) {
 			<input type="checkbox" id="play_checkbox" name="play_checkbox" onclick="on_play_checkbox_clicked(this.checked)"/>
 			&nbsp;&nbsp;&nbsp;<input type="button" onclick="on_single_frame_back_clicked()" value="<" />
 			<input type="button" onclick="on_single_frame_forward_clicked()" value=">" />
+			///// <label><input id="map_sync_checkbox" type="checkbox"/>Map Sync</label>
             <img id="loading_img" src="loading.gif" style="visibility:hidden"/>
 		</div>
 		<!--
