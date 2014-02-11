@@ -1234,8 +1234,6 @@ function init_everything_that_depends_on_map() {
 	}
 }
 
-var g_i = 0; // tdr 
-
 function on_map_click(mouseevent_) {
 	var latlng = new LatLng(mouseevent_.latLng.lat(), mouseevent_.latLng.lng());
 	var nearby_froutes = [];
@@ -1998,6 +1996,7 @@ function on_traffictype_changed() {
 }
 
 function schedule_refresh_data_from_server() {
+	stop_refresh_data_from_server_timer();
 	g_refresh_data_from_server_timer = setTimeout('refresh_data_from_server_timer_func()', REFRESH_INTERVAL_MS);
 }
 
