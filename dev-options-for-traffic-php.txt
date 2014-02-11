@@ -11,9 +11,9 @@ SHOW_ZOOM = false;
 DISABLE_GEOLOCATION = true;
 
 HARDCODE_DISPLAY_SET = true;
-//HARDCODED_DISPLAY_SET = [['bathurst', 1]];
+HARDCODED_DISPLAY_SET = [['bathurst', 1]];
 HARDCODED_DISPLAY_SET = [];
 SHOW_FRAMERATE = false;
 
-MAP_SYNC = true;
+MAP_SYNC_DEFAULT = true;
 

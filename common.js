@@ -659,19 +659,35 @@ function make_polyline_arrow_icons(zoom_, latlngs_) {
 
 var g_map_sync_bounds_changed_listener = null;
 
-function init_map_sync() {
-	map_sync_add_bounds_changed_listener();
+function init_map_sync(checkbox_id_, enabled_initially_) {
+	set_selected(checkbox_id_, enabled_initially_);
+
+	map_sync_add_bounds_changed_listener(checkbox_id_);
 
 	window.addEventListener('storage', function(event__) {
-		if(event__.key == 'dev-map-sync') {
-			var new_params = get_map_sync_params_from_str(event__.newValue);
-			var latlng = new_params[0], zoom = new_params[1];
-			map_sync_remove_bounds_changed_listener();
-			g_map.setZoom(zoom);
-			set_map_bounds_northwest(latlng);
-			setTimeout(map_sync_add_bounds_changed_listener, 3000);
+		if((event__.key == 'dev-map-sync') && is_selected(checkbox_id_)) {
+			map_sync_set_map_bounds_from_localstorage_value(checkbox_id_);
 		}
 	}, false);
+
+	$('#'+checkbox_id_).click(function() {
+		if(is_selected(checkbox_id_)) {
+			map_sync_set_map_bounds_from_localstorage_value(checkbox_id_);
+		}
+	});
+
+	if(enabled_initially_) {
+		map_sync_set_map_bounds_from_localstorage_value(checkbox_id_);
+	}
+}
+
+function map_sync_set_map_bounds_from_localstorage_value(checkbox_id_) {
+	var new_params = get_map_sync_params_from_str(localStorage.getItem('dev-map-sync'));
+	var latlng = new_params[0], zoom = new_params[1];
+	map_sync_remove_bounds_changed_listener();
+	g_map.setZoom(zoom);
+	set_map_bounds_northwest(latlng);
+	map_sync_add_bounds_changed_listener(checkbox_id_);
 }
 
 function set_map_bounds_northwest(latlng_) {
@@ -689,10 +705,12 @@ function get_map_bounds_northwest() {
 	return new google.maps.LatLng(bounds.getNorthEast().lat(), west = bounds.getSouthWest().lng());
 }
 
-function map_sync_add_bounds_changed_listener() {
+function map_sync_add_bounds_changed_listener(checkbox_id_) {
 	map_sync_remove_bounds_changed_listener();
 	g_map_sync_bounds_changed_listener = add_delayed_event_listener(g_map, 'bounds_changed', function() {
-		localStorage.setItem('dev-map-sync', get_map_sync_params_str_from_map());
+		if(is_selected(checkbox_id_)) {
+			localStorage.setItem('dev-map-sync', get_map_sync_params_str_from_map());
+		}
 	}, 500);
 }
 
