@@ -10,7 +10,7 @@ import shapefile
 
 RDP_SIMPLIFY_EPSILON_METERS = 5
 
-USE_TESTING_SUBSET = True
+USE_TESTING_SUBSET = False
 
 @picklestore.decorate
 def get_polylines():
