@@ -2316,7 +2316,7 @@ $(document).ready(initialize);
 					<label for="historical_button">Past</label>
 					<input id="datetimepicker_textfield" type="text" name="datetimepicker_textfield" value="" />
 
-					<br>
+					///
 					<label><input id="map_sync_checkbox" type="checkbox"/>Map Sync</label>
 
 					<font size="-1">
