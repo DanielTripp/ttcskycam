@@ -246,6 +246,7 @@ function get_latlngs_from_string(str_) {
 		try {
 			var str = str_.replace(/\(/g, '[');
 			str = str.replace(/\)/g, ']');
+			str = str.replace(/\s/g, '');
 			try {
 				raw_polylines = $.parseJSON(str);
 				console.log('Slightly massaged JSON parse succeeded.');
