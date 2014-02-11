@@ -77,9 +77,9 @@ function init_everything_that_depends_on_map() {
       }
     });
 
-	if(true) { 
-		//set_value('filename_field', 'simp2');
-		//refresh_from_file();
+	var contents = localStorage.getItem('show-points-textarea-contents');
+	if(contents != null) {
+		set_value('contents_textarea', contents);
 		refresh_from_textarea();
 	}
 
@@ -235,6 +235,7 @@ function refresh_from_textarea() {
 
 function get_latlngs_from_textarea() {
 	var contents_str = get_value('contents_textarea');
+	localStorage.setItem('show-points-textarea-contents', contents_str);
 	get_latlngs_from_string(contents_str);
 }
 
@@ -263,7 +264,7 @@ function get_latlngs_from_string(str_) {
 				raw_polylines = [raw_polylines]; // now it's a list of polylines. 
 			}
 		} catch(e) {
-			console.log('JSON parse failed.');
+			console.log('All massaged JSON parse attempts failed.');
 			// So it wasn't JSON.    Maybe it's XML: 
 			try {
 				var polyline = [];
@@ -276,14 +277,16 @@ function get_latlngs_from_string(str_) {
 				});
 				raw_polylines.push(polyline);
 			} catch(err) {
+				console.log('XML parse failed.');
 				var polyline = [];
 				raw_polylines.push(polyline);
 				var filelines = str_.split('\n');
 				for(var filelinei in filelines) {
 					var fileline = filelines[filelinei];
-					var regex = /.*?[^:](43\.\d+).*?(-79\.\d+).*/g;
+					var regex = /.*?[^:]?(43\.\d+).*?(-79\.\d+).*/g;
 					var match = regex.exec(fileline);
 					if(match != null) {
+						console.log('match');
 					  var lat = parseFloat(match[1], 10);
 						var lng = parseFloat(match[2], 10);
 						polyline.push([lat, lng]);
@@ -543,12 +546,10 @@ function on_submit_contents_clicked() {
     </script>
   </head>
   <body onload="initialize()" >
-		<div id="map_canvas" style="width:80%; height:100%"></div>
+		<div id="map_canvas" style="width:100%; height:100%"></div>
 		Filename: <input type="text" size="80" name="filename_field" id="filename_field" /> <br>
 		OR Contents:<br>
-		<textarea id="contents_textarea" cols="80" rows="5">
-		[(43.6585890,-79.3965331), (43.6579360,-79.3997590), (43.6587210,-79.3958810), (43.6592179,-79.3935154), (43.6598780,-79.3903730), (43.6592179,-79.3935154), (43.6601232,-79.3891835)]
-		</textarea> 
+		<textarea id="contents_textarea" cols="80" rows="5"></textarea>
 		<input type="button" onclick="refresh_from_textarea()" value="Submit Contents" />
 		<br>
 		<input type="button" onclick="on_opacity_down_clicked()" value="Opacity DOWN" />
