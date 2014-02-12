@@ -27,7 +27,7 @@ var g_grid_lats = eval(get_sync('debug-vehicle-lat-grid.json'));
 eval(get_sync("sprintf.js"));
 
 function add_info_win(mark_, text_) {
-	(new google.maps.InfoWindow({content: text_, disableAutoPan: false})).open(g_map, mark_);
+	(new google.maps.InfoWindow({content: text_, disableAutoPan: true})).open(g_map, mark_);
 }
 
 function start_vehicle_markers_animation() {
@@ -234,7 +234,7 @@ function make_vi_marker(vi_, add_infowin_) {
 			// I believe this only happened on the second and subsequent query submitted after page load. 
 	}
 	google.maps.event.addListener(marker, 'click', function() {
-		(new google.maps.InfoWindow({content: txt, disableAutoPan: false})).open(g_map, marker);
+		add_info_win(marker, txt);
 	});
 	return marker;
 
