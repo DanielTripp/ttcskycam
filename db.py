@@ -683,11 +683,11 @@ def get_latlonnheading_from_path(path_, pieceidx_, time_ratio_):
 	return piece.mapl_to_latlonnheading(mapl)
 
 def get_piece_idx(vis_, lo_idx_, vi_to_grade_):
-	r = 0
+	r = -1
 	for i in range(lo_idx_, -1, -1):
+		r += 1
 		if vi_to_grade_[vis_[i]] != 'g':
 			break
-		r += 1
 	return r
 
 def get_grade_stretch_info(vis_, be_clever_, log_):
