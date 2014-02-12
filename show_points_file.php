@@ -8,7 +8,7 @@
       body { height: 70%; margin: 0; padding: 0 }
     </style>
     <script type="text/javascript"
-		      src="http://maps.googleapis.com/maps/api/js?sensor=false&v=3.13">
+		      src="http://maps.googleapis.com/maps/api/js?sensor=false&v=3.14">
 					    </script>
 		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
 		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
@@ -76,6 +76,11 @@ function init_everything_that_depends_on_map() {
 				refresh_from_file();
       }
     });
+
+	var filename = localStorage.getItem('show-points-filename');
+	if(filename != null) {
+		set_value('filename_field', filename);
+	}
 
 	var contents = localStorage.getItem('show-points-textarea-contents');
 	if(contents != null) {
@@ -223,7 +228,9 @@ function refresh_from_file() {
 }
 
 function get_latlngs_from_file() {
-	var contents_str = get_sync(get_value('filename_field'), {cache: false});
+	var filename = get_value('filename_field');
+	localStorage.setItem('show-points-filename', filename);
+	var contents_str = get_sync(filename, {cache: false});
 	get_latlngs_from_string(contents_str);
 }
 
@@ -450,7 +457,7 @@ function make_marker(latlng_, label_) {
 
 function add_marker_mouseover_listener_for_infowin(mapobject_, label_) {
 	var infowin = new google.maps.InfoWindow({disableAutoPan: true, content: label_});
-	google.maps.event.addListener(mapobject_, 'mouseover', function(mouseevent_) {
+	infowin_opening_mouse_handler = function(mouseevent_) {
 		if(g_mouseovered_object_infowindow != null) {
 			g_mouseovered_object_infowindow.close();
 			g_mouseovered_object_infowindow = null;
@@ -470,16 +477,22 @@ function add_marker_mouseover_listener_for_infowin(mapobject_, label_) {
 		infowin.setPosition(pos);
 		infowin.open(g_map);
 		g_mouseovered_object_infowindow = infowin;
-	});
+		g_mouseovered_object_infowindow.setPosition(g_mouseovered_object_infowindow.getPosition());
+	};
+	google.maps.event.addListener(mapobject_, 'mouseover', infowin_opening_mouse_handler);
+
 	google.maps.event.addListener(mapobject_, 'mouseout', function() {
 		if(g_mouseovered_object_infowindow_close_timer != null) {
 			clearTimeout(g_mouseovered_object_infowindow_close_timer);
 			g_mouseovered_object_infowindow_close_timer = null;
 		}
 		g_mouseovered_object_infowindow_close_timer = setTimeout(function() {
-			infowin.close();
+			if(g_mouseovered_object_infowindow != null) {
+				g_mouseovered_object_infowindow.close();
+				g_mouseovered_object_infowindow = null;
+			}
 			g_mouseovered_object_infowindow_close_timer = null;
-		}, 1000);
+		}, 500);
 	});
 }
 
@@ -548,10 +561,11 @@ function on_submit_contents_clicked() {
   </head>
   <body onload="initialize()" >
 		<div id="map_canvas" style="width:100%; height:100%"></div>
-		Filename: <input type="text" size="80" name="filename_field" id="filename_field" /> <br>
+		Filename: <input type="text" size="80" name="filename_field" id="filename_field" /> 
+		<input type="button" onclick="refresh_from_file()" value="Submit (file)" /> <br>
 		OR Contents:<br>
 		<textarea id="contents_textarea" cols="80" rows="5"></textarea>
-		<input type="button" onclick="refresh_from_textarea()" value="Submit Contents" />
+		<input type="button" onclick="refresh_from_textarea()" value="Submit (text area)" />
 		<br>
 		<input type="button" onclick="on_opacity_down_clicked()" value="Opacity DOWN" />
 		<input type="button" onclick="on_opacity_up_clicked()" value="Opacity UP" />

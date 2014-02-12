@@ -8,7 +8,7 @@
       body { height: 70%; margin: 0; padding: 0 }
     </style>
     <script type="text/javascript"
-		      src="http://maps.googleapis.com/maps/api/js?sensor=false&v=3.13">
+		      src="http://maps.googleapis.com/maps/api/js?sensor=false&v=3.14">
 					    </script>
 		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
 		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>

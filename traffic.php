@@ -9,10 +9,7 @@
     </style>
 		<link type="text/css" href="css/ui-lightness/jquery-ui-1.8.17.custom.css" rel="stylesheet" />
     <script type="text/javascript"
-      src="http://maps.googleapis.com/maps/api/js?sensor=true&v=3.13">
-			<!-- ^^ using v3 stable b/c at one point the unstable release had our infowindows apearing too small, 
-			and with a vertical scroll bar.  Same as http://stackoverflow.com/questions/18271220/google-maps-info-window-is-smaller-since-last-night 
-			Hope that this issue goes away and that I can then go to a newer google maps version ('visual refresh' version I guess). --> 
+      src="http://maps.googleapis.com/maps/api/js?sensor=true&v=3.14">
     </script>
 		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
 		<script type="text/javascript" src="js/infobox_packed.js"></script>
@@ -2228,7 +2225,10 @@ $(document).ready(initialize);
   </head>
   <body>
 		<div id="map_wrapper">
-			<div id="map_canvas" style="width:100%; height:100%"></div>
+			<!-- 'overflow' here is thanks to http://stackoverflow.com/questions/14751558/google-maps-infowindow-vertical-scroll-appers-only-when-using-br
+			I don't know how it works.  But it prevents our InfoWindow with more than one line of text in them from 
+			showing up one line high and scrollable in google maps version 3.14. -->
+			<div id="map_canvas" style="width:100%; height:100%; overflow:visible !important;"></div>
 			<div id="div_clock" style="position: absolute; background-color: transparent; top: 30px; right: 2px; z-index: 99; ">
 				<svg id="svg_clock" viewBox="0 0 100 100" width="50" height="50">
 					<!-- SVG clock from https://gist.github.com/1188550 --> 

@@ -9,7 +9,7 @@
     </style>
 		<link type="text/css" href="css/ui-lightness/jquery-ui-1.8.17.custom.css" rel="stylesheet" />
     <script type="text/javascript"
-      src="http://maps.googleapis.com/maps/api/js?sensor=false&v=3.13">
+      src="http://maps.googleapis.com/maps/api/js?sensor=false&v=3.14">
     </script>
 		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
 		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
@@ -193,7 +193,7 @@ function make_vehicle_markers(vis_by_time_) {
 		g_vmarkers.push(timeslice);
 		for(var j=1; j<vis.length; j++) {
 			var vi = vis[j];
-			var add_infowin = is_selected('infowindows_checkbox') && (vis.length < 5) && !is_selected('collapseanimation_checkbox');
+			var add_infowin = is_selected('infowindows_checkbox') && (vis.length < 50);
 			var marker = make_vi_marker(vi, add_infowin);
 			timeslice.push(marker);
 		}
