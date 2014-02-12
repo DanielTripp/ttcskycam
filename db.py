@@ -381,24 +381,17 @@ def massage_whereclause_time_args(whereclause_):
 		return r
 
 def massage_whereclause_lat_args(whereclause_):
-	with open('debug-vehicle-lat-grid.json') as fin:
-		grid_lats = json.load(fin)
 	def repl(mo_):
 		n = float(mo_.group(1))
-		floorn = int(math.floor(n)); ceiln = int(math.ceil(n))
-		lat = get_range_val((floorn, grid_lats[floorn]), (ceiln, grid_lats[ceiln]), n)
-		return str(lat)
+		return str(snapgraph.gridlat_to_lat(n))
 	return re.sub(r'\b(\d+(?:\.\d+)?)lat\b', repl, whereclause_)
 
-def massage_whereclause_lon_args(whereclause_):
-	with open('debug-vehicle-lon-grid.json') as fin:
-		grid_lons = json.load(fin)
+def massage_whereclause_lng_args(whereclause_):
+	r = re.sub(r'\blng\b', 'lon', whereclause_)
 	def repl(mo_):
 		n = float(mo_.group(1))
-		floorn = int(math.floor(n)); ceiln = int(math.ceil(n))
-		lon = get_range_val((floorn, grid_lons[floorn]), (ceiln, grid_lons[ceiln]), n)
-		return str(lon)
-	return re.sub(r'\b(\d+(?:\.\d+)?)lon\b', repl, whereclause_)
+		return str(snapgraph.gridlng_to_lng(n))
+	return re.sub(r'\b(\d+(?:\.\d+)?)lng\b', repl, r)
 
 def massage_whereclause_dir_args(whereclause_):
 	r = whereclause_
@@ -421,7 +414,7 @@ def massage_whereclause(whereclause_):
 	r = whereclause_
 	r = massage_whereclause_time_args(r)
 	r = massage_whereclause_lat_args(r)
-	r = massage_whereclause_lon_args(r)
+	r = massage_whereclause_lng_args(r)
 	r = massage_whereclause_dir_args(r)
 	r = massage_whereclause_route_args(r)
 	r = massage_whereclause_vid_args(r)
