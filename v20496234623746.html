@@ -17,7 +17,6 @@
 		<script type="text/javascript" src="common.js"></script>
     <script type="text/javascript">
 
-var g_map, g_orig_marker, g_dest_marker;
 var g_vmarkers = new Array(), g_times = new Array(), g_curtimeidx = -1;
 var g_playtimer = null;
 
@@ -147,7 +146,8 @@ function make_vi_marker(vi_, add_infowin_) {
 					title: txt 
 			});
 	} else {
-		var icon = {path: google.maps.SymbolPath.CIRCLE, scale: 14, strokeWeight : 0, fillOpacity: 0.5, 
+		var opacity = parseFloat(get_value('opacity_slider'), 10)/100.0;
+		var icon = {path: google.maps.SymbolPath.CIRCLE, scale: 14, strokeWeight : 0, fillOpacity: opacity, 
 				fillColor: 'black'};
 		marker = new google.maps.Marker({position: pos, icon: icon});
 	}
@@ -228,13 +228,17 @@ function slider_float_to_timeidx(floatval_) {
 	}
 }
 
-function run_query1(whereclause_, maxrows_, interpbytime_) {
-	localStorage.setItem('debug-vehicle-sqlstr', whereclause_);
+function run_query() {
+	var whereclause = get_value('sqlstr_field');
+	var maxrows = get_value('maxrows_field');
+	var interpbytime = is_selected('interpbytime_checkbox');
+
+	localStorage.setItem('debug-vehicle-sqlstr', whereclause);
 
 	add_to_loading_urls('sql');
 	try {
-		display_vis(get_sync("debug-vehicle-query1.cgi?whereclause="+encode_url_paramval(whereclause_)+"&maxrows="+maxrows_+"&interpbytime="+interpbytime_));
-		if($('#collapseanimation_checkbox').is(":checked")) {
+		display_vis(get_sync("debug-vehicle-query1.cgi?whereclause="+encode_url_paramval(whereclause)+"&maxrows="+maxrows+"&interpbytime="+interpbytime));
+		if(is_selected('collapseanimation_checkbox')) {
 			collapse_animation();
 		}
 		recreate_slider();
@@ -300,14 +304,15 @@ function on_play_checkbox_clicked(play_) {
 		<div id="map_canvas" style="width:100%; height:100%"></div>
 		<div>
 			<form name="form1">
-				<input type="text" size="130" name="sqlstr_field" id="sqlstr_field" />
-				<input type="button" onclick="run_query1(this.form.sqlstr_field.value, this.form.maxrows_field.value, this.form.interpbytime_checkbox.checked)" value="Submit" id="submit0_button" />
+				<input type="text" size="130" id="sqlstr_field" />
+				<input type="button" onclick="run_query()" value="Submit" id="submit0_button" />
 				<br>
-				Max rows: <input type="text" size="5" name="maxrows_field" value="1000" /> 
-				<label><input type="checkbox" id="interpbytime_checkbox" name="interpbytime_checkbox" />Interp</label>
+				Max rows: <input type="text" size="5" id="maxrows_field" value="1000" /> 
+				<label><input type="checkbox" id="interpbytime_checkbox" />Interp</label>
 				<label><input type="checkbox" id="collapseanimation_checkbox" />Collapse</label>
 				<label><input type="checkbox" id="infowindows_checkbox" />InfoWindows</label>
 				<label><input type="checkbox" id="vid_markers_checkbox" checked="checked" />Vehicle ID markers</label>
+				&nbsp;&nbsp;<input type="range" id="opacity_slider" min="0" max="100" onchange="run_query()"> << Opacity 
 			</form>
 			<br/>
 			<br/>
