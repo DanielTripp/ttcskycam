@@ -37,6 +37,12 @@ function initialize() {
 		google.maps.event.addListener(g_map, 'zoom_changed', on_zoom_changed);
 		google.maps.event.addListener(g_map, 'bounds_changed', on_bounds_changed);
 
+		google.maps.event.addListener(g_map, 'click', function(mouseevent__) {
+			g_marker.setPosition(mouseevent__.latLng);
+			on_drag();
+		});
+
+
 		on_zoom_changed();
 		show_latlng_text();
 
