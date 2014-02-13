@@ -20,9 +20,6 @@
 var g_map, g_orig_marker, g_dest_marker;
 var g_vmarkers = new Array(), g_times = new Array(), g_curtimeidx = -1;
 var g_playtimer = null;
-var g_grid_objects = new Array();
-var g_grid_lons = eval(get_sync('debug-vehicle-lon-grid.json'));
-var g_grid_lats = eval(get_sync('debug-vehicle-lat-grid.json'));
 
 eval(get_sync("sprintf.js"));
 
@@ -82,15 +79,6 @@ function initialize() {
 	google.maps.event.addListenerOnce(g_map, 'bounds_changed', function() {
 		recreate_slider();
 
-		// Using a delayed listener for the grid redraw because bounds_changed events can happen dozens of times a second while 
-		// drag-scrolling the map, and redrawing on every one of those was making that dragging very choppy.  
-		// And I see no utility in redrawing the map more than 10 times per second.  
-		// Furthermore - the idea behind erasing the grid on dragstart is to make scrolling even smoother, because the fewer 
-		// objects are on the map, the smoother the scrolling will be.   (I'm fairly sure that I noticed a difference in 
-		// scrolling smoothness with this erasing but it's not as pronounced as the difference that the delayed listener makes.)
-		google.maps.event.addListener(g_map, 'dragstart', erase_grid);
-		//add_delayed_event_listener(g_map, 'bounds_changed', redraw_grid, 100);
-
 		$('#sqlstr_field').keydown(function (e){
 				if(e.keyCode == 13) {
 					$('#submit0_button').trigger('click');
@@ -104,74 +92,6 @@ function initialize() {
 
 		init_map_sync('map_sync_checkbox', true);
 	});
-}
-
-function redraw_grid() {
-	erase_grid();
-	draw_grid();
-}
-
-function draw_grid() {
-	draw_grid_lons();
-	draw_grid_lats();
-}
-
-function draw_grid_lats() {
-	for(var i=0; i<g_grid_lats.length; i++) {
-		var lat = g_grid_lats[i];
-		if(!(lat > g_map.getBounds().getSouthWest().lat() && lat < g_map.getBounds().getNorthEast().lat())) {
-			continue;
-		}
-		var pts = new Array();
-		pts.push(new google.maps.LatLng(lat, g_map.getBounds().getSouthWest().lng()));
-		pts.push(new google.maps.LatLng(lat, g_map.getBounds().getNorthEast().lng()));
-		var line = new google.maps.Polyline({map: g_map, path: pts, strokeColor: 'rgb(0,0,255)', strokeWeight: "0.5"});
-		g_grid_objects.push(line);
-		var marker = new RichMarker({
-			position: new google.maps.LatLng(lat, g_map.getBounds().getNorthEast().lng()), 
-			map: g_map,
-			draggable: false,
-			flat: true, 
-			anchor: RichMarkerPosition.BOTTOM_RIGHT, 
-			content: sprintf('<svg width="35" height="20" version="1.1">' +
-					'<text x="0" y="15" font-size="24" font-weight="bold"  fill="rgb(0,0,255)">       %d</text>' +
-					'</svg>', 
-					i)
-			});
-		g_grid_objects.push(marker);
-	}
-}
-
-function draw_grid_lons() {
-	for(var i=0; i<g_grid_lons.length; i++) {
-		var lon = g_grid_lons[i];
-		if(!(lon > g_map.getBounds().getSouthWest().lng() && lon < g_map.getBounds().getNorthEast().lng())) {
-			continue;
-		}
-		var pts = new Array();
-		pts.push(new google.maps.LatLng(g_map.getBounds().getSouthWest().lat(), lon));
-		pts.push(new google.maps.LatLng(g_map.getBounds().getNorthEast().lat(), lon));
-		var line = new google.maps.Polyline({map: g_map, path: pts, strokeColor: 'rgb(0,0,255)', strokeWeight: "0.5"});
-		g_grid_objects.push(line);
-		var marker = new RichMarker({
-			position: new google.maps.LatLng(g_map.getBounds().getNorthEast().lat(), lon), 
-			anchor: RichMarkerPosition.TOP_LEFT, 
-			map: g_map,
-			draggable: false,
-			flat: true, 
-			content: sprintf('<svg width="35" height="20" version="1.1">' +
-					'<text x="0" y="15" font-size="24" font-weight="bold" fill="rgb(0,0,255)">%d</text>' +
-					'</svg>', 
-					i)
-			});
-		g_grid_objects.push(marker);
-	}
-}
-
-function erase_grid() {
-	while(g_grid_objects.length > 0) {
-		g_grid_objects.pop().setMap(null);
-	}
 }
 
 function set_route(route_) {
@@ -218,14 +138,20 @@ function delete_vehicle_markers() {
 
 function make_vi_marker(vi_, add_infowin_) {
 	var txt = get_vi_marker_text(vi_);
-	var marker = new google.maps.Marker({
-				position: new google.maps.LatLng(vi_.lat, vi_.lon),
-				//map: g_map,
-				draggable: false, 
-				icon: new google.maps.MarkerImage(cgi_url('get_vehicle_debug_circle_image.cgi', [vi_.vehicle_id]), null, null, 
-						new google.maps.Point(15, 15)), 
-				title: txt 
-		});
+	var pos = new google.maps.LatLng(vi_.lat, vi_.lon);
+	var marker = null;
+	if(is_selected('vid_markers_checkbox')) {
+		marker = new google.maps.Marker({position: pos, draggable: false, 
+					icon: new google.maps.MarkerImage(cgi_url('get_vehicle_debug_circle_image.cgi', [vi_.vehicle_id]), null, null, 
+							new google.maps.Point(15, 15)), 
+					title: txt 
+			});
+	} else {
+		var icon = {path: google.maps.SymbolPath.CIRCLE, scale: 14, strokeWeight : 0, fillOpacity: 0.5, 
+				fillColor: 'black'};
+		marker = new google.maps.Marker({position: pos, icon: icon});
+	}
+
 	if(add_infowin_) {
 		add_info_win(marker, txt);
 		marker.setMap(g_map); // This is a work-around for something, I forget what. 
@@ -375,11 +301,13 @@ function on_play_checkbox_clicked(play_) {
 		<div>
 			<form name="form1">
 				<input type="text" size="130" name="sqlstr_field" id="sqlstr_field" />
-				Max rows: <input type="text" size="5" name="maxrows_field" value="1000" /> &nbsp;
-				<label for="interpbytime_checkbox">Interp:</label><input type="checkbox" id="interpbytime_checkbox" name="interpbytime_checkbox" />
-				<label for="collapseanimation_checkbox">Collapse:</label><input type="checkbox" id="collapseanimation_checkbox" />
-				<label for="infowindows_checkbox">InfoWindows:</label><input type="checkbox" id="infowindows_checkbox" />
 				<input type="button" onclick="run_query1(this.form.sqlstr_field.value, this.form.maxrows_field.value, this.form.interpbytime_checkbox.checked)" value="Submit" id="submit0_button" />
+				<br>
+				Max rows: <input type="text" size="5" name="maxrows_field" value="1000" /> 
+				<label><input type="checkbox" id="interpbytime_checkbox" name="interpbytime_checkbox" />Interp</label>
+				<label><input type="checkbox" id="collapseanimation_checkbox" />Collapse</label>
+				<label><input type="checkbox" id="infowindows_checkbox" />InfoWindows</label>
+				<label><input type="checkbox" id="vid_markers_checkbox" checked="checked" />Vehicle ID markers</label>
 			</form>
 			<br/>
 			<br/>
