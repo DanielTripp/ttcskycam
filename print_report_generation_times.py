@@ -14,7 +14,11 @@ if __name__ == '__main__':
 	if len(sys.argv) == 2:
 		yyyymmdd = sys.argv[1]
 	else:
-		yyyymmdd = now_str_ymd()
+		if em_to_str_hm(now_em())[:2] in ('00', '01', '02', '03'):
+			yyyymmdd = em_to_str_ymd(now_em() - 1000*60*60*24)
+		else:
+			yyyymmdd = em_to_str_ymd(now_em())
+		print yyyymmdd
 
 	for hour in range(7, 23+1):
 	#for hour in [10]:
