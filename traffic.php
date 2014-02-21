@@ -1671,11 +1671,18 @@ function init_trip_markers() {
 	map_fit_bounds_to_trip_markers();
 
 	if(show_instructions()) {
-		g_instructions_orig_infowin = new google.maps.InfoWindow({content: 'Move this marker to where<br>you are starting from.', zIndex: 2});
+		g_instructions_orig_infowin = new google.maps.InfoWindow({
+				content: infowin_noscroll('Move this marker to where<br>you are starting from.'), zIndex: 2});
 		g_instructions_orig_infowin.open(g_map, g_trip_orig_marker);
-		g_instructions_dest_infowin = new google.maps.InfoWindow({content: '... and this one to where<br>you want to go.', zIndex: 1});
+		g_instructions_dest_infowin = new google.maps.InfoWindow({
+				content: infowin_noscroll('... and this one to where<br>you want to go.'), zIndex: 1});
 		g_instructions_dest_infowin.open(g_map, g_trip_dest_marker);
 	}
+}
+
+// Many thanks to http://www.canbike.ca/information-technology/2013/11/01/firefox-infowindow-scrollbar-fix-google-maps-api-v3.html 
+function infowin_noscroll(content_) {
+	return sprintf('<div style="line-height:1.35;overflow:hidden;white-space:nowrap;">%s</div>', content_);
 }
 
 function show_instructions() {
