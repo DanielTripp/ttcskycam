@@ -39,7 +39,9 @@ def insert_xml_into_db(xmldoc_, really_insert_into_db_):
 	nextbus_lasttime = None
 	for elem in (node for node in xmldoc_.documentElement.childNodes if isinstance(node, xml.dom.minidom.Element)):
 		if elem.nodeName == 'vehicle':
-			vehicles.append(vinfo.VehicleInfo.from_xml_elem(elem))
+			vi = vinfo.VehicleInfo.from_xml_elem(elem)
+			if vi.vehicle_id: # because once I saw an empty vid string in the database, and I didn't like that. 
+				vehicles.append(vi)
 		elif elem.nodeName == 'lastTime':
 			nextbus_lasttime = long(elem.getAttribute('time'))
 	if not nextbus_lasttime:
@@ -50,6 +52,8 @@ def insert_xml_into_db(xmldoc_, really_insert_into_db_):
 		vehicle_info.calc_time()
 		if really_insert_into_db_:
 			db.insert_vehicle_info(vehicle_info)
+		else:
+			print vehicle_info
 
 	return {'nextbus_lasttime': nextbus_lasttime, 'our_system_time_on_poll_finish': now_em()}
 
