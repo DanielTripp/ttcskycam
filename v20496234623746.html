@@ -135,14 +135,25 @@ function delete_vehicle_markers() {
 	g_times = new Array();
 }
 
+function get_vid_img_url(vid_) {
+	var r = null;
+	var vid_int = parseInt(vid_);
+	if(vid_int >= 1000 && vid_int <= 9999) {
+		r = sprintf('img/debug-vehicle-id-%s.png', vid_) || null;
+	}
+	if(r == null) {
+		r = 'img/debug-vehicle-id-unknown.png';
+	}
+	return r;
+}
+
 function make_vi_marker(vi_, add_infowin_) {
 	var txt = get_vi_marker_text(vi_);
 	var pos = new google.maps.LatLng(vi_.lat, vi_.lon);
 	var marker = null;
 	if(is_selected('vid_markers_checkbox')) {
 		marker = new google.maps.Marker({position: pos, draggable: false, 
-					icon: new google.maps.MarkerImage(cgi_url('get_vehicle_debug_circle_image.cgi', [vi_.vehicle_id]), null, null, 
-							new google.maps.Point(15, 15)), 
+					icon: new google.maps.MarkerImage(get_vid_img_url(vi_.vehicle_id), null, null, new google.maps.Point(15, 15)), 
 					title: txt 
 			});
 	} else {
