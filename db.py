@@ -129,13 +129,14 @@ def insert_vehicle_info(vi_):
 
 def vi_select_generator(froute_, end_time_em_, start_time_em_, dir_=None, include_unpredictables_=False, vid_=None, \
 			forward_in_time_order_=False):
+	assert vid_ is None or len(vid_) > 0
 	assert froute_ in routes.NON_SUBWAY_FUDGEROUTES
 	curs = (conn().cursor('cursor_%d' % (int(time.time()*1000))) if start_time_em_ == 0 else conn().cursor())
 	dir_clause = ('and dir_tag like \'%%%%\\\\_%s\\\\_%%%%\' ' % (str(dir_)) if dir_ != None else ' ')
 	sql = 'select '+VI_COLS+' from ttc_vehicle_locations where fudgeroute = %s '\
 		+('' if include_unpredictables_ else ' and predictable = true ') \
 		+' and time <= %s and time >= %s and time_retrieved <= %s and time_retrieved >= %s '\
-		+(' and vehicle_id = %s ' if vid_ else '') \
+		+(' and vehicle_id = %s ' if vid_ else ' and vehicle_id != \'\' ') \
 		+ dir_clause \
 		+(' order by time' if forward_in_time_order_ else ' order by time desc')
 	curs.execute(sql, [froute_, end_time_em_, start_time_em_, end_time_em_, start_time_em_-1000*60] + ([vid_] if vid_ else []))
@@ -473,7 +474,7 @@ def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, datazoom
 # a little longer on the screen, which I think is desirable.
 # ^^ I'm not sure of the usefulness of this any more. 
 def add_inside_overshots_for_locations(r_vis_, vid_, time_window_end_, log_=False):
-	assert len(set([vi.vehicle_id for vi in r_vis_])) == 1
+	assert vid_ and len(set([vi.vehicle_id for vi in r_vis_])) == 1
 	new_vis = []
 	time_to_beat = max(vi.time for vi in r_vis_ if vi.vehicle_id == vid_)
 	sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations ' \
@@ -514,6 +515,7 @@ def get_outside_overshots(vilist_, time_window_boundary_, forward_in_time_, n_=1
 		return []
 	r = []
 	for vid in set([vi.vehicle_id for vi in vilist_]):
+		assert vid
 		vis_for_vid = [vi for vi in vilist_ if vi.vehicle_id == vid]
 		assert all(vi1.time >= vi2.time for vi1, vi2 in hopscotch(vis_for_vid)) # i.e. is in reverse order 
 		assert len(set(vi.fudgeroute for vi in vis_for_vid)) == 1
@@ -560,6 +562,7 @@ def get_outside_overshots_more(vis_so_far_, time_window_boundary_, forward_in_ti
 	more_vis = []
 	if not forward_in_time_ and len(vis_so_far_) > 0:
 		vid = vis_so_far_[0].vehicle_id
+		assert vid
 		r_mofr_min = min(vi.mofr for vi in vis_so_far_); r_mofr_max = max(vi.mofr for vi in vis_so_far_)
 		if (r_mofr_max != -1) and (r_mofr_max - r_mofr_min < 50): # 50 metres = small, typical GPS errors.
 			curs = conn().cursor()
