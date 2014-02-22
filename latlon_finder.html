@@ -82,8 +82,8 @@ function on_drag() {
 
 function show_latlng_text() {
 	var lat = g_marker.getPosition().lat(), lng = g_marker.getPosition().lng();
-	set_contents('p_latlng', sprintf("Marker's position:&nbsp;&nbsp;&nbsp;geom.LatLng(%.7f,%.7f)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;%.7f,%.7f", 
-			lat, lng, lat, lng));
+	set_contents('p_latlng', sprintf("Marker's position:&nbsp;&nbsp;&nbsp;geom.LatLng(%.7f,%.7f)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;new google.maps.LatLng(%.7f,%.7f)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;%.7f,%.7f", 
+			lat, lng, lat, lng, lat, lng));
 }
 
 function search() {
