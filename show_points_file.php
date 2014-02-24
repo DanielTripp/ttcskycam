@@ -67,6 +67,12 @@ function init_everything_that_depends_on_map() {
 	google.maps.event.addListener(g_map, 'zoom_changed', on_zoom_changed);
 	on_zoom_changed();
 
+	google.maps.event.addListener(g_map, 'click', function(mouseevent_) {
+		var latlng = mouseevent_.latLng;
+		var latlng_str = sprintf('%.8f,%.8f', latlng.lat(), latlng.lng());
+		set_contents('p_clicked_pt', latlng_str);
+	});
+
 	google.maps.event.addListener(g_map, 'rightclick', function(mouseevent_) {
 		on_mouse_click_for_show_dist(mouseevent_.latLng);
 	});
@@ -587,6 +593,7 @@ function on_submit_contents_clicked() {
 		<label><input id="map_sync_checkbox" type="checkbox"/>Map Sync</label>
 
 		<p id="p_zoom"/>
+		<p id="p_clicked_pt"/>
 		<p id="p_dists"/>
   </body>
 </html>
