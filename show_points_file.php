@@ -592,8 +592,8 @@ function on_submit_contents_clicked() {
 ///
 		<label><input id="map_sync_checkbox" type="checkbox"/>Map Sync</label>
 
-		<p id="p_zoom"/>
 		<p id="p_clicked_pt"/>
+		<p id="p_zoom"/>
 		<p id="p_dists"/>
   </body>
 </html>
