@@ -162,6 +162,18 @@ class Vertex(object):
 	def get_ptidx(self, polylineidx_):
 		return self.get_ptaddr(polylineidx_).ptidx
 
+	def remove_unnecessary_ptaddrs(self):
+		assert isinstance(self.ptaddrs, set)
+		vertex_mean_pos = geom.latlng_avg([self.snapgraph.get_latlng(ptaddr) for ptaddr in self.ptaddrs])
+		assert not self.on_finished_constructing_was_called
+		for plineidx in set(ptaddr.polylineidx for ptaddr in self.ptaddrs):
+			ptidxes = [ptaddr.ptidx for ptaddr in self.ptaddrs if ptaddr.polylineidx == plineidx]
+			if len(ptidxes) > 1:
+				for ptidxgroup in get_maximal_sublists2(ptidxes, lambda ptidx1, ptidx2: abs(ptidx1-ptidx2)==1):
+					dist_to_mean_pos = lambda ptidx: self.snapgraph.get_latlng(PtAddr(plineidx,ptidx)).dist_m(vertex_mean_pos)
+					chosen_ptidx = min(ptidxgroup, key=dist_to_mean_pos)
+					self.ptaddrs = set([ptaddr for ptaddr in self.ptaddrs if ptaddr.polylineidx != plineidx or ptaddr.ptidx == chosen_ptidx])
+
 	# Returns any polylines that are mentioned more than once in this vertex. 
 	def get_looping_polylineidxes(self):
 		r = set()
@@ -440,7 +452,7 @@ class SnapGraph(object):
 			return dists_n_paths
 
 	# return A (dist, Path) pair, or (None, None) if no path is possible.  'dist' is a float, in meters.   
-	def find_multipath(self, latlngs_, locses=None, snap_tolerance=100):
+	def find_multipath(self, latlngs_, locses=None, snap_tolerance=100, log_=False):
 		if len(latlngs_) < 2:
 			raise Exception()
 		our_locses = ([self.multisnap(latlng, snap_tolerance) for latlng in latlngs_] if locses is None else locses)
@@ -464,7 +476,13 @@ class SnapGraph(object):
 					if dist_n_piece_ab[1][-1] == dist_n_piece_bc[1][0]:
 						combined_dists_n_pieces.append((dist_n_piece_ab, dist_n_piece_bc))
 				if len(combined_dists_n_pieces) == 0:
-					r_pieces = None # Not path possible for this part.  No path is possible at all. 
+					if log_:
+						printerr('Multipath not possible.')
+						printerr('point a locs: %s' % locs_a)
+						printerr('point b locs: %s' % locs_b)
+						printerr('point c locs: %s' % locs_c)
+						printerr('%d possible paths from a to b.  %d possible paths from b to c.' % (len(dists_n_pieces_ab), len(dists_n_pieces_bc)))
+					r_pieces = None # No path possible for this part.  No path is possible at all. 
 					break
 				chosen_dists_n_pieces = sorted(combined_dists_n_pieces, \
 						key=lambda e: self.get_combined_cost(e[0], e[1], snap_tolerance))[0]
@@ -540,7 +558,9 @@ class SnapGraph(object):
 				return [v for v in [lo_vert, hi_vert] if v is not None]
 
 	def get_latlng(self, loc_):
-		if isinstance(loc_, PosAddr):
+		if isinstance(loc_, PtAddr):
+			return self.get_point(loc_)
+		elif isinstance(loc_, PosAddr):
 			assert loc_.pals < 1.0 # i.e. has been normalized.  Probably not a big deal.   
 			if loc_.pals == 0.0:
 				return self.get_point(loc_.linesegaddr)
@@ -551,7 +571,7 @@ class SnapGraph(object):
 		elif isinstance(loc_, Vertex):
 			return loc_.pos()
 		else:
-			raise Exception()
+			raise Exception('loc arg is instance of %s' % type(loc_))
 
 	def get_latlngs(self, locs_):
 		return [self.get_latlng(loc) for loc in locs_]
@@ -775,6 +795,7 @@ class SnapGraph(object):
 
 		for ptaddr in ptaddr_to_vertex.keys():
 			vertex = ptaddr_to_vertex[ptaddr]
+			vertex.remove_unnecessary_ptaddrs()
 			if len(vertex.get_looping_polylineidxes()) > 0:
 				del ptaddr_to_vertex[ptaddr]
 
@@ -1528,6 +1549,7 @@ if __name__ == '__main__':
 		for startptidx in range(3, -1, -1):
 			addrs.add(PtAddr(plineidx, startptidx))
 	print sorted(addrs)
+
 
 
 
