@@ -107,7 +107,7 @@ function init_spiderfying() {
 			g_mouseovered_object_infowindow = null;
 		}
 		for(var i=0; i<markers__.length; i++) {
-			markers__[i].setIcon(make_marker_icon('rgb(0,255,0)'));
+			markers__[i].setIcon(make_marker_icon('rgb(0,0,0)'));
 		} 
 	});
 	g_spiderfier.addListener('unspiderfy', function(markers__) {
@@ -116,7 +116,8 @@ function init_spiderfying() {
 			g_mouseovered_object_infowindow = null;
 		}
 		for(var i=0; i<markers__.length; i++) {
-			markers__[i].setIcon(make_marker_icon());
+			var marker = markers__[i];
+			marker.setIcon(make_marker_icon(marker.color_when_not_spiderfied));
 		}
 	});
 }
@@ -366,13 +367,21 @@ function draw_objects() {
 	var minlat=90, maxlat=0, minlng=0, maxlng=-180;
 
 	var draw_dots = is_selected('dots_checkbox');
+	var draw_lines = is_selected('polyline_checkbox');
 
 	var lineidx=0, ptidx=0;
-	g_polyline_latlngs.forEach(function(line_latlngs) {
+	for(var i=0; i<g_polyline_latlngs.length; i++) {
+		var line_latlngs = g_polyline_latlngs[i];
+		var color = get_polyline_color(line_latlngs);
 		line_latlngs.forEach(function(latlng) {
 
 			if(draw_dots) {
-				make_marker(latlng, sprintf('%d/%d -&nbsp;&nbsp;&nbsp;&nbsp;(%.8f,%.8f)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;', lineidx, ptidx, latlng.lat(), latlng.lng()));
+				var label = sprintf('%d/%d -&nbsp;&nbsp;&nbsp;&nbsp;(%.8f,%.8f)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;', lineidx, ptidx, latlng.lat(), latlng.lng());
+				make_marker(latlng, color, label);
+			}
+
+			if(draw_lines) {
+				draw_polyline(line_latlngs, color, i);
 			}
 
 			minlat = Math.min(minlat, latlng.lat());
@@ -384,18 +393,24 @@ function draw_objects() {
 		});
 		lineidx += 1;
 		ptidx = 0;
-	});
+	}
 
 	var rect_bounds = new google.maps.LatLngBounds(
 			new google.maps.LatLng(minlat, minlng), new google.maps.LatLng(maxlat, maxlng));
 	g_bounding_rect = new google.maps.Rectangle({bounds: rect_bounds, map: g_map, strokeColor: 'rgb(0,0,0)', 
 			strokeOpacity: 0.5, strokeWeight: 1, fillOpacity: 0, zIndex: -10, clickable: false});
 
-	if(is_selected('polyline_checkbox')) {
-		draw_polylines();
-	}
-
 	refresh_dists();
+}
+
+function draw_polyline(latlngs_, color_, i_) {
+	var polylineOptions = {path: latlngs_, strokeWeight: POLYLINE_STROKEWEIGHT, strokeOpacity: 0.7, 
+			strokeColor: color_, clickable: false, 
+			icons: (is_selected('arrows_checkbox') ? make_polyline_arrow_icons(g_map.getZoom(), latlngs_) : null), 
+			map: g_map};
+	var polyline = new google.maps.Polyline(polylineOptions);
+	add_marker_mouseover_listener_for_infowin(polyline, sprintf('line #%d', i_));
+	g_polylines.push(polyline);
 }
 
 function refresh_dists() {
@@ -414,19 +429,6 @@ function refresh_dists() {
 	}
 	contents += sprintf('sum total of all polyline lengths: %.2f meters<br>', all_polylines_dist_m);
 	set_contents('p_dists', contents);
-}
-
-function draw_polylines() {
-	for(var i=0; i<g_polyline_latlngs.length; i++) {
-		var polyline_latlngs = g_polyline_latlngs[i];
-		var polylineOptions = {path: polyline_latlngs, strokeWeight: POLYLINE_STROKEWEIGHT, strokeOpacity: 0.7, 
-				strokeColor: get_polyline_color(polyline_latlngs), clickable: false, 
-				icons: (is_selected('arrows_checkbox') ? make_polyline_arrow_icons(g_map.getZoom(), polyline_latlngs) : null), 
-				map: g_map};
-		var polyline = new google.maps.Polyline(polylineOptions);
-		add_marker_mouseover_listener_for_infowin(polyline, sprintf('line #%d', i));
-		g_polylines.push(polyline);
-	}
 }
 
 function get_polyline_color(polyline_latlngs_) {
@@ -453,12 +455,13 @@ function make_marker_icon(color_) {
 			fillColor: (color_ === undefined ? 'black' : color_)};
 }
 
-function make_marker(latlng_, label_) {
-	var marker = new google.maps.Marker({position: latlng_, map: g_map, icon: make_marker_icon()});
+function make_marker(latlng_, color_, label_) {
+	var marker = new google.maps.Marker({position: latlng_, map: g_map, icon: make_marker_icon(color_)});
 	g_markers.push(marker);
 	add_marker_mouseover_listener_for_infowin(marker, label_);
 	g_spiderfier.addMarker(marker);
 	add_marker_click_listener_for_show_dist(marker);
+	marker.color_when_not_spiderfied = color_;
 }
 
 function add_marker_mouseover_listener_for_infowin(mapobject_, label_) {
