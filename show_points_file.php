@@ -372,12 +372,12 @@ function draw_objects() {
 	var lineidx=0, ptidx=0;
 	for(var i=0; i<g_polyline_latlngs.length; i++) {
 		var line_latlngs = g_polyline_latlngs[i];
-		var color = get_polyline_color(line_latlngs);
+		var color = get_polyline_color(i);
 		line_latlngs.forEach(function(latlng) {
 
 			if(draw_dots) {
 				var label = sprintf('%d/%d -&nbsp;&nbsp;&nbsp;&nbsp;(%.8f,%.8f)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;', lineidx, ptidx, latlng.lat(), latlng.lng());
-				make_marker(latlng, color, label);
+				make_marker(latlng, color, label, i);
 			}
 
 			if(draw_lines) {
@@ -407,7 +407,7 @@ function draw_polyline(latlngs_, color_, i_) {
 	var polylineOptions = {path: latlngs_, strokeWeight: POLYLINE_STROKEWEIGHT, strokeOpacity: 0.7, 
 			strokeColor: color_, clickable: false, 
 			icons: (is_selected('arrows_checkbox') ? make_polyline_arrow_icons(g_map.getZoom(), latlngs_) : null), 
-			map: g_map};
+			zIndex: i_, map: g_map};
 	var polyline = new google.maps.Polyline(polylineOptions);
 	add_marker_mouseover_listener_for_infowin(polyline, sprintf('line #%d', i_));
 	g_polylines.push(polyline);
@@ -431,23 +431,15 @@ function refresh_dists() {
 	set_contents('p_dists', contents);
 }
 
-function get_polyline_color(polyline_latlngs_) {
+function get_polyline_color(i_) {
 	if(is_selected('colors_checkbox')) {
-		var colors = [[0, 0, 0], [150, 150, 150], [255, 0, 0], [255, 0, 255], [0, 255, 255], [0, 127, 0], 
-				[130, 127, 0], [127, 0, 0], [127, 0, 127], [0, 127, 127, ], [0, 255, 0], [0, 0, 255]];
-		var r = colors[get_polyline_color_hash(polyline_latlngs_) % colors.length];
+		var colors = [ [255, 0, 0], [0, 255, 0], [0, 0, 255], [0, 0, 0], [150, 150, 150], 
+				[255, 0, 255], [0, 255, 255], [0, 127, 0], [130, 127, 0], [127, 0, 0], [127, 0, 127], [0, 127, 127] ];
+		var r = colors[i_ % colors.length];
 		return sprintf('rgb(%d,%d,%d)', r[0], r[1], r[2]);
 	} else {
 		return 'rgb(0,0,0)';
 	}
-}
-
-function get_polyline_color_hash(polyline_latlngs_) {
-	var r = 0;
-	polyline_latlngs_.forEach(function(latlng) {
-		r += latlng.lat()*100000 + latlng.lng()*100000;
-	});
-	return Math.round(Math.abs(r));
 }
 
 function make_marker_icon(color_) {
@@ -455,8 +447,8 @@ function make_marker_icon(color_) {
 			fillColor: (color_ === undefined ? 'black' : color_)};
 }
 
-function make_marker(latlng_, color_, label_) {
-	var marker = new google.maps.Marker({position: latlng_, map: g_map, icon: make_marker_icon(color_)});
+function make_marker(latlng_, color_, label_, i_) {
+	var marker = new google.maps.Marker({position: latlng_, map: g_map, icon: make_marker_icon(color_), zIndex: i_});
 	g_markers.push(marker);
 	add_marker_mouseover_listener_for_infowin(marker, label_);
 	g_spiderfier.addMarker(marker);
@@ -527,7 +519,7 @@ function on_mouse_click_for_show_dist(latlng_) {
 		g_show_dist_infowindow.open(g_map);
 
 		g_show_dist_polyline = new google.maps.Polyline({path: [g_show_dist_pt1, g_show_dist_pt2], strokeWeight: 4, 
-				strokeColor: 'red', clickable: false, map: g_map});
+				strokeColor: 'red', clickable: false, map: g_map, zIndex: 10000});
 	}
 }
 
@@ -587,7 +579,7 @@ function on_submit_contents_clicked() {
 		<input type="checkbox" id="arrows_checkbox" name="arrows_checkbox" checked onclick="redraw_objects()"/>
 		<label for="arrows_checkbox">Arrows</label>
 
-		<input type="checkbox" id="colors_checkbox" name="colors_checkbox" onclick="redraw_objects()"/>
+		<input type="checkbox" id="colors_checkbox" name="colors_checkbox" checked onclick="redraw_objects()"/>
 		<label for="colors_checkbox">Colors</label>
 ///
 		<input type="checkbox" id="grid_checkbox" name="grid_checkbox" onclick="on_grid_checkbox_clicked()"/>
