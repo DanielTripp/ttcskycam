@@ -265,10 +265,10 @@ function get_latlngs_from_string(str_) {
 				raw_polylines = $.parseJSON(str);
 				console.log('Slightly massaged JSON parse succeeded.');
 			} catch(e) {
-				while(str.length > 0 && str.match(/^-79\.\d\d\d+/) == null && str.charAt(0) !== '[') { // remove leading non-JSON: 
+				while(str.length > 0 && str.match(/^-79\.\d\d\d\d+/) == null && str.charAt(0) !== '[') { // remove leading non-JSON: 
 					str = str.substring(1, str.length);
 				}
-				while(str.length > 0 && str.match(/43\.\d\d\d+$/) == null && str.charAt(str.length-1) !== ']') { // remove trailing non-JSON: 
+				while(str.length > 0 && str.match(/43\.\d\d\d\d+$/) == null && str.charAt(str.length-1) !== ']') { // remove trailing non-JSON: 
 					str = str.substring(0, str.length-1);
 				}
 				console.log(sprintf('Trying massaged JSON: "%s"', str));
@@ -298,7 +298,7 @@ function get_latlngs_from_string(str_) {
 				var filelines = str_.split('\n');
 				for(var filelinei in filelines) {
 					var fileline = filelines[filelinei];
-					var regex = /.*?[^:]?(43\.\d+).*?(-79\.\d+).*/g;
+					var regex = /.*?[^:]?(43\.\d\d\d\d+).*?(-79\.\d\d\d\d+).*/g;
 					var match = regex.exec(fileline);
 					if(match != null) {
 						console.log('match');
