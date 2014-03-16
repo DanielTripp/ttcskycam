@@ -216,6 +216,7 @@ def get_vid_to_vis_bothdirs(fudge_route_, num_minutes_, end_time_em_, log_=False
 	for vid, vis in vid_to_vis.items():
 		vis[:] = [vi for vi in vis if vi.widemofr != -1]
 		yards.remove_vehicles_in_yards(vis)
+		work_around_secssincereport_bug(vis)
 		remove_time_duplicates(vis)
 		geom.remove_bad_gps_readings_single_vid(vis, log_=log_)
 		fix_dirtags(vis)
@@ -229,6 +230,17 @@ def get_vid_to_vis_bothdirs(fudge_route_, num_minutes_, end_time_em_, log_=False
 			del vid_to_vis[vid]
 	return vid_to_vis
 
+def work_around_secssincereport_bug(vis_):
+	# I doubt that there will ever be any duplicates w.r.t. time_retrieved, but just in case: 
+	remove_consecutive_duplicates(vis_, key=lambda vi: vi.time_retrieved)
+	vis_.sort(key=lambda vi: vi.time_retrieved)
+	for vi1, vi2 in hopscotch(vis_):
+		if vi1.time > vi2.time:
+			vi2.secs_since_report = 0
+			vi2.calc_time()
+			assert vi1.time < vi2.time
+	vis_.reverse()
+	
 def is_vis_stretch_desirable(vis_, log_):
 	stretch_len_good = (len(vis_) >= MIN_DESIRABLE_DIR_STRETCH_LEN)
 	widemofr_span_good = abs(vis_[0].widemofr - vis_[-1].widemofr) > 300
