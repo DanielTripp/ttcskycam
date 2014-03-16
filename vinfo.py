@@ -116,7 +116,7 @@ class VehicleInfo:
 		return '%s  r=%-6s, vid=%s, dir: %s%-12s, (%.7f,%.7f), h=%3d, mofr=%5d%s%5d%s' \
 			% (self.timestr, routestr, self.vehicle_id, ('*' if self.is_dir_tag_corrected else ' '), self.dir_tag,
 			   self.latlng.lat, self.latlng.lng, self.heading, self.mofr, ('!' if self.mofr!=self.widemofr else ' '), self.widemofr,
-			   ('' if self.predictable else ' UNPREDICTABLE'))
+			   ('' if self.predictable else ' U'))
 
 	def __repr__(self):
 		return self.__str__()
