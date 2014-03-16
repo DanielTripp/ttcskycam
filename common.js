@@ -643,9 +643,12 @@ function roundUp(x_, step_, ref_) {
 	return (r == x_ ? r : r+step_);
 }
 
-function make_polyline_arrow_icons(zoom_, latlngs_) {
+function make_polyline_arrow_icons(zoom_, lots_of_arrows_, latlngs_) {
 	var arrowSymbol = { path: google.maps.SymbolPath.FORWARD_OPEN_ARROW };
 	var metersPerArrow = 10*Math.pow(1.8, 21-zoom_);
+	if(lots_of_arrows_) {
+		metersPerArrow /= 5;
+	}
 	var plineLengthMeters = dist_m_polyline(latlngs_);
 	var percentBetweenArrows = 100.0*metersPerArrow/plineLengthMeters;
 	var r = [];
