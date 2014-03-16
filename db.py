@@ -682,7 +682,10 @@ def get_piece_idx(vis_, lo_idx_, vi_to_grade_):
 	r = -1
 	for i in range(lo_idx_, -1, -1):
 		r += 1
-		if vi_to_grade_[vis_[i]] != 'g':
+		grade = vi_to_grade_[vis_[i]]
+		if grade != 'g':
+			if grade == 'o':
+				r -= 1
 			break
 	return r
 
@@ -803,6 +806,22 @@ def get_grade_stretch_info(vis_, be_clever_, log_):
 	def get_grade(stretch__):
 		return vi_to_grade[stretch__[0]]
 
+	# We can't use 'g' stretches of length 1 which are surrounded by 'o' stretches or nothing.  
+	# So here we remove them and make them 'o'. 
+	# Because what would we do with them?  There is no graph path between an 'o' point and a 'g' point - 
+	# that is, eg. the last 'o' point in the stretch before this length=1 'g' stretch.  
+	# This is unlike a length=1 'g' stretch which has an 'r' stretch before or after.  Because 
+	# of our assumption that the (streetcar or street) graph is a superset of the route in question, 
+	# we can always get a graph path between an 'r' point and a 'g' point. 
+	# So here we filter out those useless stretches, both because they are useless, and because if we 
+	# don't, the find_multipath() code below will fail because it doesn't like being passed 1 latlngs 
+	# list of length=1. 
+	stretches = get_maximal_sublists3(vis_, lambda vi: vi_to_grade[vi])
+	for i, stretch, isfirst, islast in enumerate2(stretches):
+		if get_grade(stretch) == 'g' and len(stretch) == 1 and \
+					(isfirst or get_grade(stretches[i-1])) and (islast or get_grade(stretches[i+1])):
+			vi_to_grade[stretch[0]] = 'o'
+
 	vi_to_path = {}
 	stretches = get_maximal_sublists3(vis_, lambda vi: vi_to_grade[vi])
 	for stretchi, stretch in enumerate(stretches):
@@ -817,7 +836,7 @@ def get_grade_stretch_info(vis_, be_clever_, log_):
 				latlng = stretches[stretchi+1][0].latlng
 				latlngs.append(latlng)
 				locses.append(sg.multisnap(latlng, T))
-			dist, path = sg.find_multipath(latlngs, locses, T)
+			dist, path = sg.find_multipath(latlngs, locses, T, log_)
 			assert dist is not None and path is not None
 			for vi in stretch:
 				vi_to_path[vi] = path
