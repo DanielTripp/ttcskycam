@@ -406,7 +406,9 @@ function draw_objects() {
 function draw_polyline(latlngs_, color_, i_) {
 	var polylineOptions = {path: latlngs_, strokeWeight: POLYLINE_STROKEWEIGHT, strokeOpacity: 0.7, 
 			strokeColor: color_, clickable: false, 
-			icons: (is_selected('arrows_checkbox') ? make_polyline_arrow_icons(g_map.getZoom(), latlngs_) : null), 
+			icons: (is_selected('arrows_checkbox') 
+					? make_polyline_arrow_icons(g_map.getZoom(), is_selected('lots_of_arrows_checkbox'), latlngs_) 
+					: null), 
 			zIndex: i_, map: g_map};
 	var polyline = new google.maps.Polyline(polylineOptions);
 	add_marker_mouseover_listener_for_infowin(polyline, sprintf('line #%d', i_));
@@ -578,6 +580,11 @@ function on_submit_contents_clicked() {
 
 		<input type="checkbox" id="arrows_checkbox" name="arrows_checkbox" checked onclick="redraw_objects()"/>
 		<label for="arrows_checkbox">Arrows</label>
+
+		<label>
+		<input type="checkbox" id="lots_of_arrows_checkbox" name="lots_of_arrows_checkbox" onclick="redraw_objects()"/>
+		Lots of Arrows
+		</label>
 
 		<input type="checkbox" id="colors_checkbox" name="colors_checkbox" checked onclick="redraw_objects()"/>
 		<label for="colors_checkbox">Colors</label>
