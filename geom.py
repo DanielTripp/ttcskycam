@@ -130,6 +130,9 @@ class LatLng:
 			 # memcache doesn't handle spaces in keys.  We prevent memcache from seeing spaces in keys by replacing spaces with
 			 # a big ugly string.  So really we're avoiding spaces here in order to minimize use of that big ugly string.
 
+	def ls(self):
+		return [self.lat, self.lng]
+
 	def __repr__(self):
 		return self.__str__()
 
@@ -291,13 +294,13 @@ def is_plausible(dist_m_, speed_kmph_):
 		return speed_kmph_ < 30
 
 def remove_bad_gps_readings_single_vid(vis_, log_=False):
+	assert is_sorted(vis_, reverse=True, key=lambda vi: vi.time)
 	assert len(set(vi.vehicle_id for vi in vis_)) <= 1
 	if not vis_:
 		return []
-	vis = vis_[:]
+	vis = vis_[::-1]
 	remove_consecutive_duplicates(vis, key=lambda vi: vi.time)
 	vigroups = [[vis[0]]]
-	if log_: printerr('Bad GPS filtering - creating group 0:\n\t%s' % vis[0])
 	for cur_vi in vis[1:]:
 		def get_dist_from_vigroup(vigroup_):
 			groups_last_vi = vigroup_[-1]
@@ -315,20 +318,28 @@ def remove_bad_gps_readings_single_vid(vis_, log_=False):
 
 		closest_vigroup = min(vigroups, key=get_dist_from_vigroup)
 		if is_plausible_vigroup(closest_vigroup):
-			if log_: printerr('Bad GPS filtering - adding to group %d:\n\t%s' % (vigroups.index(closest_vigroup), cur_vi))
 			closest_vigroup.append(cur_vi)
 		else:
-			if log_: printerr('Bad GPS filtering - creating group %d:\n\t%s' % (len(vigroups), cur_vi))
 			vigroups.append([cur_vi])
 	r_vis = max(vigroups, key=len)
 	if log_:
-		if len(r_vis) != len(vis_):
-			for i, vigroup in enumerate(vigroups):
-				if vigroup is not r_vis:
-					for vi in vigroup:
-						printerr('Bad GPS filtering - discarded (from group %d):\n\t%s' % (i, vi))
-	vis_[:] = r_vis
-
+		vid = vis_[0].vehicle_id
+		if len(vigroups) == 1:
+			printerr('Bad GPS filtering - vid %s - there was only one group.' % vid)
+		else:
+			printerr('Bad GPS filtering - vid %s - chose group %d.' % (vid, vigroups.index(r_vis)))
+			printerr('---')
+			for vi in vis:
+				groupidx = firstidx(vigroups, lambda vigroup: vi in vigroup)
+				printerr('%d - %s' % (groupidx, vi))
+			printerr('---')
+			for groupidx, vigroup in enumerate(vigroups):
+				for vi in vigroup:
+					printerr('%d - %s' % (groupidx, vi))
+			printerr('---')
+		printerr('Bad GPS filtering - vid %s - groups as JSON:' % vid)
+		printerr([[vi.latlng.ls() for vi in vigroup] for vigroup in vigroups])
+	vis_[:] = r_vis[::-1]
 
 # Finds intersection of the line segments pt1->pt2 and pt3->pt4. 
 # returns None if they don't intersect, a LatLng otherwise. 
@@ -459,6 +470,75 @@ class LineSeg(object):
 def get_linesegs_in_polyline(polyline_):
 	for startpt, endpt in hopscotch(polyline_):
 		yield LineSeg(startpt, endpt)
+
+# This function thanks to http://seewah.blogspot.ca/2009/11/gpolyline-decoding-in-python.html 
+# Usage example: 
+# latlngs = decode_line("grkyHhpc@B[[_IYiLiEgj@a@q@yEoAGi@bEyH_@aHj@m@^qAB{@IkHi@cHcAkPSiMJqEj@s@CkFp@sDfB}Ex@iBj@S_AyIkCcUWgAaA_JUyAFk@{D_]~KiLwAeCsHqJmBlAmFuXe@{DcByIZIYiBxBwAc@eCcAl@y@aEdCcBVJpHsEyAeE")
+# for latlng in latlngs:
+#     print str(latlng[0]) + "," + str(latlng[1])
+def decode_line(encoded):
+
+    """Decodes a polyline that was encoded using the Google Maps method.
+
+    See http://code.google.com/apis/maps/documentation/polylinealgorithm.html
+    
+    This is a straightforward Python port of Mark McClure's JavaScript polyline decoder
+    (http://facstaff.unca.edu/mcmcclur/GoogleMaps/EncodePolyline/decode.js)
+    and Peter Chng's PHP polyline decode
+    (http://unitstep.net/blog/2008/08/02/decoding-google-maps-encoded-polylines-using-php/)
+    """
+
+    encoded_len = len(encoded)
+    index = 0
+    array = []
+    lat = 0
+    lng = 0
+
+    while index < encoded_len:
+
+        b = 0
+        shift = 0
+        result = 0
+
+        while True:
+            b = ord(encoded[index]) - 63
+            index = index + 1
+            result |= (b & 0x1f) << shift
+            shift += 5
+            if b < 0x20:
+                break
+
+        dlat = ~(result >> 1) if result & 1 else result >> 1
+        lat += dlat
+
+        shift = 0
+        result = 0
+
+        while True:
+            b = ord(encoded[index]) - 63
+            index = index + 1
+            result |= (b & 0x1f) << shift
+            shift += 5
+            if b < 0x20:
+                break
+
+        dlng = ~(result >> 1) if result & 1 else result >> 1
+        lng += dlng
+
+        array.append((lat * 1e-5, lng * 1e-5))
+
+    return array
+
+def latlng_avg(latlngs_):
+	assert isinstance(latlngs_, Sequence) and all(isinstance(latlng, LatLng) for latlng in latlngs_)
+	assert len(latlngs_) > 0
+	lat_tally = 0.0; lng_tally = 0.0
+	for latlng in latlngs_:
+		lat_tally += latlng.lat
+		lng_tally += latlng.lng
+	avg_lat = lat_tally/len(latlngs_)
+	avg_lng = lng_tally/len(latlngs_)
+	return LatLng(avg_lat, avg_lng)
 
 if __name__ == '__main__':
 

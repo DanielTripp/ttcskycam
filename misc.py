@@ -305,6 +305,12 @@ def first(iterable_, predicate_=None):
 			return e
 	return None
 
+def firstidx(iterable_, predicate_):
+	for i, e in enumerate(iterable_):
+		if predicate_(e):
+			return i
+	raise Exception('Predicate was false for all elements.')
+
 def round_down_by_minute(t_em_):
 	dt = datetime.datetime.utcfromtimestamp(t_em_/1000.0)
 	dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute) # Omitting second on purpose.  That's what
@@ -847,6 +853,14 @@ def is_seq_like(candidate_, reference_seq_):
 # Thanks to http://stackoverflow.com/questions/11263172/what-is-the-pythonic-way-to-find-the-longest-common-prefix-of-a-list-of-lists 
 def get_common_prefix(seq1_, seq2_):
 	return [i[0] for i in takewhile(lambda elems: len(set(elems)) == 1, izip(seq1_, seq2_))]
+
+def rein_in(x_, min_, max_):
+	if x_ < min_:
+		return min_
+	elif x_ > max_:
+		return max_
+	else:
+		return x_
 
 if __name__ == '__main__':
 
