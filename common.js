@@ -329,9 +329,9 @@ function vi_to_str(vi_) {
 	} else {
 		dir_tag = "'"+vi_.dir_tag+"'";
 	}
-	return sprintf('%s  route: %4s, vehicle: %s, dir: %-12s, (  %2.5f, %2.5f  ) , mofr: %d, heading: %3d %s', 
+	return sprintf('%s  route: %4s, vehicle: %s, dir: %-12s, (  %2.5f, %2.5f  ) , mofr: %5d, heading: %3d %s', 
 			vi_.timestr, vi_.route_tag, vi_.vehicle_id, dir_tag, vi_.lat, vi_.lon, vi_.mofr, vi_.heading, 
-				(vi_.predictable ? '' : 'UNPREDICTABLE'));
+				(vi_.predictable ? '' : 'U'));
 }
 
 function avg(lo_, hi_, ratio_) {
