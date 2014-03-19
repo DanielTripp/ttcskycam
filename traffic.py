@@ -136,7 +136,7 @@ def get_traffic_avgspeedsandweights(fudgeroute_name_, dir_, datazoom_, time_, cu
 			if weights_total >= 0.01:
 				weighted_avg_speed = abs(sum([x['speed_kmph']*x['weight']/weights_total for x in rawtraffics]))
 				r[mofr] = {'kmph': weighted_avg_speed, 'weight': weights_total}
-				if log_: printerr('\tWeight speed: %.1f kmph.' % weighted_avg_speed)
+				if log_: printerr('\tWeighted speed: %.1f kmph.' % weighted_avg_speed)
 			else:
 				if log_: printerr('\tWeighted speed: none.  (Due to zero or negligible weight tally at this mofr.')
 				r[mofr] = None
