@@ -234,13 +234,11 @@ def work_around_secssincereport_bug(vis_):
 	# I doubt that there will ever be any duplicates w.r.t. time_retrieved, but just in case: 
 	remove_consecutive_duplicates(vis_, key=lambda vi: vi.time_retrieved)
 	vis_.sort(key=lambda vi: vi.time_retrieved)
-	for vi1, vi2 in hopscotch(vis_):
-		if vi1.time > vi2.time:
-			vi2.secs_since_report = 0
-			vi2.calc_time()
-			assert vi1.time < vi2.time
+	for vi in vis_:
+		vi.secs_since_report = 12
+		vi.calc_time()
 	vis_.reverse()
-	
+
 def is_vis_stretch_desirable(vis_, log_):
 	stretch_len_good = (len(vis_) >= MIN_DESIRABLE_DIR_STRETCH_LEN)
 	widemofr_span_good = abs(vis_[0].widemofr - vis_[-1].widemofr) > 300
@@ -983,6 +981,7 @@ def massage_to_list(time_to_vis_, start_time_, end_time_, log_=False):
 	r = []
 	for time in sorted(new_time_to_vis.keys()):
 		vis = new_time_to_vis[time]
+		vis.sort(key=lambda vi: vi.vehicle_id) # For debugging.  To ensure a predictable output order. 
 		r.append([em_to_str(time)] + vis)
 	return r
 
