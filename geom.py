@@ -471,12 +471,12 @@ def get_linesegs_in_polyline(polyline_):
 	for startpt, endpt in hopscotch(polyline_):
 		yield LineSeg(startpt, endpt)
 
+def decode_line(encoded_):
+	return [LatLng(lat/10.0, lng/10.0) for lat, lng in decode_line_raw(encoded_)]
+
 # This function thanks to http://seewah.blogspot.ca/2009/11/gpolyline-decoding-in-python.html 
-# Usage example: 
-# latlngs = decode_line("grkyHhpc@B[[_IYiLiEgj@a@q@yEoAGi@bEyH_@aHj@m@^qAB{@IkHi@cHcAkPSiMJqEj@s@CkFp@sDfB}Ex@iBj@S_AyIkCcUWgAaA_JUyAFk@{D_]~KiLwAeCsHqJmBlAmFuXe@{DcByIZIYiBxBwAc@eCcAl@y@aEdCcBVJpHsEyAeE")
-# for latlng in latlngs:
-#     print str(latlng[0]) + "," + str(latlng[1])
-def decode_line(encoded):
+# This function returns lats and lngs 10 times too big eg. (436.82132,-794.33430).  I don't know why. 
+def decode_line_raw(encoded):
 
     """Decodes a polyline that was encoded using the Google Maps method.
 
