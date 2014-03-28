@@ -567,7 +567,7 @@ function on_submit_contents_clicked() {
 		Filename: <input type="text" size="80" name="filename_field" id="filename_field" /> 
 		<input type="button" onclick="refresh_from_file()" value="Submit (file)" /> <br>
 		OR Contents:<br>
-		<textarea id="contents_textarea" cols="80" rows="5"></textarea>
+		<textarea id="contents_textarea" cols="140" rows="5"></textarea>
 		<input type="button" onclick="refresh_from_textarea()" value="Submit (text area)" />
 		<br>
 		<input type="button" onclick="on_opacity_down_clicked()" value="Opacity DOWN" />
