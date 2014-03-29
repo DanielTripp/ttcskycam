@@ -110,7 +110,7 @@ def get_poll_finished_flag_file_mtime():
 		return 0
 
 def wait_for_locations_poll_to_finish():
-	MAX_WAIT_SECS = 60*2
+	MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS = 60*2
 	t0 = time.time()
 	mtime0 = get_poll_finished_flag_file_mtime()
 	mtime1 = mtime0
@@ -123,12 +123,12 @@ def wait_for_locations_poll_to_finish():
 		if mtime1 != mtime0:
 			break
 
-		if (cur_wait_secs >= MAX_WAIT_SECS) and (prev_wait_secs < MAX_WAIT_SECS):
-			printerr('%s: reports: watched poll locations flag file for %d seconds, still hasn\'t been touched.' % (now_str(), MAX_WAIT_SECS))
+		if (cur_wait_secs >= MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS) and (prev_wait_secs < MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS):
+			printerr('%s: reports: watched poll locations flag file for %d seconds, still hasn\'t been touched.' % (now_str(), MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS))
 			
 		time.sleep(2)
 
-	if cur_wait_secs > MAX_WAIT_SECS:
+	if cur_wait_secs > MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS:
 		printerr('%s: reports: watched poll locations flag file for %d seconds before it was touched.' % (now_str(), cur_wait_secs))
 
 def make_all_reports_and_insert_into_db_once():
