@@ -5,9 +5,9 @@
 # If connection fails at creation time, then no error will be raised at connection time or when calling 
 # set() or get() on the client - but all get() calls will return None.
 # If however the memcache server goes down later, after we have made a connection, then 
-# future calls to get() seem to return None.  But future calls to set() might raise an Exception.  
+# future calls to get() seem to return None, same as ever.  But future calls to set() might raise an Exception.  
 # They seem to do this only if they haven't been immediately preceeded by a get().  
-# As for a memcache server that was down coming up - there is a 30-second retry time window implemented, where 
+# As for a memcache server (that was down) coming up - there is a 30-second retry time window implemented, where 
 # the memcache client will retry the connection after no less than 30 seconds.  After that, it seems all will be well.  
 
 # I find this behaviour unusual but it works with our current setup.  If the mc client raises an exception in the case 
@@ -49,7 +49,7 @@ def get_memcache_client():
 		g_memcache_client = memcache.Client(['127.0.0.1:%d' % client_get_port()], debug=0)
 	return g_memcache_client
 
-# Important that the return value of this is a str because that's what the memcache client insists on.  
+# Important that the return value of this is a str, because that's what the memcache client insists on.  
 # Unicode will cause an error right away. 
 # Also - memcached can't handle spaces in keys, so we avoid that. 
 def make_key(func_, args_, kwargs_):
@@ -69,21 +69,24 @@ def set(func_, args_, kwargs_, value_):
 	get_memcache_client().set(key, value_)
 
 # Will try to get from memcache, and if that fails, then call the func_ (the implementation function.) 
-def get(func_, args_=[], kwargs_={}):
+def get(func_, args_=[], kwargs_={}, key=None):
 	args_ = args_[:]
-	key = make_key(func_, args_, kwargs_)
-	if key in g_in_process_cache_key_to_value:
-		if LOG: printerr('Found in in-process cache: %s' % key)
-		r = g_in_process_cache_key_to_value[key]
+	if key is None:
+		key2 = make_key(func_, args_, kwargs_)
 	else:
-		r = get_memcache_client().get(key)
+		key2 = key
+	if key2 in g_in_process_cache_key_to_value:
+		if LOG: printerr('Found in in-process cache: %s' % key2)
+		r = g_in_process_cache_key_to_value[key2]
+	else:
+		r = get_memcache_client().get(key2)
 		if r is None:
-			if LOG: printerr('Not found in memcache:     %s' % key)
+			if LOG: printerr('Not found in memcache:     %s' % key2)
 			r = func_(*args_, **kwargs_)
-			get_memcache_client().set(key, r)
+			get_memcache_client().set(key2, r)
 		else:
-			if LOG: printerr('Found in memcache:         %s' % key)
-		g_in_process_cache_key_to_value[key] = r
+			if LOG: printerr('Found in memcache:         %s' % key2)
+		g_in_process_cache_key_to_value[key2] = r
 	return r
 
 def get_from_memcache(func_, args_, kwargs_):
