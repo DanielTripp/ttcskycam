@@ -79,7 +79,6 @@ def get_polylines_from_shapefile():
 	return sum(streetname_to_polylines.itervalues(), [])
 
 def join_connected_plines(plines_):
-	#for i in range(156):
 	while True:
 		joined_something = False
 		for pline1idx, pline2idx in permutation_2_indexes(plines_):
