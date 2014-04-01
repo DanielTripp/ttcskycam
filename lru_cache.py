@@ -10,7 +10,7 @@ class Counter(dict):
     def __missing__(self, key):
         return 0
 
-def lru_cache(maxsize=100):
+def lru_cache(maxsize=100, posargkeymask=None):
     '''Least-recently-used cache decorator.
 
     Arguments to the cached function must be hashable.
@@ -36,6 +36,9 @@ def lru_cache(maxsize=100):
         def wrapper(*args, **kwds):
             # cache key records both positional and keyword args
             key = args
+            if posargkeymask is not None:
+              assert len(posargkeymask) == len(args)
+              key = tuple(key[i] for i in range(len(key)) if posargkeymask[i])
             if kwds:
                 key += (kwd_mark,) + tuple(sorted(kwds.items()))
 

@@ -2,7 +2,9 @@
 
 from collections import defaultdict, Sequence
 from itertools import *
-import pprint, math, geom, bisect
+import pprint, math, json
+from lru_cache import lru_cache
+import geom
 from misc import *
 
 # Some vocabulary: 
@@ -123,15 +125,20 @@ class Vertex(object):
 
 	next_id = 0
 
-	def __init__(self, snapgraph_):
-		self.id = Vertex.next_id
-		Vertex.next_id += 1
-		self.snapgraph = snapgraph_
-		self.ptaddrs = set() # starts off as a set, but will be a sorted list after this object is completely built. 
-		self.on_finished_constructing_was_called = False
+	# Creating a new vertex that will very likely be added to.  
+	# Could be seen as mutable. 
+	@classmethod
+	def create_open(cls_, snapgraph_):
+		r = cls_()
+		r.id = cls_.next_id
+		cls_.next_id += 1
+		r.snapgraph = snapgraph_
+		r.ptaddrs = set() # starts off as a set, but will be a sorted list after this object is completely built. 
+		r.is_closed = False
+		return r
 
-	def on_finished_constructing(self):
-		self.on_finished_constructing_was_called = True
+	def set_closed(self):
+		self.is_closed = True
 		# We want 'ptaddrs' to have a predictable iteration order across different calls in the same program run 
 		# so that pos() will return the same thing every time, which is a little bit important for Path.latlngs(). 
 		# (Otherwise the polyline that it returns could have some minor but odd things going on around certain corners.) 
@@ -140,7 +147,7 @@ class Vertex(object):
 		self.ptaddrs = sorted(self.ptaddrs)
 
 	def pos(self):
-		assert self.on_finished_constructing_was_called
+		assert self.is_closed
 		return self.snapgraph.get_point(self.ptaddrs[0])
 
 	# arg polylineidx_: None ==> first polyline appearing in this vertex.  Whatever 'first' means.  Arbitrary.  Random.  Any.
@@ -165,7 +172,7 @@ class Vertex(object):
 	def remove_unnecessary_ptaddrs(self):
 		assert isinstance(self.ptaddrs, set)
 		vertex_mean_pos = geom.latlng_avg([self.snapgraph.get_latlng(ptaddr) for ptaddr in self.ptaddrs])
-		assert not self.on_finished_constructing_was_called
+		assert not self.is_closed
 		for plineidx in set(ptaddr.polylineidx for ptaddr in self.ptaddrs):
 			ptidxes = [ptaddr.ptidx for ptaddr in self.ptaddrs if ptaddr.polylineidx == plineidx]
 			if len(ptidxes) > 1:
@@ -196,9 +203,6 @@ class Vertex(object):
 
 	def __repr__(self):
 		return self.__str__()
-
-	def copy(self):
-		return Vertex()
 
 	def to_json_dict(self):
 		return {'id': self.id, 'pos': self.pos(), 
@@ -236,7 +240,7 @@ class PosAddr(object):
 
 	def __str__(self):
 		assert 0.0 <= self.pals < 1.0
-		return 'PosAddr(%s,%.2f)' % (self.linesegaddr, self.pals)
+		return 'PosAddr(%s,%.3f)' % (self.linesegaddr, self.pals)
 
 	def __hash__(self):
 		return hash(self._key())
@@ -431,8 +435,10 @@ class SnapGraph(object):
 			# distance-between-vertexes info is built.)
 			self.init_polylineidx_to_ptidx_to_mapl()
 
-	# return list of (dist, Path) pairs.  Dist is a float, in meters.   List is sorted in ascending order of dist. 
+	# return list of (dist, pathsteps) pairs.  Dist is a float, in meters.   List is sorted in ascending order of dist. 
+	@lru_cache(maxsize=60000, posargkeymask=[1,1,0,1,0])
 	def find_paths(self, startlatlng_, startlocs_, destlatlng_, destlocs_, snap_tolerance=100, out_visited_vertexes=None):
+		assert out_visited_vertexes is None # (temporarily?) unsupported due to caching of return value based on arguments. 
 		start_locs = (startlocs_ if startlocs_ is not None else self.multisnap(startlatlng_, snap_tolerance))
 		dest_locs = (destlocs_ if destlocs_ is not None else self.multisnap(destlatlng_, snap_tolerance))
 		if not(start_locs and dest_locs):
@@ -590,9 +596,10 @@ class SnapGraph(object):
 			dist_between_bounding_pts = ptidx_to_mapl[ptidx+1] - ptidx_to_mapl[ptidx]
 			return dist_between_bounding_pts*posaddr_.pals
 
-	# Returns shortest path, as one (dist, pathsteps) ((float, list<PosAddr|Vertex>)) pair.   If no path is possible, both dist and path will be None. 
+	# Returns shortest path, as one (dist, pathsteps) (i.e. (float, list<PosAddr|Vertex>)) pair.   If no path is possible, 
+	# then both dist and path will be None. 
 	# We pass a fancy 'get connected vertexes' function to dijkstra, to support path finding from somewhere along an edge 
-	# (which dijkstra doesn't do) but pretending like we've inserted a temporary vertex at the start and dest positions. 
+	# (which dijkstra doesn't do) by pretending like we've inserted a temporary vertex at the start and dest positions. 
 	# In the code below, 'vvert' is short for 'virtual vertex' which is a term I made up for this function, 
 	# to describe something that is a vertex in the graph theory sense and from the dijkstra function's perspective, 
 	# but is not necessarily one of our Vertex objects.  A virtual vertex could be a Vertex, or it could be a PosAddr. 
@@ -657,8 +664,9 @@ class SnapGraph(object):
 
 		return (dist, pathsteps)
 
+	# returns None if that vertex ID does not exist.
 	def get_vertex(self, id_):
-		return first(self.get_vertexes(), lambda vertex: vertex.id == id_)
+		return self.vertexid_to_vertex.get(id_)
 
 	def init_path_structures(self, disttolerance_):
 		self.paths_disttolerance = disttolerance_
@@ -776,7 +784,7 @@ class SnapGraph(object):
 	def get_addr_to_vertex(self, disttolerance_):
 		latlngid_to_ontop_latlngids = self.get_graph_latlngid_to_ontop_latlngids(disttolerance_)
 		latlngid_to_addr = self.get_latlngid_to_addr(latlngid_to_ontop_latlngids)
-		ptaddr_to_vertex = defaultdict(lambda: Vertex(self))
+		ptaddr_to_vertex = defaultdict(lambda: Vertex.create_open(self))
 
 		# Iterating in a sorted order like this not because this sort has any 
 		# useful meaning in itself, but so that the Vertex objects are created in a 
@@ -800,7 +808,7 @@ class SnapGraph(object):
 				del ptaddr_to_vertex[ptaddr]
 
 		for vertex in ptaddr_to_vertex.values():
-			vertex.on_finished_constructing()
+			vertex.set_closed()
 
 		return dict(ptaddr_to_vertex)
 
@@ -893,29 +901,16 @@ class SnapGraph(object):
 	def get_point(self, linesegaddr_):
 		return self.polylines[linesegaddr_.polylineidx][linesegaddr_.ptidx]
 
-	# returns: list of (PosAddr or Vertex), sorted by dist to target_ in increasing order. 
-	# There are three stages to this.  The first stage finds all of the possible lineseg snaps.  Simple.  
+	# returns: list, each element either a PosAddr or a Vertex, sorted by dist to target_ in increasing order. 
+	# There are three stages to this.  The first stage finds all of the possible lineseg (i.e. PosAddr) snaps.  Simple.  
 	# 
 	# The second stage reduces that list of lineseg snaps to probably one per polyline.  The reason for doing this is because 
 	# for most cases, several consecutive linesegs will be within the search radius, and we'll see a lot of useless 
 	# snaps with a pals of 0 or 1.  These are not useful.  So we get the closest ones to our target only, 
 	# AKA the local minima by dist to target.
 	# 
-	# The third stage (which is optional and might not be a good idea) reduces 
-	# the list more, in a similar way, but looking across polylines.  This deals 
-	# best with the scenario of many short streets (polylines) in a small area.  
-	# So before this stage there would tend to be many snaps at one extreme 
-	# end of each of these polylines - which will be at a vertex which connects that polyline to the one that the target is 
-	# closest to.  (Or there might be a polyline or two in between - same issue.)   So we look at connected groups of polylines.  
-	# There is a chance that we could throw out some useful results in this stage.  
-	# There is something special about the heading difference chosen - it is the same as the approximate smallest angle between two 
-	# streets that I could find.  (Jarvis & Mt. Pleasant.)  I would explain this more but I don't have the energy right now.
-	# This code will do you a disservice if you use it on an unusual layout, such as polylines 
-	# with a long skinny 'U' shape.  But the graphs that we use aren't like that. 
-	# The third stage caused a problem in the scenario of a T intersection where the vertical part of the T extends a little 
-	# too high, past the horizontal part.  See doc/comment-multisnap-t-intersection-reduce-pitfall.png.   
-	# I think I'll disable this third stage for now. 
-	def multisnap(self, target_, searchradius_, reducepts=False):
+	# The third stages adds all of the vertexes surrounding the posaddrs that we have.
+	def multisnap(self, target_, searchradius_):
 		assert searchradius_ is not None
 		linesegaddr_to_lssr = {}
 		for linesegaddr in self.get_nearby_linesegaddrs(GridSquare(target_), searchradius_):
@@ -936,21 +931,7 @@ class SnapGraph(object):
 				lssr = plines_lssrs[idx]
 				posaddr_to_dist[PosAddr(linesegaddr, lssr.pals)] = lssr.dist
 
-		if reducepts:
-			are_posaddrs_connected = lambda pa1, pa2: self.are_plines_connected(pa1.linesegaddr.polylineidx, pa2.linesegaddr.polylineidx)
-			connected_posaddr_groups = get_maximal_connected_groups(posaddr_to_dist.keys(), are_posaddrs_connected)
-			r = []
-			for connected_posaddr_group in connected_posaddr_groups:
-				connected_posaddr_group.sort(key=lambda posaddr: posaddr_to_dist[posaddr])
-				r_for_connected_group = []
-				for candidate_posaddr in connected_posaddr_group:
-					candidate_heading = target_.heading(self.get_latlng(candidate_posaddr))
-					if not any(geom.diff_headings(candidate_heading, target_.heading(self.get_latlng(other_posaddr))) < 35 \
-							for other_posaddr in r_for_connected_group):
-						r_for_connected_group.append(candidate_posaddr)
-				r += r_for_connected_group
-		else:
-			r = posaddr_to_dist.keys()
+		r = posaddr_to_dist.keys()
 
 		vert_to_dist = {}
 		for pos in r:
@@ -1541,6 +1522,31 @@ def a_star(srcvertex_, destvertex_, all_vertexes_, get_connected_vertexndists_, 
 
 def isloc(obj_):
 	return isinstance(obj_, Vertex) or isinstance(obj_, PosAddr)
+
+def graph_locs_to_json_str(r_):
+	output_list = []
+	for loc in r_:
+		if isinstance(loc, PosAddr):
+			output_e = [loc.linesegaddr.polylineidx, loc.linesegaddr.ptidx, round(loc.pals, 4)]
+		elif isinstance(loc, Vertex):
+			output_e = loc.id
+		else:
+			raise Exception()
+		output_list.append(output_e)
+	return json.dumps(output_list, separators=(',',':'))
+
+def parse_graph_locs_json_str(str_, sg_):
+	obj = json.loads(str_)
+	assert isinstance(obj, Sequence)
+	r = []
+	for e in obj:
+		if isinstance(e, int):
+			output_loc = sg_.get_vertex(e)
+		else:
+			assert is_seq_like(e, [0,0,0.0])
+			output_loc = PosAddr(PosAddr(e.polylineidx, e.ptidx), e.pals)
+		r.append(output_loc)
+	return r
 
 if __name__ == '__main__':
 

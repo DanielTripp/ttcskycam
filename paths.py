@@ -620,7 +620,7 @@ def get_pathgridsquare(latlng_):
 HEADING_ROUND = 30
 
 def round_heading_for_paths_db(heading_):
-	return geom.normalize_heading(round(heading_, HEADING_ROUND))
+	return geom.normalize_heading(roundbystep(heading_, HEADING_ROUND))
 
 def paths_already_present_in_db(orig_square_, dest_square_, heading_):
 	orig_dest_key = orig_dest_squares_key(orig_square_, dest_square_, heading_)

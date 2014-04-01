@@ -294,7 +294,7 @@ def round_down(x_, step_):
 	else:
 		return fdiv(x_, step_)*step_
 
-def round(x_, step_):
+def roundbystep(x_, step_):
 	rd = round_down(x_, step_)
 	ru = round_up(x_, step_)
 	return (rd if x_ - rd < ru - x_ else ru)

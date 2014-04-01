@@ -88,7 +88,7 @@ def get_traffics_visuals(mofr_to_avgspeedandweight_, froute_, dir_, datazoom_):
 	ri = routes.routeinfo(froute_)
 	for routept1_mofr, routept2_mofr in hopscotch(ri.routeptmofrs(dir_, datazoom_)):
 		route_seg_len = routept2_mofr - routept1_mofr
-		routept1_mofr_ref = round(routept1_mofr, mofrstep); routept2_mofr_ref = round(routept2_mofr, mofrstep)
+		routept1_mofr_ref = roundbystep(routept1_mofr, mofrstep); routept2_mofr_ref = roundbystep(routept2_mofr, mofrstep)
 		for mofr_ref in range(routept1_mofr_ref, routept2_mofr_ref+1, mofrstep):
 			if mofr_ref not in mofr_to_avgspeedandweight_: continue
 			seg_start_mofr = max(mofr_ref - mofrstep/2, routept1_mofr)
@@ -310,7 +310,7 @@ def get_est_riding_time_secs(froute_, start_mofr_, dest_mofr_, current_, time_):
 	r_secs = 0
 	if startmofr != round_up_off_step(startmofr, mofrstep):
 		dist_m = round_up_off_step(startmofr, mofrstep) - startmofr
-		speed_kmph = mofr_to_kmph[round(startmofr, mofrstep)]
+		speed_kmph = mofr_to_kmph[roundbystep(startmofr, mofrstep)]
 		if speed_kmph is None:
 			return None
 		speed_mps = kmph_to_mps(speed_kmph)
@@ -326,7 +326,7 @@ def get_est_riding_time_secs(froute_, start_mofr_, dest_mofr_, current_, time_):
 		cur_offstep_mofr += mofrstep
 	if destmofr != round_down_off_step(destmofr, mofrstep):
 		dist_m = destmofr - round_down_off_step(destmofr, mofrstep)
-		speed_kmph = mofr_to_kmph[round(destmofr, mofrstep)]
+		speed_kmph = mofr_to_kmph[roundbystep(destmofr, mofrstep)]
 		if speed_kmph is None:
 			return None
 		speed_mps = kmph_to_mps(speed_kmph)
