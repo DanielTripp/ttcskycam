@@ -27,42 +27,25 @@ if __name__ == '__main__':
 			report_timestr = '%s %02d:%02d' % (yyyymmdd, hour, minute)
 			report_time = str_to_em(report_timestr)
 			curs = db.conn().cursor()
-			sqlstr = 'select froute, time_inserted_str from reports where time = %s order by time_inserted_str, froute' 
+			sqlstr = 'select time_inserted_str from reports where time = %s order by time_inserted_str' 
 			curs.execute(sqlstr, [report_time])
 			time_inserted_strs = []
-			froute_to_mintime_n_maxtime = defaultdict(lambda: [None,None])
-			last_froute = None
 			for row in curs:
-				time_inserted_str = row[1]
+				time_inserted_str = row[0]
 				time_inserted_strs.append(time_inserted_str)
-				froute = row[0]
-				if froute != last_froute:
-					froute_to_mintime_n_maxtime[last_froute][1] = time_inserted_str
-					froute_to_mintime_n_maxtime[froute][0] = time_inserted_str
-					last_froute = froute
 			curs.close()
-
-			for froute, (mintime, maxtime) in froute_to_mintime_n_maxtime.iteritems():
-				#print froute, mintime, maxtime
-				if maxtime and mintime:
-					timegap = (str_to_em(maxtime) - str_to_em(mintime))/1000
-					froute_to_timetally[froute][0] += timegap
-					froute_to_timetally[froute][1] += 1
-					#print froute, timegap
-				else:
-					pass # print 'omitting %s' % froute
-
 
 			out_report_timestr = report_timestr[11:]
 			if len(time_inserted_strs) > 0:
-				numsecs = (str_to_em(max(time_inserted_strs)) - str_to_em(min(time_inserted_strs)))/1000
-				print out_report_timestr, numsecs  
+				secs_span = (str_to_em(max(time_inserted_strs)) - str_to_em(min(time_inserted_strs)))/1000
+				# Seconds after the 'poll minute' that the last report was inserted: 
+				time_finished_secs = (str_to_em(max(time_inserted_strs)) - (report_time-1000*60))/1000
+				span_flagstr = '%-5s' % ('*'*rein_in((secs_span-25)/5, 0, 5)) # tricky: lowest non-zero yielded for secs_span=30, not 25 or 26.  
+				finished_flagstr = '%-5s' % ('*'*rein_in((time_finished_secs-35)/5, 0, 5)) # Likewise with 40, not 35 or 36.
+				print '%s  took: %3ds  finished: %3ds  %s %s' % \
+						(out_report_timestr, secs_span, time_finished_secs, span_flagstr, finished_flagstr)
 			else:
 				print out_report_timestr
 
-
-	if 0:
-		for timetally, froute in sorted([(float(y[0])/y[1], x) for x, y in froute_to_timetally.items()], reverse=True):
-			print timetally, froute
 
 
