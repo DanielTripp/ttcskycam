@@ -6,7 +6,8 @@ Tables involved:
 
 create table ttc_vehicle_locations (vehicle_id varchar(100), fudgeroute varchar(20), route_tag varchar(10), dir_tag varchar(100), 
      lat double precision, lon double precision, secs_since_report integer, time_retrieved bigint, 
-     predictable boolean, heading integer, time bigint, time_str varchar(100), rowid serial unique, mofr integer, widemofr integer);
+     predictable boolean, heading integer, time bigint, time_str varchar(100), rowid serial unique, mofr integer, widemofr integer, 
+		 graph_locs varchar(300), graph_version integer);
 create index ttc_vehicle_locations_idx on ttc_vehicle_locations (fudgeroute, time_retrieved desc);
 create index ttc_vehicle_locations_idx2 on ttc_vehicle_locations (vehicle_id, time_retrieved desc);
 create index ttc_vehicle_locations_idx3 on ttc_vehicle_locations  (time_retrieved) ; 
@@ -33,7 +34,7 @@ from misc import *
 
 HOSTMONIKER_TO_IP = {'theorem': '72.2.4.176', 'black': '24.52.231.206', 'u': 'localhost'}
 
-VI_COLS = ' dir_tag, heading, vehicle_id, lat, lon, predictable, fudgeroute, route_tag, secs_since_report, time_retrieved, time, mofr, widemofr '
+VI_COLS = ' dir_tag, heading, vehicle_id, lat, lon, predictable, fudgeroute, route_tag, secs_since_report, time_retrieved, time, mofr, widemofr, graph_locs, graph_version '
 
 PREDICTION_COLS = ' fudgeroute, configroute, stoptag, time_retrieved, time_of_prediction, vehicle_id, is_departure, block, dirtag, triptag, branch, affected_by_layover, is_schedule_based, delayed'
 
@@ -123,8 +124,8 @@ def insert_vehicle_info(vi_):
 	else:
 		mofr = None; widemofr = None
 	cols = [vi_.vehicle_id, vi_.fudgeroute, vi_.route_tag, vi_.dir_tag, vi_.lat, vi_.lng, vi_.secs_since_report, vi_.time_retrieved, \
-		vi_.predictable, vi_.heading, vi_.time, em_to_str(vi_.time), mofr, widemofr]
-	curs.execute('INSERT INTO ttc_vehicle_locations VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,default,%s,%s)', cols)
+		vi_.predictable, vi_.heading, vi_.time, em_to_str(vi_.time), mofr, widemofr, vi_.get_graph_locs_json_str(), vi_.get_cur_graph_version()]
+	curs.execute('INSERT INTO ttc_vehicle_locations VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,default,%s,%s,%s,%s)', cols)
 	curs.close()
 
 def vi_select_generator(froute_, end_time_em_, start_time_em_, dir_=None, include_unpredictables_=False, vid_=None, \
@@ -646,7 +647,8 @@ def interp_by_time(vilist_, be_clever_, current_conditions_, dir_=None, datazoom
 					i_latlon, i_heading, i_mofr = interp_latlonnheadingnmofr(lo_vi, hi_vi, time_ratio, datazoom_, be_clever_)
 				i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, i_heading, vid, i_latlon.lat, i_latlon.lng,
 										 lo_vi.predictable and hi_vi.predictable,
-										 lo_vi.fudgeroute, lo_vi.route_tag, 0, interptime, interptime, i_mofr, None)
+										 lo_vi.fudgeroute, lo_vi.route_tag, 0, interptime, interptime, i_mofr, None, 
+										 None, None)
 			elif lo_vi and not hi_vi:
 				if current_conditions_:
 					if (interptime - lo_vi.time > 3*60*1000) or dirs_disagree(dir_, lo_vi.dir_tag_int):
@@ -656,7 +658,8 @@ def interp_by_time(vilist_, be_clever_, current_conditions_, dir_=None, datazoom
 					else:
 						latlng, heading = get_latlonnheadingnmofr_from_lo_sample(lolo_vi, lo_vi, datazoom_, be_clever_)[:2]
 					i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, heading, vid, latlng.lat, latlng.lng,
-							lo_vi.predictable, lo_vi.fudgeroute, lo_vi.route_tag, 0, interptime, interptime, lo_vi.mofr, lo_vi.widemofr)
+							lo_vi.predictable, lo_vi.fudgeroute, lo_vi.route_tag, 0, interptime, interptime, lo_vi.mofr, lo_vi.widemofr, 
+							None, None)
 
 			if i_vi:
 				time_to_out_vis[interptime].append(i_vi)
@@ -706,38 +709,7 @@ def get_grade_stretch_info(vis_, be_clever_, log_):
 	if not be_clever_:
 		return (defaultdict(lambda: 'o'), {})
 
-	# In meters.  This is more or less a maximum GPS error - that is, the maximum 
-	# distance that there could be between a lat/lng sample and where that 
-	# vehicle really is.  I think that this is in the right ballpark but the 
-	# thinking here (and nearby) probably isn't as clear as it should be.  For 
-	# example, I haven't considered here the maximum distance between where I 
-	# think a road or streetcar track is and where it really is.  Or the vertex 
-	# distance tolerance that was used when building the vertex list for each 
-	# instance of SnapGraph - that is, the maximum distance apart two line or 
-	# points can be while still being considered to intersect.  Neither have I 
-	# considered the maximum distance that can be introduced between a polyline 
-	# and it's RDP-simplified version.
-	# 150 meters might seem high but I observed 140 before - vid 4114, 2014-01-31 11:14:47.
-	T = 150 
-
 	vi_to_offroute = dict((vi, vi.mofr == -1) for vi in vis_)
-	if 0:
-		for stretch in get_maximal_sublists3(vis_, lambda vi: vi_to_offroute[vi]):
-			if not vi_to_offroute[stretch[0]]:
-				mofrs = set(vi.mofr for vi in stretch)
-				min_mofr = min(mofrs); max_mofr = max(mofrs)
-				for vi in stretch:
-					if vi.mofr - min_mofr < T or max_mofr - vi.mofr < T:
-						vi_to_offroute[vi] = True
-
-	if 0: # tdr 
-		try: # tdr
-			print 'x ----'
-			for vi, offroute in iteritemssorted(vi_to_offroute): # tdr 
-				print 'x', vi, '---', offroute # tdr
-			print 'x ----'
-		except Exception, e: # tdr
-			print e # tdr
 
 	stretches = get_maximal_sublists3(vis_, lambda vi: vi_to_offroute[vi])
 	for stretchi in range(len(stretches)):
@@ -747,7 +719,7 @@ def get_grade_stretch_info(vis_, be_clever_, log_):
 				ref_mofr = stretch[0].mofr
 				vi_to_offroute[stretch[0]] = True
 				for vi in stretch[1:]:
-					if abs(vi.mofr - ref_mofr) < T:
+					if abs(vi.mofr - ref_mofr) < c.GRAPH_SNAP_RADIUS:
 						vi_to_offroute[vi] = True
 					else:
 						break
@@ -755,27 +727,18 @@ def get_grade_stretch_info(vis_, be_clever_, log_):
 				ref_mofr = stretch[-1].mofr
 				vi_to_offroute[stretch[-1]] = True
 				for vi in stretch[-2::-1]:
-					if abs(vi.mofr - ref_mofr) < T:
+					if abs(vi.mofr - ref_mofr) < c.GRAPH_SNAP_RADIUS:
 						vi_to_offroute[vi] = True
 					else:
 						break
 			
-	if 0: # tdr 
-		try: # tdr
-			print 'x ----'
-			for vi, offroute in iteritemssorted(vi_to_offroute): # tdr 
-				print 'x', vi, '---', offroute # tdr
-			print 'x ----'
-		except Exception, e: # tdr
-			print e # tdr
-
 	stretches = get_maximal_sublists3(vis_, lambda vi: vi_to_offroute[vi])
 	for stretchi in range(len(stretches)):
 		stretch = stretches[stretchi]
 		if not vi_to_offroute[stretch[0]]:
 			mofrs = [vi.mofr for vi in stretch]
 			mofr_span = max(mofrs) - min(mofrs)
-			if mofr_span < T:
+			if mofr_span < c.GRAPH_SNAP_RADIUS:
 				for vi in stretch:
 					vi_to_offroute[vi] = True
 
@@ -784,33 +747,12 @@ def get_grade_stretch_info(vis_, be_clever_, log_):
 	if DISABLE_GRAPH_PATHS:
 		return (vi_to_grade, {})
 
-	if 0: # tdr
-		return (vi_to_grade, {})
-
-	if 0: # tdr 
-		try: # tdr
-			print 'x ----'
-			for vi, offroute in iteritemssorted(vi_to_offroute): # tdr 
-				print 'x', vi, '---', offroute # tdr
-			print 'x ----'
-		except Exception, e: # tdr
-			print e # tdr
-
-		try: # tdr
-			if 1:
-				for vi in vis_:
-					print 'grade:', vi, vi_to_grade[vi]
-				print '---'
-		except Exception, e: # tdr
-			print e # tdr
-
 	vi_to_locs = {}
 	sg = (tracks.get_snapgraph() if vis_[0].is_a_streetcar() else streets.get_snapgraph())
-	for i, vi in enumerate(vis_):
+	for vi in vis_:
 		if vi_to_grade[vi] == 'o':
-			locs = sg.multisnap(vi.latlng, T)
+			locs = vi.graph_locs
 			if len(locs) > 0:
-				vi_to_locs[vi] = locs
 				vi_to_grade[vi] = 'g'
 
 	def get_grade(stretch__):
@@ -837,28 +779,19 @@ def get_grade_stretch_info(vis_, be_clever_, log_):
 	for stretchi, stretch in enumerate(stretches):
 		if get_grade(stretch) == 'g':
 			latlngs = [vi.latlng for vi in stretch]
-			locses = [vi_to_locs[vi] for vi in stretch]
+			locses = [vi.graph_locs for vi in stretch]
 			if stretchi > 0 and get_grade(stretches[stretchi-1]) == 'r':
-				latlng = stretches[stretchi-1][-1].latlng
-				latlngs.insert(0, latlng)
-				locses.insert(0, sg.multisnap(latlng, T))
+				vi = stretches[stretchi-1][-1]
+				latlngs.insert(0, vi.latlng)
+				locses.insert(0, vi.graph_locs)
 			if stretchi < len(stretches)-1 and get_grade(stretches[stretchi+1]) == 'r':
-				latlng = stretches[stretchi+1][0].latlng
-				latlngs.append(latlng)
-				locses.append(sg.multisnap(latlng, T))
-			dist, path = sg.find_multipath(latlngs, locses, T, log_)
+				vi = stretches[stretchi+1][0]
+				latlngs.append(vi.latlng)
+				locses.append(vi.graph_locs)
+			dist, path = sg.find_multipath(latlngs, locses, c.GRAPH_SNAP_RADIUS, log_)
 			assert dist is not None and path is not None
 			for vi in stretch:
 				vi_to_path[vi] = path
-
-	if 0: # tdr 
-		try: # tdr
-			if 1:
-				for vi in vis_:
-					print 'grade:', vi, vi_to_grade[vi]
-			sys.exit(1)
-		except Exception, e: # tdr
-			print e # tdr
 
 	if log_:
 		printerr('Grades for vid %s:' % vis_[0].vehicle_id)

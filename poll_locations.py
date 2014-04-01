@@ -4,7 +4,7 @@ import sys, subprocess, re, time, xml.dom, xml.dom.minidom, traceback, json, get
 T0 = time.time()
 from collections import *
 from xml.parsers.expat import ExpatError
-import db, vinfo, routes
+import db, vinfo, routes, tracks, streets
 from misc import *
 
 POLL_PERIOD_SECS = 60
@@ -54,7 +54,7 @@ def deal_with_xml(xmldoc_, insert_into_db_, vis_fout_):
 		if insert_into_db_:
 			db.insert_vehicle_info(vehicle_info)
 		if vis_fout_:
-			print >> vis_fout_, vehicle_info
+			print >> vis_fout_, vehicle_info.str_long()
 
 	return {'nextbus_lasttime': nextbus_lasttime, 'our_system_time_on_poll_finish': now_em()}
 
@@ -98,6 +98,15 @@ def poll_once(routelist_, insert_into_db_, pollstate_filename_, xml_fout_, vis_f
 		with open(pollstate_filename_, 'w') as fout:
 			json.dump(route_to_times, fout, indent=0)
 
+def get_graphs_into_ram():
+	# Doing this because this is currently called as a cron job every minute i.e. new process every minute. 
+	# If we poll nextbus THEN read these large snapgraphs into memory (which takes several seconds) on first use, 
+	# then the information for that first route polled will be a few seconds more out of date than it needs to be. 
+	# If we ever change our polling of NextBus here to be done in a long-lived process rather than cron, 
+	# then this can be removed.
+	tracks.get_snapgraph()
+	streets.get_snapgraph()
+
 if __name__ == '__main__':
 
 	opts, args = getopt.getopt(sys.argv[1:], '', ['routes=', 'pollstatefile=', 'redirect-stdstreams-to-file', 
@@ -118,6 +127,8 @@ if __name__ == '__main__':
 	xml_fout = (open(get_opt(opts, 'dump-xml'), 'a') if get_opt(opts, 'dump-xml') else None)
 	vis_fout = (open(get_opt(opts, 'dump-vis'), 'a') if get_opt(opts, 'dump-vis') else None)
 	insert_into_db = not get_opt(opts, 'dont-insert-into-db')
+
+	get_graphs_into_ram()
 
 	poll_once(routelist, insert_into_db, pollstate_filename, xml_fout, vis_fout)
 

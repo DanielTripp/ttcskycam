@@ -533,7 +533,7 @@ class RouteInfo:
 			# mofr 100, and if you want to know the traffic at mofr 151 you should consult 200.   This results in the lines being 
 			# drawn offset by half of mofrstep - eg. one line from 50 to 150, the next from 150 to 250 (more or less.  I'm not 
 			# bothering with off-by-ones here.) 
-			start_mofr_ref = round(start_mofr_, mofrstep); end_mofr_ref = round(end_mofr_, mofrstep)
+			start_mofr_ref = roundbystep(start_mofr_, mofrstep); end_mofr_ref = roundbystep(end_mofr_, mofrstep)
 			start_and_end_are_not_in_adjacent_mofrstep_segments = (end_mofr_ref - start_mofr_ref > mofrstep)
 
 			r |= start_and_end_are_not_in_adjacent_mofrstep_segments

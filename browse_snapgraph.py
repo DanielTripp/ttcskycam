@@ -24,8 +24,8 @@ def find_multipath(sgname_, latlngs_):
 	path = sg(sgname_).find_multipath(latlngs_)[1]
 	return (path.latlngs() if path is not None else None)
 
-def multisnap(sgname_, latlng_, radius_, reducepts_):
-	posaddrs = sg(sgname_).multisnap(latlng_, radius_, reducepts=reducepts_)
+def multisnap(sgname_, latlng_, radius_):
+	posaddrs = sg(sgname_).multisnap(latlng_, radius_)
 	return [(sg(sgname_).get_latlng(posaddr), str(posaddr)) for posaddr in posaddrs]
 
 def get_pline_latlngs(sgname_, plineidx_):

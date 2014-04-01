@@ -114,7 +114,7 @@ function get_sgname() {
 function on_map_clicked(mouseevent_) {
 	forget_multisnap_objects();
 	set_contents('p_multisnap_info', 'Multisnap: ...');
-	callpy('browse_snapgraph.multisnap', get_sgname(), mouseevent_.latLng, MULTISNAP_RADIUS, is_selected('multisnap_reducepts_checkbox'), 
+	callpy('browse_snapgraph.multisnap', get_sgname(), mouseevent_.latLng, MULTISNAP_RADIUS, 
 		{success: function(latlng_n_posaddrstrs__) {
 			var infostr = sprintf('Multisnap: arg: geom.LatLng(%.8f,%.8f) <br>%d result(s):', 
 					mouseevent_.latLng.lat(), mouseevent_.latLng.lng(), latlng_n_posaddrstrs__.length);
@@ -435,8 +435,6 @@ function on_vertid_button_clicked() {
 		 ////////
 		<input type="checkbox" id="multisnap_show_infowindows" />
 		<label for="multisnap_show_infowindows">Multisnap: show infowindows</label> , 
-		<input type="checkbox" id="multisnap_reducepts_checkbox" />
-		<label for="multisnap_reducepts_checkbox">Multisnap: reduce points</label>
 		///////
 		<label><input id="map_sync_checkbox" type="checkbox"/>Map Sync</label>
 		<p id="p_error"/>

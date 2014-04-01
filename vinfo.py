@@ -1,7 +1,7 @@
 #!/usr/bin/python2.6
 
 import re, copy
-import geom, routes
+import geom, routes, snapgraph, tracks, streets, c
 from misc import *
 
 DONT_USE_WRITTEN_MOFRS = os.path.exists('DONT_USE_WRITTEN_MOFRS')
@@ -33,18 +33,19 @@ class VehicleInfo:
 			(True if elem_.getAttribute('predictable').lower() == 'true' else False),
 			froute, croute, 
 			int(elem_.getAttribute('secsSinceReport')),  
-			0L, 0L, None, None)
+			0L, 0L, None, None, None, None)
 		return r
 
 	@classmethod
 	def from_db(cls_, dir_tag_, heading_, vehicle_id_, lat_, lon_, predictable_, fudgeroute_, route_tag_, secs_since_report_, \
-			time_retrieved_, time_, mofr_, widemofr_):
+			time_retrieved_, time_, mofr_, widemofr_, graph_locs_str_, graph_version_):
 		r = cls_(dir_tag_, heading_, vehicle_id_, lat_, lon_, predictable_, fudgeroute_, route_tag_, secs_since_report_, time_retrieved_, time_,
-				 (None if DONT_USE_WRITTEN_MOFRS else mofr_), (None if DONT_USE_WRITTEN_MOFRS else widemofr_))
+				 (None if DONT_USE_WRITTEN_MOFRS else mofr_), (None if DONT_USE_WRITTEN_MOFRS else widemofr_), 
+				 graph_locs_str_, graph_version_)
 		return r
 
 	def __init__(self, dir_tag_, heading_, vehicle_id_, lat_, lon_, predictable_, fudgeroute_, route_tag_, secs_since_report_, \
-				time_retrieved_, time_, mofr_, widemofr_):
+				time_retrieved_, time_, mofr_, widemofr_, graph_locs_str_, graph_version_):
 		assert type(dir_tag_) == str and type(heading_) == int and type(vehicle_id_) == str \
 			and type(lat_) == float and type(lon_) == float \
 			and type(predictable_) == bool and type(route_tag_) == str \
@@ -62,6 +63,32 @@ class VehicleInfo:
 		self._mofr = mofr_
 		self._widemofr = widemofr_
 		self.is_dir_tag_corrected = False
+		assert (graph_locs_str_ is None) == (graph_version_ is None)
+		if graph_locs_str_ is None or graph_version_ != self.get_cur_graph_version():
+			self._graph_locs = None
+		else:
+			self._graph_locs = snapgraph.parse_graph_locs_json_str(graph_locs_str_, self.get_snapgraph())
+
+	def get_snapgraph(self):
+		if self.is_a_streetcar():
+			return tracks.get_snapgraph()
+		else:
+			return streets.get_snapgraph()
+
+	def get_cur_graph_version(self):
+		if self.is_a_streetcar():
+			return c.TRACKS_GRAPH_VERSION
+		else:
+			return c.STREETS_GRAPH_VERSION
+
+	@property
+	def graph_locs(self):
+		if self._graph_locs is None:
+			self._graph_locs = self.get_snapgraph().multisnap(self.latlng, c.GRAPH_SNAP_RADIUS)
+		return self._graph_locs
+
+	def get_graph_locs_json_str(self):
+		return snapgraph.graph_locs_to_json_str(self.graph_locs)
 
 	def _key(self):
 		return (self.dir_tag, self.heading, self.vehicle_id, self.latlng, self.predictable, self.fudgeroute, self.route_tag, self.secs_since_report, self.time_retrieved, self.time, self._mofr, self._widemofr, self.is_dir_tag_corrected)
@@ -116,7 +143,10 @@ class VehicleInfo:
 		return '%s  r=%-6s, vid=%s, dir: %s%-12s, (%.7f,%.7f), h=%3d, mofr=%5d%s%5d%s' \
 			% (self.timestr, routestr, self.vehicle_id, ('*' if self.is_dir_tag_corrected else ' '), self.dir_tag,
 			   self.latlng.lat, self.latlng.lng, self.heading, self.mofr, ('!' if self.mofr!=self.widemofr else ' '), self.widemofr,
-			   ('' if self.predictable else ' U'))
+			   ('  ' if self.predictable else ' U'))
+
+	def str_long(self):
+		return self.__str__() + (' %s %d' % (self.get_graph_locs_json_str(), self.get_cur_graph_version()))
 
 	def __repr__(self):
 		return self.__str__()
@@ -175,9 +205,12 @@ class VehicleInfo:
 		# At least, I think that starting w/ 4 means streetcar.  This logic is also implemented in traffic.php. 
 		return self.vehicle_id.startswith('4') 
 
+	# Probably shouldn't be used anywhere performance is important in it's present state, because 
+	# we nullifies _graph_locs. 
 	def copy(self):
 		r = copy.copy(self)
 		r.latlng = r.latlng.copy()
+		r._graph_locs = None # Setting to None so that these will be recalculated on next use of the property. 
 		return r
 
 	def mofrchunk(self, mofrstep_):
@@ -185,7 +218,7 @@ class VehicleInfo:
 
 def makevi1(**kwargs):
 	r = VehicleInfo('', -4, '9999', 43.0, -79.0, True, '', '', 0, 0L, 0L,
-		None, None)
+		None, None, None, None)
 	for key, val in kwargs.iteritems():
 		setattr(r, key, val)
 	return r
@@ -199,7 +232,7 @@ def makevi(pos_, timestr_, *args_):
 	else:
 		raise ValueError()
 
-	r = VehicleInfo('', -4, '9999', 43.0, -79.0, True, 'dundas', '', 0, time_em, time_em, None, None)
+	r = VehicleInfo('', -4, '9999', 43.0, -79.0, True, 'dundas', '', 0, time_em, time_em, None, None, None, None)
 	dir_int = 0
 	for arg in args_:
 		if isinstance(arg, str) and re.match(r'\d\d\d\d', arg):
