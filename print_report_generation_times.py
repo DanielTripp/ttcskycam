@@ -41,7 +41,7 @@ if __name__ == '__main__':
 				# Seconds after the 'poll minute' that the last report was inserted: 
 				time_finished_secs = (str_to_em(max(time_inserted_strs)) - (report_time-1000*60))/1000
 				span_flagstr = '%-5s' % ('*'*rein_in((secs_span-25)/5, 0, 5)) # tricky: lowest non-zero yielded for secs_span=30, not 25 or 26.  
-				finished_flagstr = '%-5s' % ('*'*rein_in((time_finished_secs-35)/5, 0, 5)) # Likewise with 40, not 35 or 36.
+				finished_flagstr = '%-5s' % ('*'*rein_in((time_finished_secs-50)/5, 0, 5)) # Likewise with 55, not 50 or 51.
 				print '%s  took: %3ds  finished: %3ds  %s %s' % \
 						(out_report_timestr, secs_span, time_finished_secs, span_flagstr, finished_flagstr)
 			else:
