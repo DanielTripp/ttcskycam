@@ -15,7 +15,10 @@
 # matter), to be re-created on the next incoming request. 
 
 
-import sys, os, os.path, subprocess, signal, re, time, functools
+import sys, os, os.path, subprocess, signal, re, time, functools, collections, functools
+from itertools import ifilterfalse
+from heapq import nsmallest
+from operator import itemgetter
 if len(sys.argv[0]) > 0 and (sys.argv[0] != '-c'): 
 	# b/c sys.argv[0] will be '' if this is imported from an interactive interpreter, 
 	# and we don't want to chdir in that case anyway. 
@@ -23,6 +26,7 @@ if len(sys.argv[0]) > 0 and (sys.argv[0] != '-c'):
 	if len(new_cwd) > 0:
 		os.chdir(new_cwd) 
 import memcache
+from lru_cache import lru_cache
 import c
 from misc import *
 
@@ -33,8 +37,6 @@ NUM_MEGS = 100
 INSTANCE_TO_PORT = {'dev': 2029, 'prod': 2030}
 
 g_memcache_client = None
-
-g_in_process_cache_key_to_value = {}
 
 # Meaning: this process is going to be a client of the memcache.  Which port should it use? 
 def client_get_port():
@@ -52,12 +54,14 @@ def get_memcache_client():
 # Important that the return value of this is a str, because that's what the memcache client insists on.  
 # Unicode will cause an error right away. 
 # Also - memcached can't handle spaces in keys, so we avoid that. 
-def make_key(func_, args_, kwargs_):
+def make_key(func_, args_, kwargs_, posargkeymask=None):
+	assert posargkeymask is None or len(posargkeymask) == len(args_)
 	if isinstance(func_, str):
 		name = func_
 	else:
 		name = '%s.%s' % (func_.__module__, func_.__name__)
-	str_arg_list = [str(arg) for arg in args_] + ['%s=%s' % (kwargname, kwargs_[kwargname]) for kwargname in sorted(kwargs_.keys())]
+	str_arg_list = [str(arg) for i, arg in enumerate(args_) if posargkeymask is None or posargkeymask[i]] 
+	str_arg_list += ['%s=%s' % (kwargname, kwargs_[kwargname]) for kwargname in sorted(kwargs_.keys())]
 	r = '%s-%s(%s)' % (c.VERSION, name, ','.join(str_arg_list))
 	SPACE_REPLACER = '________'
 	assert SPACE_REPLACER not in r
@@ -69,36 +73,33 @@ def set(func_, args_, kwargs_, value_):
 	get_memcache_client().set(key, value_)
 
 # Will try to get from memcache, and if that fails, then call the func_ (the implementation function.) 
-def get(func_, args_=[], kwargs_={}, key=None):
+def get(func_, args_=[], kwargs_={}, key=None, posargkeymask=None):
+	assert not (key is not None and posargkeymask is not None)
 	args_ = args_[:]
 	if key is None:
-		key2 = make_key(func_, args_, kwargs_)
+		key2 = make_key(func_, args_, kwargs_, posargkeymask=posargkeymask)
 	else:
 		key2 = key
-	if key2 in g_in_process_cache_key_to_value:
-		if LOG: printerr('Found in in-process cache: %s' % key2)
-		r = g_in_process_cache_key_to_value[key2]
+	r = get_memcache_client().get(key2)
+	if r is None:
+		if LOG: printerr('Not found in memcache:     %s' % key2)
+		r = func_(*args_, **kwargs_)
+		get_memcache_client().set(key2, r)
 	else:
-		r = get_memcache_client().get(key2)
-		if r is None:
-			if LOG: printerr('Not found in memcache:     %s' % key2)
-			r = func_(*args_, **kwargs_)
-			get_memcache_client().set(key2, r)
-		else:
-			if LOG: printerr('Found in memcache:         %s' % key2)
-		g_in_process_cache_key_to_value[key2] = r
+		if LOG: printerr('Found in memcache:         %s' % key2)
 	return r
 
 def get_from_memcache(func_, args_, kwargs_):
 	key = make_key(func_, args_, kwargs_)
 	return get_memcache_client().get(key)
 
-def decorate(user_function_):
+def decorate(user_function_, posargkeymask=None):
 	@functools.wraps(user_function_)
 	def decorating_function(*args, **kwargs):
-		return get(user_function_, args, kwargs)
+		return get(user_function_, args, kwargs, posargkeymask=posargkeymask)
 	
 	return decorating_function
+
 
 
 
@@ -184,9 +185,6 @@ def print_running_instances():
 			print '%s instance is running as pid %d' % (instance__, pid)
 	p('dev')
 	p('prod')
-
-def clear_in_process_cache():
-	g_in_process_cache_key_to_value.clear()
 
 def close_connection():
 	global g_memcache_client

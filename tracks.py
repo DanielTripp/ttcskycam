@@ -1,14 +1,15 @@
 #!/usr/bin/python2.6
 
 import os, json
-import geom, snapgraph, mc
+import geom, snapgraph, mc, picklestore
 from misc import *
 from collections import Sequence
 from lru_cache import lru_cache
 
-@mc.decorate
+@lru_cache(1)
+@picklestore.decorate
 def get_snapgraph():
-	return snapgraph.SnapGraph(get_polylines_from_files(), forpaths=True, forpaths_disttolerance=15)
+	return snapgraph.SnapGraph(get_polylines_from_files(), forpaths=True, forpaths_disttolerance=15, name='tracks')
 
 def get_polylines_from_files():
 	r = []

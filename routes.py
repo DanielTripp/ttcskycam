@@ -240,10 +240,9 @@ class Schedule(object):
 					print '---'
 
 
+@lru_cache(20)
+@mc.decorate
 def schedule(froute_):
-	return mc.get(schedule_impl, [froute_])
-
-def schedule_impl(froute_):
 	if froute_ in ('king', 'dundas', 'lansdowne'):
 		return Schedule(froute_, '%s-schedule.xml' % froute_)
 	else:
@@ -620,6 +619,7 @@ def max_mofr(route_):
 def routeinfo(routename_):
 	return routeinfo_impl(massage_to_fudgeroute(routename_))
 
+@lru_cache(1000)
 @mc.decorate
 @picklestore.decorate
 def routeinfo_impl(froute_):
@@ -779,6 +779,7 @@ def get_fudgeroutes_for_map_bounds(southwest_, northeast_, compassdir_or_heading
 # For all routes that I've looked at, our dir 0 (which corresponds to NextBus's _0_ in a dirtag) is east for a
 # route that goes east-west, and south for one that goes north-south.  (1 for the other direction, of course.)
 # But I know of no guarantee for this.
+@lru_cache(1)
 @mc.decorate
 def get_fudgeroute_to_intdir_to_englishdesc_json_str():
 	return util.to_json_str(get_fudgeroute_to_intdir_to_englishdesc())
@@ -807,7 +808,7 @@ def heading_to_englishdesc(heading_):
 	else:
 		return 'West'
 
-@mc.decorate
+@lru_cache(1)
 def get_froute_to_english():
 	# These need to fit in a dialog so we make them short.  
 	r = {'yonge_university_spadina': 'Yonge/Uni Subway', 'bloor_danforth': 'Bloor Subway'}
@@ -862,10 +863,9 @@ class HalfIntersection:
 		return self.__str__()
 
 
+@lru_cache(1)
+@mc.decorate
 def get_intersections():
-	return mc.get(get_intersections_impl)
-
-def get_intersections_impl():
 	r = []
 	for routei, route1 in enumerate(FUDGEROUTES[:]):
 		for route2 in FUDGEROUTES[:][routei+1:]:
@@ -893,11 +893,10 @@ def get_intersections_impl():
 			r += new_intersections
 	return r
 
-def get_recorded_froutenstoptags():
-	return mc.get(get_recorded_froutenstoptags_impl)
-
 # Recorded stops are intersections plus the last stop on each route, in each direction. 
-def get_recorded_froutenstoptags_impl():
+@lru_cache(1)
+@mc.decorate
+def get_recorded_froutenstoptags():
 	r = []
 	for i in get_intersections():
 		if not is_subway(i.froute1):
@@ -956,6 +955,7 @@ def get_stops_dir_to_stoptag_to_latlng(froute_):
 def routepts(froute_, dir_):
 	return routeinfo(froute_).routepts(dir_)
 
+@lru_cache(1)
 @mc.decorate
 def get_froute_to_routepts_min_datazoom_json_str():
 	return util.to_json_str(get_froute_to_routepts_min_datazoom())
@@ -973,6 +973,7 @@ def get_froute_to_routepts_min_datazoom():
 def dir_from_latlngs(froute_, latlng1_, latlng2_):
 	return routeinfo(froute_).dir_from_latlngs(latlng1_, latlng2_)
 
+@lru_cache(1)
 @mc.decorate
 def get_subway_froute_to_datazoom_to_routepts():
 	r = {}

@@ -1,6 +1,7 @@
 #!/usr/bin/python2.6
 
 from collections import *
+from lru_cache import lru_cache
 import vinfo, db, routes, geom, mc, yards, c
 from misc import *
 
@@ -61,7 +62,6 @@ def get_traffics(fudgeroute_name_, dir_, datazoom_, time_, last_returned_timestr
 		r_data = None
 	return (r_timestr, r_data)
 
-@mc.decorate
 def get_traffics_impl(fudgeroute_name_, dir_, datazoom_, time_, window_minutes_=TIME_WINDOW_MINUTES, log_=False):
 	assert dir_ in (0, 1) or (len(dir_) == 2 and all(isinstance(e, geom.LatLng) for e in dir_)) and (time_!=0)
 	if dir_ in (0, 1):
@@ -118,7 +118,7 @@ def get_mofr_to_kmph_impl(froute_, dir_, current_, time_, window_minutes_, log_=
 			r[mofr] = None
 	return r
 
-@mc.decorate
+@lru_cache(5)
 def get_traffic_avgspeedsandweights(fudgeroute_name_, dir_, datazoom_, time_, current_, window_minutes_, log_=False):
 	r = {}
 	mofr_to_rawtraffics = get_traffic_rawspeeds(fudgeroute_name_, dir_, datazoom_, time_, window_minutes_, log_=log_)

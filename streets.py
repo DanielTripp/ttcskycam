@@ -93,7 +93,15 @@ def join_connected_plines(plines_):
 
 @picklestore.decorate
 def get_streetname_to_polylines_from_shapefile_directly():
-	street_fcode_descs = ['Access Road', 'Busway', 'Collector', 'Collector Ramp', 'Expressway', 'Expressway Ramp', 'Local', 'Major Arterial', 'Major Arterial Ramp', 'Minor Arterial', 'Minor Arterial Ramp', 'Pending', 'Other', 'Other Ramp']
+	# We would include 'Expressway' and 'Expressway Ramp' here too, but highways tend to have a lot of over/underpasses, 
+	# so we were creating a lot of false vertexes on them.  We don't support any bus routes that travel on highways 
+	# yet, and when normal buses came near these highways with all of their false vertexes (like Lansdowne buses 
+	# at Yorkdale), even though we didn't tend to mistakenly think that the buses were on the highway, they were in multisnap 
+	# range and performance of graph path-finding suffered a lot.
+	# 
+	# One might think that 'Collector' and 'Collector Ramp' refer to highways, but they don't.  eg. Adelaide St. is a 'Collector'. 
+	street_fcode_descs = ['Access Road', 'Busway', 'Collector', 'Collector Ramp', 
+			'Local', 'Major Arterial', 'Major Arterial Ramp', 'Minor Arterial', 'Minor Arterial Ramp', 'Pending', 'Other', 'Other Ramp']
 	sf = shapefile.Reader('toronto_street_map/centreline_wgs84/CENTRELINE_WGS84')
 	fields = [x for x in sf.fields if x[0] != 'DeletionFlag']
 	idx_FCODE_DESC = [x[0] for x in fields].index('FCODE_DESC')
@@ -108,7 +116,7 @@ def get_streetname_to_polylines_from_shapefile_directly():
 
 @picklestore.decorate
 def get_snapgraph():
-	return snapgraph.SnapGraph(get_polylines(), forpaths=True, forpaths_disttolerance=RDP_SIMPLIFY_EPSILON_METERS+1)
+	return snapgraph.SnapGraph(get_polylines(), forpaths=True, forpaths_disttolerance=RDP_SIMPLIFY_EPSILON_METERS+1, name='streets')
 
 def heading(linesegaddr_, referencing_lineseg_aot_point_):
 	return snapgraph().heading(linesegaddr_, referencing_lineseg_aot_point_)

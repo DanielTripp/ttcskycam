@@ -29,6 +29,7 @@ create index reports_idx_3 on reports ( time desc, time_inserted_str desc ) ;
 
 import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket, datetime, calendar, math
 from collections import defaultdict, Sequence
+from lru_cache import lru_cache
 import vinfo, geom, traffic, routes, yards, tracks, streets, snapgraph, predictions, mc, c, util
 from misc import *
 
@@ -193,7 +194,7 @@ MIN_DESIRABLE_DIR_STRETCH_LEN = 6
 # if widemofrs go like this: [0, 50, 100, 101, 100, 101, 100, 101, 100, 150, 200, ...] do we throw out the whole middle part
 # [100, 101, 100, 101, 100]?  Wouldn't it be better if we tried to keep the two 101s in there?  That would give us more accurate
 # interpolations in that area.
-@mc.decorate
+@lru_cache(10)
 def get_vid_to_vis_singledir(fudge_route_, dir_, num_minutes_, end_time_em_, log_=False):
 	assert dir_ in (0, 1)
 	src = get_vid_to_vis_bothdirs(fudge_route_, num_minutes_, end_time_em_, log_=log_)
@@ -202,7 +203,7 @@ def get_vid_to_vis_singledir(fudge_route_, dir_, num_minutes_, end_time_em_, log
 		r[vid] = [vi for vi in vis if vi.dir_tag_int == dir_]
 	return r
 
-@mc.decorate
+@lru_cache(10)
 def get_vid_to_vis_bothdirs(fudge_route_, num_minutes_, end_time_em_, log_=False):
 	start_time = end_time_em_ - num_minutes_*60*1000
 	vi_list = []
@@ -456,9 +457,6 @@ def make_whereclause_safe(whereclause_):
 	return re.sub('(?i)insert|delete|drop|create|truncate|alter|update|;', '', whereclause_)
 
 # direction_ can be an integer direction (0 or 1) or a pair of LatLngs from which we will infer that integer direction.
-# Important to do this mc.decorate here, when the time arg is a definite integer, because that will usually be 0 (meaning now) 
-# when it comes from the client. 
-@mc.decorate
 def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, datazoom_, time_window_end_, log_=False):
 	assert direction_ in (0, 1) or (len(direction_) == 2 and all(isinstance(e, geom.LatLng) for e in direction_))
 	assert (fudgeroute_ in routes.NON_SUBWAY_FUDGEROUTES) and type(num_minutes_) == int and datazoom_ in c.VALID_DATAZOOMS 
@@ -1140,6 +1138,7 @@ def _get_observed_arrival_time_caught_vehicle_passing_vis(froute_, startstoptag_
 		curs.close()
 
 # returns report json, always non-None.  raises ReportNotFoundException if report does not exist in db. 
+@lru_cache(10)
 @mc.decorate
 def get_report(report_type_, froute_, dir_, datazoom_, time_):
 	assert isinstance(time_, long)

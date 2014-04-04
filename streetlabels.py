@@ -1,6 +1,7 @@
 #!/usr/bin/python2.6
 
 import sys, json, os.path, bisect, xml.dom, xml.dom.minidom, yaml
+from lru_cache import lru_cache
 import geom, mc, c, routes 
 from misc import *
 
@@ -37,6 +38,7 @@ def is_route_straight_enough_here(ri_, dir_, guizoom_, start_mofr_, end_mofr_):
 	return True
 
 # The startmofr_to_text parts are sorteddicts. 
+@lru_cache(1)
 @mc.decorate
 def get_froute_to_dir_to_startmofr_to_text():
 	global g_froute_to_dir_to_startmofr_to_text
@@ -77,6 +79,9 @@ def get_labels(froute_, dir_, guizoom_, box_sw_, box_ne_):
 	return [label for label in get_labels_for_zoom(froute_, direction, guizoom_) if is_within_box(label)]
 
 # return eg. [{'text': 'College St', 'latlng': geom.LatLng(43.0,-79.0), 'end_latlng': geom.LatLng(43.1,-79.1), 'rotation': 10}, ...]
+@lru_cache(9999) # Current situation: 12 froutes X 2 dirs X 10 guizooms = 240.  But I want headroom for the future and 
+	# considering that this is called from the browser every time the user scrolls or zooms, if it was not cached very 
+	# heavily, that would probably be bad.
 @mc.decorate
 def get_labels_for_zoom(froute_, dir_, guizoom_):
 	assert (dir_ in (0, 1)) and isinstance(guizoom_, int)

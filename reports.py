@@ -149,7 +149,6 @@ def make_all_reports_and_insert_into_db_once():
 
 def make_all_reports_and_insert_into_db_forever():
 	routes.prime_routeinfos()
-	i = 0
 	while True:
 		wait_for_locations_poll_to_finish()
 		t0 = time.time()
@@ -158,10 +157,6 @@ def make_all_reports_and_insert_into_db_forever():
 		reports_took_secs = t1 - t0
 		if reports_took_secs > 60:
 			printerr('Reports took too long to generate - %s seconds.  (Finished at %s.)' % (int(reports_took_secs), now_str()))
-		i += 1
-		if i % 10 == 0:
-			mc.clear_in_process_cache() # Avoid memory leak.  This cache will contain (among other things) 
-					# all the reports we make, and will grow indefinitely.
 
 
 if __name__ == '__main__':
