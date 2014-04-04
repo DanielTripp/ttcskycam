@@ -169,7 +169,7 @@ function get_path_from_server() {
 						var path_latlngs = google_LatLngs(path__);
 						var path_pline = new google.maps.Polyline({map: g_map, path: path_latlngs, zIndex: 12, 
 								strokeColor: 'rgb(100,100,100)', strokeWeight: 6, clickable: false, strokeOpacity: 1, 
-								icons: (is_selected('arrows_checkbox') ? make_polyline_arrow_icons(g_map.getZoom(), path_latlngs) : null)});
+								icons: (is_selected('arrows_checkbox') ? make_polyline_arrow_icons(g_map.getZoom(), false, path_latlngs) : null)});
 						g_path_objects.push(path_pline);
 					}
 				} 
