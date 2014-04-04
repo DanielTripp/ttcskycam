@@ -24,6 +24,7 @@ def get_polygon_from_file(filename_):
 	return r
 	
 # return: list of geom.LatLng.  in order.  Last point is probably not the same as first point. 
+@lru_cache(1)
 @mc.decorate
 def get_city_bounding_polygon():
 	return get_polygon_from_file('paths_db_city_bounding_polygon.json')
@@ -34,10 +35,12 @@ def get_city_sw():
 def get_city_ne():
 	return geom.LatLng(max(pt.lat for pt in get_city_bounding_polygon()), max(pt.lng for pt in get_city_bounding_polygon()))
 
+@lru_cache(1)
 @mc.decorate
 def get_hires_bounding_polygon():
 	return get_polygon_from_file('paths_db_hires_bounding_polygon.json')
 
+@lru_cache(1)
 @mc.decorate
 def get_lores_bounding_polygons():
 	with open('paths_db_lores_bounding_polygon.json') as fin:
@@ -575,6 +578,7 @@ def find_paths_by_pathgridsquare_far(orig_pathgridsquare_, dest_pathgridsquare_)
 	fastest_path_froutendirs = [(leg.froute, leg.dir) for leg in paths[0] if leg.mode == 'transit']
 	return (fastest_path_froutendirs, all_froutendirs)
 
+@lru_cache(1)
 @mc.decorate
 def get_pathgridsquares_lores():
 	city_bounding_polygon = get_city_bounding_polygon()
@@ -596,6 +600,7 @@ def orig_dest_squares_key(orig_, dest_, heading_):
 		r += ' %d' % heading_
 	return r
 
+@lru_cache(1)
 @mc.decorate
 def pathgridsquares_bothres():
 	r = []

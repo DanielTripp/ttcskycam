@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 import json
+from lru_cache import lru_cache
 import vinfo, geom, mc
 from misc import *
 
@@ -8,10 +9,9 @@ from misc import *
 # whether a point is within the yard polygon or not.
 
 
+@lru_cache(1)
+@mc.decorate
 def get_polygon_n_boundingboxes():
-	return mc.get(get_polygon_n_boundingboxes_impl)
-
-def get_polygon_n_boundingboxes_impl():
 	with open('yards.json') as fin:
 		r = []
 		for raw_pts in json.load(fin):

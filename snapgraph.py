@@ -4,7 +4,7 @@ from collections import defaultdict, Sequence
 from itertools import *
 import pprint, math, json
 from lru_cache import lru_cache
-import geom
+import geom, mc, c
 from misc import *
 
 # Some vocabulary: 
@@ -408,8 +408,9 @@ class SnapGraph(object):
 	# 	intersect other line segments.  We will not join polylines or remove any points. 
 	# arg forpaths_disttolerance: Two points need to be less than this far apart for us to consider them 
 	# 	coincident AKA the same point, for our path-graph purposes. 
-	def __init__(self, polylines_, forsnaps=True, forpaths=True, forpaths_disttolerance=DEFAULT_GRAPH_VERTEX_DIST_TOLERANCE):
+	def __init__(self, polylines_, forsnaps=True, forpaths=True, forpaths_disttolerance=DEFAULT_GRAPH_VERTEX_DIST_TOLERANCE, name=None):
 		assert isinstance(polylines_[0][0], geom.LatLng)
+		self.name = name
 		self.latstep = LATSTEP; self.lngstep = LNGSTEP; self.latref = LATREF; self.lngref = LNGREF
 		self.polylines = polylines_
 		if forsnaps:
@@ -435,9 +436,37 @@ class SnapGraph(object):
 			# distance-between-vertexes info is built.)
 			self.init_polylineidx_to_ptidx_to_mapl()
 
+	def __str__(self):
+		return 'SnapGraph(%s)' % (self.name if self.name is not None else id(self))
+
 	# return list of (dist, pathsteps) pairs.  Dist is a float, in meters.   List is sorted in ascending order of dist. 
 	@lru_cache(maxsize=60000, posargkeymask=[1,1,0,1,0])
 	def find_paths(self, startlatlng_, startlocs_, destlatlng_, destlocs_, snap_tolerance=100, out_visited_vertexes=None):
+		assert out_visited_vertexes is None # (temporarily?) unsupported due to caching of return value based on arguments. 
+
+		# We could almost decorate this function with mc.decorate instead of calling mc.get() ourselves, 
+		# but that's won't quite work, because we can't store anything with a reference to a SnapGraph object to in memcache, 
+		# because they're large.  Vertexes have those.  So we will nullify those references before the result is put 
+		# into memcache, and un-nullify them before we return from this function.
+
+		def set_sg_of_vertexes(r__, sg__):
+			for dist, pathsteps in r__:
+				for pathstep in pathsteps:
+					if isinstance(pathstep, Vertex):
+						pathstep.snapgraph = sg__
+
+		assert self.name is not None
+		def find_paths_and_nullify_vertex_sgs(sgname__, startlatlng__, startlocs__, destlatlng__, destlocs__, snap_tolerance__=100):
+			r = self.find_paths_impl(startlatlng__, startlocs__, destlatlng__, destlocs__, snap_tolerance=snap_tolerance__)
+			set_sg_of_vertexes(r, None)
+			return r
+
+		r = mc.get(find_paths_and_nullify_vertex_sgs, 
+				[self.name, startlatlng_, startlocs_, destlatlng_, destlocs_], {'snap_tolerance__': snap_tolerance}, posargkeymask=[1,1,0,1,0])
+		set_sg_of_vertexes(r, self)
+		return r
+
+	def find_paths_impl(self, startlatlng_, startlocs_, destlatlng_, destlocs_, snap_tolerance=c.GRAPH_SNAP_RADIUS, out_visited_vertexes=None):
 		assert out_visited_vertexes is None # (temporarily?) unsupported due to caching of return value based on arguments. 
 		start_locs = (startlocs_ if startlocs_ is not None else self.multisnap(startlatlng_, snap_tolerance))
 		dest_locs = (destlocs_ if destlocs_ is not None else self.multisnap(destlatlng_, snap_tolerance))
@@ -458,7 +487,7 @@ class SnapGraph(object):
 			return dists_n_paths
 
 	# return A (dist, Path) pair, or (None, None) if no path is possible.  'dist' is a float, in meters.   
-	def find_multipath(self, latlngs_, locses=None, snap_tolerance=100, log_=False):
+	def find_multipath(self, latlngs_, locses=None, snap_tolerance=c.GRAPH_SNAP_RADIUS, log_=False):
 		if len(latlngs_) < 2:
 			raise Exception()
 		our_locses = ([self.multisnap(latlng, snap_tolerance) for latlng in latlngs_] if locses is None else locses)
@@ -693,7 +722,7 @@ class SnapGraph(object):
 		self.polylineidx_to_ptidx_to_vertex = dict(self.polylineidx_to_ptidx_to_vertex)
 
 	# note 239084723 - making sure that even if there is a polyline with only one vertex on it, 
-	# and the other polyline involves in this vertex has only one too, that this vertex gets a key made for 
+	# and the other polyline involved in this vertex has only one too, that this vertex gets a key made for 
 	# it in the dict we're building here.  (i.e. if the hopscotch loop loops zero times.) 
 	# So that the keys of this dict represent a complete list of the vertexes.  
 	def init_vertex_to_connectedvertex_n_dists(self):
@@ -704,6 +733,7 @@ class SnapGraph(object):
 				self.vertex_to_connectedvertex_n_dists[vertex]
 			for vertex1, vertex2 in hopscotch(vertexes_in_polyline_order):
 				dist = self.get_dist_between_points(polylineidx, vertex1.get_ptidx(polylineidx), vertex2.get_ptidx(polylineidx))
+				# TODO: if unroutable pline, then multiply dist by something large here. 
 				self.vertex_to_connectedvertex_n_dists[vertex1].append((vertex2, dist))
 				self.vertex_to_connectedvertex_n_dists[vertex2].append((vertex1, dist))
 		self.vertex_to_connectedvertex_n_dists = dict(self.vertex_to_connectedvertex_n_dists)
@@ -1523,9 +1553,9 @@ def a_star(srcvertex_, destvertex_, all_vertexes_, get_connected_vertexndists_, 
 def isloc(obj_):
 	return isinstance(obj_, Vertex) or isinstance(obj_, PosAddr)
 
-def graph_locs_to_json_str(r_):
+def graph_locs_to_json_str(locs_):
 	output_list = []
-	for loc in r_:
+	for loc in locs_:
 		if isinstance(loc, PosAddr):
 			output_e = [loc.linesegaddr.polylineidx, loc.linesegaddr.ptidx, round(loc.pals, 4)]
 		elif isinstance(loc, Vertex):
@@ -1542,9 +1572,11 @@ def parse_graph_locs_json_str(str_, sg_):
 	for e in obj:
 		if isinstance(e, int):
 			output_loc = sg_.get_vertex(e)
+			if output_loc is None:
+				raise Exception('vertex id %d was in graph_locs json string, but not in snapgraph.' % e)
 		else:
 			assert is_seq_like(e, [0,0,0.0])
-			output_loc = PosAddr(PosAddr(e.polylineidx, e.ptidx), e.pals)
+			output_loc = PosAddr(PtAddr(e[0], e[1]), e[2])
 		r.append(output_loc)
 	return r
 

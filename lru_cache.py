@@ -1,9 +1,13 @@
 ## {{{ http://code.activestate.com/recipes/498245/ (r6)
+import os
 import collections
 import functools
 from itertools import ifilterfalse
 from heapq import nsmallest
 from operator import itemgetter
+from misc import *
+
+LOG = os.path.exists('LOG_LRU_CACHE')
 
 class Counter(dict):
     'Mapping where default values are zero'
@@ -49,8 +53,10 @@ def lru_cache(maxsize=100, posargkeymask=None):
             # get cache entry or compute if not found
             try:
                 result = cache[key]
+                if LOG: printerr('Found in lru_cache - func=%s, key=%s' % (user_function, str(key)))
                 wrapper.hits += 1
             except KeyError:
+                if LOG: printerr('Not found in lru_cache - func=%s, key=%s' % (user_function, str(key)))
                 result = user_function(*args, **kwds)
                 cache[key] = result
                 wrapper.misses += 1
