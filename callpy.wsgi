@@ -65,15 +65,6 @@ def call_func(query_string_, referer_):
 	else:
 		printerr('Method %s not in allowed list.' % module_and_funcname)
 
-g_mc_clear_in_process_cache_last_time_es = time.time()
-
-def clear_mc_in_process_cache_maybe():
-	global g_mc_clear_in_process_cache_last_time_es
-	now = time.time()
-	if now - g_mc_clear_in_process_cache_last_time_es > 60*10:
-		mc.clear_in_process_cache()
-		g_mc_clear_in_process_cache_last_time_es = now
-
 # WSGI entry point.
 def application(environ, start_response):
 	if '.' not in sys.path:
@@ -87,8 +78,6 @@ def application(environ, start_response):
 
 		response_headers = [('Content-type', 'text/plain')]
 		start_response('200 OK', response_headers)
-
-		clear_mc_in_process_cache_maybe()
 
 		return [output]
 
