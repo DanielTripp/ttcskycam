@@ -448,6 +448,7 @@ class SnapGraph(object):
 		# but that's won't quite work, because we can't store anything with a reference to a SnapGraph object to in memcache, 
 		# because they're large.  Vertexes have those.  So we will nullify those references before the result is put 
 		# into memcache, and un-nullify them before we return from this function.
+		# It probably wouldn't be that hard to make Vertex not have a reference to it's owner snapgraph.  Maybe later.
 
 		def set_sg_of_vertexes(r__, sg__):
 			for dist, pathsteps in r__:
