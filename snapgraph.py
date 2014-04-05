@@ -644,7 +644,7 @@ class SnapGraph(object):
 		def get_connected_vertexndists(vvert__):
 			if (len(shared_bounding_vertexes) == 2) and (startloc_.linesegaddr.polylineidx == destloc_.linesegaddr.polylineidx):
 				startpos_is_lo = (cmp(startloc_, destloc_) < 0)
-				if vvert__ in (startloc_, destloc_):	
+				if vvert__ in (startloc_, destloc_): # going to return one vert and one posaddr.
 					vert = startpos_bounding_vertexes[(not startpos_is_lo) ^ (vvert__ == destloc_)]
 					thisposaddr, otherposaddr = (startloc_, destloc_)[::-1 if vvert__ == destloc_ else 1]
 					r = ([(vert, self.get_dist(thisposaddr, vert))] if vert is not None else [])
@@ -681,8 +681,13 @@ class SnapGraph(object):
 						r += [(posaddr, self.get_dist(posaddr, vvert__)) for posaddr in (startloc_, destloc_)]
 					elif vvert__ in startpos_bounding_vertexes:
 						r = [(v,d) for v,d in r if v not in startpos_bounding_vertexes] + [(startloc_,self.get_dist(startloc_, vvert__))]
+						if len(shared_bounding_vertexes) == 2: # but note that the start pos and dest pos are not on the same polyline, 
+								# otherwise we wouldn't be here. 
+							assert set(startpos_bounding_vertexes) == set(destpos_bounding_vertexes)
+							r += [(destloc_,self.get_dist(destloc_, vvert__))]
 					elif vvert__ in destpos_bounding_vertexes:
 						r = [(v,d) for v,d in r if v not in destpos_bounding_vertexes] + [(destloc_,self.get_dist(destloc_, vvert__))]
+						# if len(shared_bounding_vertexes) == 2, then that is caught 3 lines above this one.
 			return r
 			
 		def heuristic(vvert1__, vvert2__):
