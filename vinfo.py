@@ -90,17 +90,8 @@ class VehicleInfo:
 	def get_graph_locs_json_str(self):
 		return snapgraph.graph_locs_to_json_str(self.graph_locs)
 
-	def _key(self):
-		return (self.dir_tag, self.heading, self.vehicle_id, self.latlng, self.predictable, self.fudgeroute, self.route_tag, self.secs_since_report, self.time_retrieved, self.time, self._mofr, self._widemofr, self.is_dir_tag_corrected)
-
-	def __eq__(self, other_):
-		return isinstance(other_, VehicleInfo) and (self._key() == other_._key())
-
 	def __hash__(self):
-		return hash(self._key())
-
-	def __cmp__(self, other_):
-		return cmp(self.__class__.__name__, other_.__class__.__name__) or cmp(self.time, other_.time)
+		return hash(self.latlng.lat)
 
 	def calc_time(self):
 		self.time = self.time_retrieved - self.secs_since_report*1000

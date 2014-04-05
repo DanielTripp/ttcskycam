@@ -233,6 +233,7 @@ def get_vid_to_vis_bothdirs(fudge_route_, num_minutes_, end_time_em_, log_=False
 	return vid_to_vis
 
 def work_around_secssincereport_bug(vis_):
+	assert all(isinstance(e, vinfo.VehicleInfo) for e in vis_)
 	# I doubt that there will ever be any duplicates w.r.t. time_retrieved, but just in case: 
 	remove_consecutive_duplicates(vis_, key=lambda vi: vi.time_retrieved)
 	vis_.sort(key=lambda vi: vi.time_retrieved)
@@ -447,6 +448,7 @@ def query1(whereclause_, maxrows_, interp_by_time_):
 	for row in curs:
 		r.append(vinfo.VehicleInfo.from_db(*row))
 	curs.close()
+	work_around_secssincereport_bug(r)
 	if interp_by_time_:
 		r = interp_by_time(r, False, False)
 	else:
@@ -617,7 +619,7 @@ def group_by_time(vilist_):
 # for (they asked for dir=1 vehicles) and it looks awful too - looking at vehicles going both directions on a route is visual chaos and
 # makes it a lot harder to make sense of the dir=1 vehicles that they do want to see.
 def interp_by_time(vilist_, be_clever_, current_conditions_, dir_=None, datazoom_=None, start_time_=None, end_time_=None, log_=False):
-	assert isinstance(vilist_, Sequence)
+	assert isinstance(vilist_, Sequence) and all(isinstance(e, vinfo.VehicleInfo) for e in vilist_)
 	if len(vilist_) == 0:
 		return []
 	starttime = (round_up_by_minute(start_time_) if start_time_ is not None else round_down_by_minute(min(vi.time for vi in vilist_)))
@@ -701,6 +703,13 @@ def get_piece_idx(vis_, lo_idx_, vi_to_grade_):
 	return r
 
 def get_grade_stretch_info(vis_, be_clever_, log_):
+	return get_grade_stretch_info_impl(tuple(vis_), be_clever_, log_)
+
+@lru_cache(100) # It's important that this cache at least the maximum number of vehicle that will ever appear in the locations 
+# report for one route / one direction.  If this cache size is even 1 less than that, then every time around the loop over 
+# the datazooms in reports.py / make_all_reports_and_insert_into_db_once(), these will be forgotten, and performance will 
+# suffer badly. 
+def get_grade_stretch_info_impl(vis_, be_clever_, log_):
 	assert len(set(vi.vehicle_id for vi in vis_)) == 1
 	assert is_sorted(vis_, key=lambda vi: vi.time)
 
@@ -797,8 +806,6 @@ def get_grade_stretch_info(vis_, be_clever_, log_):
 			printerr('\t%s / %s: %s' % (vi.timestr, vi.latlng, vi_to_grade[vi]))
 
 	return (vi_to_grade, vi_to_path)
-		
-
 # Either arg could be None (i.e. blank dir_tag).  For this we consider None to 'agree' with 0 or 1.
 def dirs_disagree(dir1_, dir2_):
 	return (dir1_ == 0 and dir2_ == 1) or (dir1_ == 1 and dir2_ == 0)
