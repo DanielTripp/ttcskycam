@@ -135,7 +135,7 @@ def vi_select_generator(froute_, end_time_em_, start_time_em_, dir_=None, includ
 	assert froute_ in routes.NON_SUBWAY_FUDGEROUTES
 	curs = (conn().cursor('cursor_%d' % (int(time.time()*1000))) if start_time_em_ == 0 else conn().cursor())
 	dir_clause = ('and dir_tag like \'%%%%\\\\_%s\\\\_%%%%\' ' % (str(dir_)) if dir_ != None else ' ')
-	sql = 'select '+VI_COLS+' from ttc_vehicle_locations where fudgeroute = %s '\
+	sql = 'select '+VI_COLS+' from ttc_vehicle_locations where fudgeroute in (\'\', %s) '\
 		+('' if include_unpredictables_ else ' and predictable = true ') \
 		+' and time <= %s and time >= %s and time_retrieved <= %s and time_retrieved >= %s '\
 		+(' and vehicle_id = %s ' if vid_ else ' and vehicle_id != \'\' ') \
@@ -209,16 +209,18 @@ def get_vid_to_vis_bothdirs(fudge_route_, num_minutes_, end_time_em_, log_=False
 	vi_list = []
 	vis = list(vi_select_generator(fudge_route_, end_time_em_, start_time-2*MIN_DESIRABLE_DIR_STRETCH_LEN*60*1000, None, True))
 	# We want to get a lot of overshots, because we need a lot of samples in order to determine directions with any certainty.
-	vis += get_outside_overshots(vis, start_time, False, MIN_DESIRABLE_DIR_STRETCH_LEN-1, log_=log_)
+	vis += get_outside_overshots(fudge_route_, vis, start_time, False, MIN_DESIRABLE_DIR_STRETCH_LEN-1, log_=log_)
 	vi_list += vis
 	# TODO: maybe get outside overshots /forward/ here too, for the benefit of historical traffic reports.
 	vid_to_vis = file_under_key(vi_list, lambda vi: vi.vehicle_id)
 	for vis in vid_to_vis.values():
 		vis.sort(key=lambda x: x.time, reverse=True)
 	for vid, vis in vid_to_vis.items():
+		work_around_secssincereport_bug(vis)
+		adopt_or_discard_vis_with_blank_froutes(fudge_route_, vis, log_=log_) # We have to call this before the filtering on 
+				# widemofr below, because to get a widemofr we need a fudgeroute to refer to. 
 		vis[:] = [vi for vi in vis if vi.widemofr != -1]
 		yards.remove_vehicles_in_yards(vis)
-		work_around_secssincereport_bug(vis)
 		remove_time_duplicates(vis)
 		geom.remove_bad_gps_readings_single_vid(vis, log_=log_)
 		fix_dirtags(vis)
@@ -231,6 +233,20 @@ def get_vid_to_vis_bothdirs(fudge_route_, num_minutes_, end_time_em_, log_=False
 		if len(vid_to_vis[vid]) == 0:
 			del vid_to_vis[vid]
 	return vid_to_vis
+
+def adopt_or_discard_vis_with_blank_froutes(froute_, vis_, log_=False):
+	assert len(froute_) > 0
+	num_vis_with_blank_route = sum(1 for vi in vis_ if vi.fudgeroute == '')
+	if num_vis_with_blank_route < len(vis_)/2:
+		for vi in (vi for vi in vis_ if vi.fudgeroute == ''):
+			if log_:
+				printerr('Adopting blank froute: %s' % vi)
+			vi.correct_fudgeroute(froute_)
+	else:
+		if log_:
+			for vi in (vi for vi in vis_ if vi.fudgeroute == ''):
+				printerr('Discarding blank froute: %s' % vi)
+		vis_[:] = [vi for vi in vis_ if vi.fudgeroute != '']
 
 def work_around_secssincereport_bug(vis_):
 	assert all(isinstance(e, vinfo.VehicleInfo) for e in vis_)
@@ -480,30 +496,6 @@ def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, datazoom
 	r = interp_by_time(r, True, True, direction, datazoom_, starttime, time_window_end_, log_=log_)
 	return r
 
-# The idea here is, for each vid, to get one more vi from the db, greater in time than the pre-existing
-# max time vi.  This new vi may be on a different route or direction, but it will help us show that vehicle
-# a little longer on the screen, which I think is desirable.
-# ^^ I'm not sure of the usefulness of this any more. 
-def add_inside_overshots_for_locations(r_vis_, vid_, time_window_end_, log_=False):
-	assert vid_ and len(set([vi.vehicle_id for vi in r_vis_])) == 1
-	new_vis = []
-	time_to_beat = max(vi.time for vi in r_vis_ if vi.vehicle_id == vid_)
-	sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations ' \
-		+ ' where vehicle_id = %s and time > %s and time <= %s order by time limit 1' 
-	curs = conn().cursor()
-	curs.execute(sqlstr, [vid_, time_to_beat, time_window_end_])
-	row = curs.fetchone()
-	vi = None
-	if row:
-		vi = vinfo.VehicleInfo.from_db(*row)
-		if log_: printerr('Got inside overshot: %s' % (str(vi)))
-		new_vis.append(vi)
-	else:
-		if log_: printerr('No inside overshot found for vid %s.' % (vid_))
-	curs.close()
-	r_vis_ += new_vis
-	r_vis_.sort(key=lambda vi: vi.time, reverse=True)
-
 # Return only elements for which predicate is true.  (It's a one-argument predicate.  It takes one element.)
 # Group them as they appeared in input list as runs of trues.
 def get_maximal_sublists(list_, predicate_):
@@ -520,7 +512,7 @@ def get_maximal_sublists(list_, predicate_):
 	return r
 
 # Fetch some rows before startime (or after endtime), to give us something to interpolate with.
-def get_outside_overshots(vilist_, time_window_boundary_, forward_in_time_, n_=1, log_=False):
+def get_outside_overshots(froute_, vilist_, time_window_boundary_, forward_in_time_, n_=1, log_=False):
 	forward_str = ('forward' if forward_in_time_ else 'backward')
 	if not vilist_:
 		return []
@@ -529,7 +521,7 @@ def get_outside_overshots(vilist_, time_window_boundary_, forward_in_time_, n_=1
 		assert vid
 		vis_for_vid = [vi for vi in vilist_ if vi.vehicle_id == vid]
 		assert all(vi1.time >= vi2.time for vi1, vi2 in hopscotch(vis_for_vid)) # i.e. is in reverse order 
-		assert len(set(vi.fudgeroute for vi in vis_for_vid)) == 1
+		assert set(vi.fudgeroute for vi in vis_for_vid).issubset(set([froute_, '']))
 
 		num_overshots_already_present = num_outside_overshots_already_present(vis_for_vid, time_window_boundary_, forward_in_time_)
 		if num_overshots_already_present >= n_:
@@ -539,12 +531,11 @@ def get_outside_overshots(vilist_, time_window_boundary_, forward_in_time_, n_=1
 			vid_extreme_time = vis_for_vid[0 if forward_in_time_ else -1].time
 			if log_: printerr('Looking for %s overshots for vid %s.  Time to beat is %s.' % (forward_str, vid, em_to_str(vid_extreme_time)))
 			sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations ' \
-				+ ' where vehicle_id = %s and fudgeroute = %s and time_retrieved <= %s and time_retrieved >= %s '\
+				+ ' where vehicle_id = %s and fudgeroute in (\'\', %s) and time_retrieved <= %s and time_retrieved >= %s '\
 				+ ' order by time '+('' if forward_in_time_ else 'desc')+' limit %s'
 			curs = conn().cursor()
 			query_times = [time_window_boundary_+20*60*1000, vid_extreme_time] if forward_in_time_ else [vid_extreme_time, time_window_boundary_-20*60*1000]
-			froute = vis_for_vid[0].fudgeroute
-			args = [vid, froute] + query_times + [num_more_overshots_to_get]
+			args = [vid, froute_] + query_times + [num_more_overshots_to_get]
 			curs.execute(sqlstr, args)
 			for row in curs:
 				vi = vinfo.VehicleInfo.from_db(*row)
@@ -552,7 +543,7 @@ def get_outside_overshots(vilist_, time_window_boundary_, forward_in_time_, n_=1
 				r.append(vi)
 			curs.close()
 		vis_for_vid = [vi for vi in r if vi.vehicle_id == vid]
-		r += get_outside_overshots_more(vis_for_vid, time_window_boundary_, forward_in_time_, log_=log_)
+		r += get_outside_overshots_more(froute_, vis_for_vid, time_window_boundary_, forward_in_time_, log_=log_)
 
 	return r
 
@@ -566,9 +557,9 @@ def num_outside_overshots_already_present(single_vid_vis_, time_window_boundary_
 
 # This function is for when we want to look back far enough to see a change in mofr, so that we can determine the
 # direction of a long-stalled vehicle.
-def get_outside_overshots_more(vis_so_far_, time_window_boundary_, forward_in_time_, log_=False):
+def get_outside_overshots_more(froute_, vis_so_far_, time_window_boundary_, forward_in_time_, log_=False):
 	assert len(set(vi.vehicle_id for vi in vis_so_far_)) <= 1
-	assert len(set(vi.fudgeroute for vi in vis_so_far_)) <= 1
+	assert set(vi.fudgeroute for vi in vis_so_far_).issubset(set([froute_, '']))
 	r = []
 	more_vis = []
 	if not forward_in_time_ and len(vis_so_far_) > 0:
@@ -578,10 +569,9 @@ def get_outside_overshots_more(vis_so_far_, time_window_boundary_, forward_in_ti
 		if (r_mofr_max != -1) and (r_mofr_max - r_mofr_min < 50): # 50 metres = small, typical GPS errors.
 			curs = conn().cursor()
 			sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations '\
-					 + ' where vehicle_id = %s and fudgeroute = %s and time_retrieved <= %s and time_retrieved >= %s '\
+					 + ' where vehicle_id = %s and fudgeroute in (\'\', %s) and time_retrieved <= %s and time_retrieved >= %s '\
 					 + ' order by time '+('' if forward_in_time_ else 'desc')+' limit %s'
-			froute = vis_so_far_[0].fudgeroute
-			curs.execute(sqlstr, [vid, froute, vis_so_far_[-1].time, time_window_boundary_-6*60*60*1000, 999999])
+			curs.execute(sqlstr, [vid, froute_, vis_so_far_[-1].time, time_window_boundary_-6*60*60*1000, 999999])
 			for row in curs:
 				vi = vinfo.VehicleInfo.from_db(*row)
 				more_vis.append(vi)

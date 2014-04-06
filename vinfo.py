@@ -63,6 +63,7 @@ class VehicleInfo:
 		self._mofr = mofr_
 		self._widemofr = widemofr_
 		self.is_dir_tag_corrected = False
+		self.is_fudgeroute_corrected = False
 		assert (graph_locs_str_ is None) == (graph_version_ is None)
 		if graph_locs_str_ is None or graph_version_ != self.get_cur_graph_version():
 			self._graph_locs = None
@@ -122,17 +123,24 @@ class VehicleInfo:
 				ratio = (post_ - self.mofr)/float(forevi_.mofr - self.mofr)
 		return long(self.time + ratio*(forevi_.time - self.time))
 
+	def correct_fudgeroute(self, froute_):
+		self.fudgeroute = froute_
+		self.route_tag = routes.FUDGEROUTE_TO_CONFIGROUTES[froute_][0]
+		self.is_fudgeroute_corrected = True
+		self._mofr = self._widemofr = None
+
 	def __str__(self):
 		if self.fudgeroute in routes.SUBWAY_FUDGEROUTES:
 			assert False # Not a big deal for this function, but since when do we have vehicle locations for subways? 
 			routestr = self.fudgeroute
 		else:
-			routestr = '%3s%-3s' % (self.fudgeroute[:3], self.route_tag)
-			assert len(routestr) == 6 # Not that it's a big deal if it's greater than 6.  It's just that I would like to know, 
+			routestr = '%s%3s%-3s' % ('*' if self.is_fudgeroute_corrected else ' ', self.fudgeroute[:3], self.route_tag)
+			assert len(routestr) == 7 # Not that it's a big deal if it's greater than 7.  It's just that I would like to know, 
 				# and probably rewrite this function, to make sure that the values it returns are always the same length, 
 				# so that when I print out a list of them, every field lines up in the same columns. 
 		return '%s  r=%-6s, vid=%s, dir: %s%-12s, (%.7f,%.7f), h=%3d, mofr=%5d%s%5d%s' \
-			% (self.timestr, routestr, self.vehicle_id, ('*' if self.is_dir_tag_corrected else ' '), self.dir_tag,
+			% (self.timestr, routestr, self.vehicle_id, 
+					('*' if self.is_dir_tag_corrected else ' '), self.dir_tag,
 			   self.latlng.lat, self.latlng.lng, self.heading, self.mofr, ('!' if self.mofr!=self.widemofr else ' '), self.widemofr,
 			   ('  ' if self.predictable else ' U'))
 
