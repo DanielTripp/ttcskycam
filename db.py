@@ -413,15 +413,15 @@ def massage_whereclause_time_args(whereclause_):
 def massage_whereclause_lat_args(whereclause_):
 	def repl(mo_):
 		n = float(mo_.group(1))
-		return str(snapgraph.gridlat_to_lat(n))
-	return re.sub(r'\b(\d+(?:\.\d+)?)lat\b', repl, whereclause_)
+		return ' '+str(snapgraph.gridlat_to_lat(n))
+	return re.sub(r'\s(-?\d+(?:\.\d+)?)lat\b', repl, whereclause_)
 
 def massage_whereclause_lng_args(whereclause_):
 	r = re.sub(r'\blng\b', 'lon', whereclause_)
 	def repl(mo_):
 		n = float(mo_.group(1))
-		return str(snapgraph.gridlng_to_lng(n))
-	return re.sub(r'\b(\d+(?:\.\d+)?)lng\b', repl, r)
+		return ' '+str(snapgraph.gridlng_to_lng(n))
+	return re.sub(r'\s(-?\d+(?:\.\d+)?)lng\b', repl, r)
 
 def massage_whereclause_dir_args(whereclause_):
 	r = whereclause_
