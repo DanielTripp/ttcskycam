@@ -124,9 +124,13 @@ class VehicleInfo:
 		return long(self.time + ratio*(forevi_.time - self.time))
 
 	def correct_fudgeroute(self, froute_):
+		assert self.fudgeroute == '' and froute_ != '' # Just because that's all I had in mind when I wrote this.
+				# Maybe this is useful for other cases too.  I don't know.
 		self.fudgeroute = froute_
 		self.route_tag = routes.FUDGEROUTE_TO_CONFIGROUTES[froute_][0]
 		self.is_fudgeroute_corrected = True
+		# mofr and widemofr are based on the route, so if we're changing the route, we had better cause these 
+		# to be recalculated.
 		self._mofr = self._widemofr = None
 
 	def __str__(self):
