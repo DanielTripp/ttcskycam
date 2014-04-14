@@ -1,4 +1,7 @@
 
+select relname, relkind, pg_size_pretty(pg_table_size(oid)) as size from pg_class  order by pg_relation_size(oid) desc;
+
+
 as root:
 (necessary?)
 (does order matter?)
