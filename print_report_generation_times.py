@@ -26,7 +26,7 @@ if __name__ == '__main__':
 			yyyymmdd = em_to_str_ymd(now_em())
 		print yyyymmdd
 
-	for hour in range(7, 23+1):
+	for hour in range(0, 23+1):
 	#for hour in [10]:
 		for minute in range(0, 60, 5):
 		#for minute in [30]:
