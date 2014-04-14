@@ -380,7 +380,7 @@ class PathPiece(object):
 			else:
 				assert isinstance(cur_step, Vertex)
 				linesegaddr = cur_step.get_ptaddr()
-			return streetsg_.heading(linesegaddr, True)
+			return streetsg_.heading(linesegaddr, False)
 
 	def length_m(self):
 		if self.is_zero_length:
@@ -518,6 +518,13 @@ class SnapGraph(object):
 						printerr('point b locs: %s' % locs_b)
 						printerr('point c locs: %s' % locs_c)
 						printerr('%d possible paths from a to b.  %d possible paths from b to c.' % (len(dists_n_pieces_ab), len(dists_n_pieces_bc)))
+						printerr(latlng_a, latlng_b, latlng_c)
+						printerr('a -> b')
+						for dist, pieces in dists_n_pieces_ab:
+							printerr(pieces)
+						printerr('b -> c')
+						for dist, pieces in dists_n_pieces_bc:
+							printerr(pieces)
 					r_pieces = None # No path possible for this part.  No path is possible at all. 
 					break
 				chosen_dists_n_pieces = sorted(combined_dists_n_pieces, \
