@@ -618,6 +618,7 @@ def interp_by_time(vilist_, be_clever_, current_conditions_, dir_=None, datazoom
 	interptimes = list(lrange(starttime, endtime+1, 60*1000))
 	time_to_out_vis = dict((interptime, []) for interptime in interptimes)
 	for vid in vids:
+		if log_: printerr('Interpolating locations for vid %s...' % vid)
 		vis = [vi for vi in vilist_ if vi.vehicle_id == vid][::-1]
 		assert is_sorted(vis, key=lambda vi: vi.time)
 		vi_to_grade, vi_to_path = get_grade_stretch_info(vis, be_clever_, log_)
@@ -659,6 +660,7 @@ def interp_by_time(vilist_, be_clever_, current_conditions_, dir_=None, datazoom
 					if hi_vi:
 						printerr('\thi: %s' % hi_vi)
 					printerr('\t==> %s' % i_vi)
+		if log_: printerr('Finished interpolating locations for vid %s.' % vid)
 
 	return massage_to_list(time_to_out_vis, starttime, endtime, log_=log_)
 
