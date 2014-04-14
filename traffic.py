@@ -38,8 +38,8 @@ def get_recent_vehicle_locations_impl(fudgeroute_, dir_, datazoom_, time_, log_=
 # there.  Then it stands still for a few minutes there.  Then it continues eastward.  I don't want that to mess things up.
 # TODO: improve this comment.
 def get_vid_to_vis_from_db_for_traffic(fudgeroute_name_, dir_, time_, window_minutes_, usewidemofr_=False, log_=False):
-	src = db.get_vid_to_vis_singledir(fudgeroute_name_, dir_, window_minutes_, time_, log_=log_) # We must be careful not to modify this, 
-		# because it is memcached. 
+	src = db.get_vid_to_vis_singledir(fudgeroute_name_, dir_, window_minutes_, time_, log_=log_) 
+		# We must be careful not to modify this, because it is cached in memory. 
 	r = {}
 	for vid, vis in src.iteritems():
 		r[vid] = filter(lambda vi: (vi.widemofr if usewidemofr_ else vi.mofr) != -1, vis)
@@ -210,6 +210,9 @@ def get_mofrchunk_to_vis(vis_, mofrstep_):
 	r = defaultdict(lambda: [])
 	for vi in vis_:
 		r[int(vi.widemofr)/mofrstep_].append(vi)
+	r = sorteddict(r)
+	if __debug__:
+		assert all(len(vis) > 0 for vis in r.values())
 	return r
 
 def get_stretches(vis_, dir_):
@@ -245,6 +248,10 @@ def get_observed_headway(froute_, stoptag_, time_, window_minutes_, usewidemofr_
 	else:
 		return None
 
+# arg mofrchunk_to_vis_: This might have (or we might put) a key of -1 in it, which might seem to represent 
+# mofr==-1, but it's not - the value for -1 is going to be an empty list, and the code is slightly cleaner 
+# if we use than rather than having a special case for -1 which amounts to the same thing.
+# 
 # [1] Here I am trying to implement the following judgement call:
 # It is better to show no traffic at all (white) than a misleading orange
 # that is derived from one or more vehicles that never traversed that stretch of road,
@@ -255,7 +262,7 @@ def get_observed_headway(froute_, stoptag_, time_, window_minutes_, usewidemofr_
 # decent-looking traffic report for that stretch of road.  I would rather show white (or whatever
 # I'm showing to signify 'no traffic data' now) and thus encourage the user to look for the detour.
 def get_bounding_mofr_vis(mofr_, mofrstep_, mofrchunk_to_vis_, usewidemofr_):
-	assert isinstance(mofr_, int) and isinstance(mofrchunk_to_vis_, defaultdict) and isinstance(usewidemofr_, bool)
+	assert isinstance(mofr_, int) and isinstance(mofrchunk_to_vis_, sorteddict) and isinstance(usewidemofr_, bool)
 	if __debug__:
 		all_vis = sum(mofrchunk_to_vis_.values(), [])
 		assert all(vi1.vehicle_id == vi2.vehicle_id for vi1, vi2 in hopscotch(all_vis))
@@ -264,11 +271,12 @@ def get_bounding_mofr_vis(mofr_, mofrstep_, mofrchunk_to_vis_, usewidemofr_):
 	def mofr_time_key(vi__):
 		return ((vi__.widemofr if usewidemofr_ else vi__.mofr), vi__.time)
 
-	prev_chunk_vis = mofrchunk_to_vis_[mofr_/mofrstep_ - 1]
+	prev_mofrchunk = mofr_/mofrstep_ - 1
+	prev_chunk_vis = (mofrchunk_to_vis_[prev_mofrchunk] if prev_mofrchunk in mofrchunk_to_vis_ else [])
 	if len(prev_chunk_vis) > 0:
 		vi_lo = min(prev_chunk_vis, key=mofr_time_key)
 	else:
-		for mofrchunk in range(mofr_/mofrstep_ - 2, -1, -1):
+		for mofrchunk in (x for x in xrange(mofr_/mofrstep_ - 2, mofrchunk_to_vis_.minkey()-1, -1) if x in mofrchunk_to_vis_):
 			vis_in_chunk = mofrchunk_to_vis_[mofrchunk]
 			if len(vis_in_chunk) > 0:
 				vi_lo = max(vis_in_chunk, key=mofr_time_key)
@@ -276,7 +284,7 @@ def get_bounding_mofr_vis(mofr_, mofrstep_, mofrchunk_to_vis_, usewidemofr_):
 		else:
 			vi_lo = None
 
-	for mofrchunk in range(mofr_/mofrstep_, max(mofrchunk_to_vis_.keys())+1):
+	for mofrchunk in (x for x in xrange(mofr_/mofrstep_, mofrchunk_to_vis_.maxkey()+1) if x in mofrchunk_to_vis_):
 		vis_in_chunk = mofrchunk_to_vis_[mofrchunk]
 		if len(vis_in_chunk) > 0:
 			vi_hi = min(vis_in_chunk, key=mofr_time_key)
