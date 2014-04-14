@@ -433,7 +433,7 @@ class BoundingBox:
 		return 'box:(%s, %s)' % (self.southwest, self.northeast)
 
 	def __repr__(self):
-		return self.__repr__()
+		return self.__str__()
 
 class LineSeg(object):
 
