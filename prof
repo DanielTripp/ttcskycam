@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+
+if [ "$#" != 1 ] ; then
+	echo 'Need one argument - filename of python script.'
+	exit 1
+fi
+
+script=$1
+
+python -O -m cProfile -o /tmp/out.profile $script && gprof2dot.py -f pstats /tmp/out.profile | dot -Tsvg -o profiler-output.svg && ./add-panzoom-to-svg.py profiler-output.svg
+
+
+
