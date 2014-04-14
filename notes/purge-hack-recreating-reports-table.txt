@@ -1,0 +1,26 @@
+
+as root:
+(necessary?)
+(does order matter?)
+supervisorctl stop ttc-make-reports-main
+/etc/init.d/postgresql  restart
+apache-restart
+
+
+as postgres:
+
+pg_dump -t reports  -c -s > /tmp/d.sql
+psql
+postgres=> \i /tmp/d.sql;
+
+
+as root: 
+
+supervisorctl start ttc-make-reports-main
+
+
+
+Hung on drop index first time, before restarting things.
+
+
+
