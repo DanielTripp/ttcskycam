@@ -11,8 +11,14 @@ if __name__ == '__main__':
 
 	froute_to_timetally = defaultdict(lambda: [0, 0])
 
-	if len(sys.argv) == 2:
-		yyyymmdd = sys.argv[1]
+	if len(sys.argv) < 2:
+		sys.exit('Takes two args: 1) (dev|prod) and 2) a date [optional].')
+
+	appversiontype = sys.argv[1]
+	if appversiontype not in ('dev', 'prod'):
+		raise Exception()
+	if len(sys.argv) == 3:
+		yyyymmdd = sys.argv[2]
 	else:
 		if em_to_str_hm(now_em())[:2] in ('00', '01', '02', '03'):
 			yyyymmdd = em_to_str_ymd(now_em() - 1000*60*60*24)
@@ -27,7 +33,8 @@ if __name__ == '__main__':
 			report_timestr = '%s %02d:%02d' % (yyyymmdd, hour, minute)
 			report_time = str_to_em(report_timestr)
 			curs = db.conn().cursor()
-			sqlstr = 'select time_inserted_str from reports where time = %s order by time_inserted_str' 
+			sqlstr = 'select time_inserted_str from reports where time = %s and app_version '\
+					+('like' if appversiontype == 'dev' else 'not like' )+' \'dev%%\' order by time_inserted_str' 
 			curs.execute(sqlstr, [report_time])
 			time_inserted_strs = []
 			for row in curs:
