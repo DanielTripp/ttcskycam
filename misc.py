@@ -453,6 +453,18 @@ class sorteddict(dict):
 			return (item__[1] if item__ is not None else None)
 		return (get_value(ritems[0]), get_value(ritems[1]))
 
+	def minkey(self):
+		if len(self._sortedkeys) == 0:
+			raise Exception('Dict is empty.  Can\'t get min key.')
+		else:
+			return self._sortedkeys[0]
+
+	def maxkey(self):
+		if len(self._sortedkeys) == 0:
+			raise Exception('Dict is empty.  Can\'t get max key.')
+		else:
+			return self._sortedkeys[-1]
+
 def get_dir_tag_int(dir_tag_str_):
 	assert isinstance(dir_tag_str_, basestring)
 	is0 = '_0_' in dir_tag_str_
