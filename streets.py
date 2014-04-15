@@ -15,11 +15,17 @@ USE_TESTING_SUBSET = False
 @picklestore.decorate
 def get_polylines():
 	r = get_polylines_from_shapefile()
+	r += get_polylines_from_supplemental_json_file()
 	if USE_TESTING_SUBSET:
 		north = 43.6774561; east = -79.3611221; west = -79.4661788
 		r = filter(lambda pline: any(pt.lat < north and pt.lng < east and pt.lng > west for pt in pline), r)
 	simplify_polylines_via_rdp_algo(r)
 	return r
+
+def get_polylines_from_supplemental_json_file():
+	with open('streets-supplemental.json') as fin:
+		raw_plines = json.load(fin)
+		return [[geom.LatLng(pt) for pt in pline] for pline in raw_plines]
 
 # Modifies argument. 
 def simplify_polylines_via_rdp_algo(polylines_):
