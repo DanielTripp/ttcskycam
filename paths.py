@@ -1,6 +1,6 @@
 #!/usr/bin/python2.6 -O
 
-import sys, json, os.path, pprint, sqlite3, multiprocessing, time, subprocess
+import sys, json, os.path, pprint, sqlite3, multiprocessing, time, subprocess, threading
 from collections import *
 from lru_cache import lru_cache
 import vinfo, geom, routes, predictions, mc, c, snapgraph, traffic 
@@ -8,12 +8,21 @@ from misc import *
 
 PATHS_DB_FILENAME = 'paths.sqlitedb'
 
-g_dbconn = None
+# We need to maintain a separate connection for each thread (as Apache could call this from multiple threads 
+# because 'SQLite objects created in a thread can only be used in that same thread').  
+# Apparently accessing the same sqlite database from different connections is no problem, though. 
+g_thread_to_dbconn = {}
+g_thread_to_dbconn_rlock = threading.RLock()
 
-def init_dbconn():
-	global g_dbconn
-	if g_dbconn is None:
-		g_dbconn = sqlite3.connect(PATHS_DB_FILENAME)
+def get_dbconn():
+	with g_thread_to_dbconn_rlock:
+		curthread = threading.current_thread() 
+		if curthread in g_thread_to_dbconn:
+			return g_thread_to_dbconn[curthread]
+		else:
+			dbconn = sqlite3.connect(PATHS_DB_FILENAME)
+			g_thread_to_dbconn[curthread] = dbconn
+			return dbconn
 
 def get_polygon_from_file(filename_):
 	with open(filename_) as fin:
@@ -292,7 +301,7 @@ def find_nearby_froutenmofrs(latlng_, radius_):
 		ri = routes.routeinfo(froute)
 		snap_result = ri.snapgraph.snap(latlng_, radius_)
 		if snap_result is not None:
-			pt_on_froute = snap_result.latlng
+			pt_on_froute = ri.snapgraph.get_latlng(snap_result)
 			r.append((froute, ri.latlon_to_mofr(pt_on_froute)))
 	return r
 			
@@ -483,10 +492,14 @@ def get_paths_by_latlngs(orig_latlng_, dest_latlng_):
 	else:
 		heading = None
 	key = orig_dest_squares_key(orig_square, dest_square, heading)
-	init_dbconn()
-	r_row = g_dbconn.execute('select value from t where key = ?', [key]).fetchone()
+	return get_paths_by_key(key)
+
+@lru_cache(100)
+@mc.decorate
+def get_paths_by_key(key_):
+	r_row = get_dbconn().execute('select value from t where key = ?', [key_]).fetchone()
 	if r_row is None:
-		raise Exception('key "%s" not found in database.' % key)
+		raise Exception('key "%s" not found in database.' % key_)
 	return json.loads(r_row[0])
 
 def get_paths_use_near_algo(orig_square_, dest_square_):
@@ -629,7 +642,7 @@ def round_heading_for_paths_db(heading_):
 
 def paths_already_present_in_db(orig_square_, dest_square_, heading_):
 	orig_dest_key = orig_dest_squares_key(orig_square_, dest_square_, heading_)
-	return (g_dbconn.execute('select * from t where key = ?', [orig_dest_key]).fetchone() is not None)
+	return (get_dbconn().execute('select * from t where key = ?', [orig_dest_key]).fetchone() is not None)
 
 def need_to_calc(fill_in_, orig_square_, dest_square_, heading_):
 	return (not fill_in_) or not paths_already_present_in_db(orig_square_, dest_square_, heading_)
@@ -638,9 +651,8 @@ def build_db_start_db(fill_in_):
 	if not fill_in_:
 		if os.path.exists(PATHS_DB_FILENAME):
 			os.remove(PATHS_DB_FILENAME)
-	init_dbconn()
 	if not fill_in_:
-		g_dbconn.execute('create table t (key text unique, value text)')
+		get_dbconn().execute('create table t (key text unique, value text)')
 
 def child_worker_main(conn_to_parent_):
 	while True:
@@ -675,10 +687,10 @@ def build_db_receive_jobs_from_children_and_insert_results_into_db(r_num_inserts
 		while child_connection.poll():
 			(orig_square, dest_square, heading), paths_result = child_connection.recv()
 			orig_dest_key = orig_dest_squares_key(orig_square, dest_square, heading)
-			g_dbconn.execute('insert into t values (?, ?)', [orig_dest_key, json.dumps(paths_result)])
+			get_dbconn().execute('insert into t values (?, ?)', [orig_dest_key, json.dumps(paths_result)])
 			r_num_inserts_[0] += 1
 			if r_num_inserts_[0] % 10 == 0:
-				g_dbconn.commit()
+				get_dbconn().commit()
 
 def build_db_get_square_and_heading_combos():
 	r = []
@@ -720,7 +732,7 @@ def build_db(fill_in_):
 		time.sleep(5)
 		build_db_receive_jobs_from_children_and_insert_results_into_db(num_jobs_received, children, child_connections)
 		build_db_print_progress(num_jobs_received[0], len(square_and_heading_combos), t0)
-	g_dbconn.commit()
+	get_dbconn().commit()
 	do_amazon_shutdown_instance_if_appropriate()
 
 def get_amazon_instance_id():
