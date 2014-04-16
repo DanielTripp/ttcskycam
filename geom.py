@@ -1,6 +1,6 @@
 #!/usr/bin/python2.6
 
-import datetime, calendar, math, time
+import datetime, calendar, math, time, random
 from math import *
 from lru_cache import lru_cache
 import vinfo, routes
@@ -539,6 +539,11 @@ def latlng_avg(latlngs_):
 	avg_lat = lat_tally/len(latlngs_)
 	avg_lng = lng_tally/len(latlngs_)
 	return LatLng(avg_lat, avg_lng)
+
+def rand_latlng():
+	minlat=43.65744025; minlng=-79.51286316
+	maxlat=43.75621697; maxlng=-79.33776855
+	return LatLng(avg(minlat, maxlat, random.random()), avg(minlng, maxlng, random.random()))
 
 if __name__ == '__main__':
 
