@@ -130,12 +130,13 @@ def insert_vehicle_info(vi_):
 	curs.close()
 
 def vi_select_generator(froute_, end_time_em_, start_time_em_, dir_=None, include_unpredictables_=False, vid_=None, \
-			forward_in_time_order_=False):
+			forward_in_time_order_=False, include_blank_fudgeroute_=True):
 	assert vid_ is None or len(vid_) > 0
 	assert froute_ in routes.NON_SUBWAY_FUDGEROUTES
 	curs = (conn().cursor('cursor_%d' % (int(time.time()*1000))) if start_time_em_ == 0 else conn().cursor())
 	dir_clause = ('and dir_tag like \'%%%%\\\\_%s\\\\_%%%%\' ' % (str(dir_)) if dir_ != None else ' ')
-	sql = 'select '+VI_COLS+' from ttc_vehicle_locations where fudgeroute in (\'\', %s) '\
+	sql = 'select '+VI_COLS+' from ttc_vehicle_locations where '\
+		+('fudgeroute in (\'\', %s) ' if include_blank_fudgeroute_ else 'fudgeroute = %s ')\
 		+('' if include_unpredictables_ else ' and predictable = true ') \
 		+' and time <= %s and time >= %s and time_retrieved <= %s and time_retrieved >= %s '\
 		+(' and vehicle_id = %s ' if vid_ else ' and vehicle_id != \'\' ') \
