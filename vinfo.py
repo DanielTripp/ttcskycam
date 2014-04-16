@@ -82,6 +82,10 @@ class VehicleInfo:
 		else:
 			return c.STREETS_GRAPH_VERSION
 
+	# This is a list where each element is either a PosAddr or a Vertex of the appropriate graph (tracks or streets). 
+	# This list will be sorted in increasing order of distance to the reported location of this object i.e. self.latlng. 
+	# (Assuming that SnapGraph.multisnap() still returns lists in this order.) 
+	# If this is empty, then that means that self.latlng must not be anywhere near the appropriate graph.
 	@property
 	def graph_locs(self):
 		if self._graph_locs is None:
