@@ -7,6 +7,17 @@ from backport_OrderedDict import *
 import routes, traffic, db, vinfo, geom, mc, tracks, util, predictions, paths, c, reports, streetlabels, snapgraph, picklestore
 #from routes import *
 
+def dots(val_, min_, max_):
+	ratio = rein_in((val_-min_)/float(max_-min_), 0, 1.0)
+	max_n = 20
+	n = int(ratio*max_n)
+	if n == max_n:
+		r = '.'*(max_n-1) + '*'
+	else:
+		r = '.'*n
+	r = ('%-'+str(max_n)+'s') % r
+	return r
+
 if __name__ == '__main__':
 
 	froute_to_timetally = defaultdict(lambda: [0, 0])
@@ -47,8 +58,8 @@ if __name__ == '__main__':
 				secs_span = (str_to_em(max(time_inserted_strs)) - str_to_em(min(time_inserted_strs)))/1000
 				# Seconds after the 'poll minute' that the last report was inserted: 
 				time_finished_secs = (str_to_em(max(time_inserted_strs)) - (report_time-1000*60))/1000
-				span_flagstr = '%-5s' % ('*'*rein_in((secs_span-25)/5, 0, 5)) # tricky: lowest non-zero yielded for secs_span=30, not 25 or 26.  
-				finished_flagstr = '%-5s' % ('*'*rein_in((time_finished_secs-50)/5, 0, 5)) # Likewise with 55, not 50 or 51.
+				span_flagstr = dots(secs_span, 20, 45)
+				finished_flagstr = dots(time_finished_secs, 30, 60)
 				print '%s  took: %3ds  finished: %3ds  %s %s' % \
 						(out_report_timestr, secs_span, time_finished_secs, span_flagstr, finished_flagstr)
 			else:
