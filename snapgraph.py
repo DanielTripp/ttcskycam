@@ -169,6 +169,9 @@ class Vertex(object):
 	def get_ptidx(self, polylineidx_):
 		return self.get_ptaddr(polylineidx_).ptidx
 
+	# No need for adjacent points on a single polyline to be included in the vertex.  
+	# Here for each group of such adjacent points we remove all but the closest point to the 'vertex mean pos' 
+	# from this vertex. 
 	def remove_unnecessary_ptaddrs(self):
 		assert isinstance(self.ptaddrs, set)
 		vertex_mean_pos = geom.latlng_avg([self.snapgraph.get_latlng(ptaddr) for ptaddr in self.ptaddrs])
@@ -203,6 +206,9 @@ class Vertex(object):
 
 	def __repr__(self):
 		return self.__str__()
+
+	def strlong(self):
+		return 'Vertex(id:%d, %s, %s)' % (self.id, self.pos(), self.ptaddrs)
 
 	def to_json_dict(self):
 		return {'id': self.id, 'pos': self.pos(), 
@@ -265,7 +271,7 @@ class PosAddr(object):
 #		A 'step' is a PosAddr or a Vertex. 
 class Path(object):
 	
-	def __init__(self, piecestepses_, snapgraph_, snap_tolerance_):
+	def __init__(self, piecestepses_, snapgraph_):
 		assert isinstance(piecestepses_, Sequence)
 		for piecesteps in piecestepses_:
 			assert self.is_piece_valid(piecesteps)
@@ -273,7 +279,6 @@ class Path(object):
 		self.piecestepses = piecestepses_
 		self.pieces = [None]*len(self.piecestepses)
 		self.snapgraph = snapgraph_
-		self.snap_tolerance = snap_tolerance_
 
 	@staticmethod
 	def is_piece_valid(steps_):
@@ -316,6 +321,39 @@ class Path(object):
 				raise Exception()
 			if isinstance(step2, PosAddr):
 				r += [self.snapgraph.get_latlng(step2)] 
+		return uniq(r)
+
+	def plineidxes_n_dirs(self):
+		allsteps = sum(self.piecestepses, [])
+		assert len(allsteps) > 0
+		startposaddr = allsteps[0]; destposaddr = allsteps[-1]
+		r = []
+		for step1, step2 in hopscotch(allsteps):
+			if isinstance(step1, PosAddr) and isinstance(step2, Vertex):
+				plineidx = step1.linesegaddr.polylineidx
+				step1_ptidx = step1.linesegaddr.ptidx
+				vert_ptidx = step2.get_ptidx(plineidx)
+				direction = (0 if step1_ptidx < vert_ptidx else 1)
+			elif isinstance(step1, Vertex) and isinstance(step2, Vertex):
+				plineidx = step1.get_shortest_common_plineidx(step2)
+				step1_ptidx = step1.get_ptidx(plineidx)
+				step2_ptidx = step2.get_ptidx(plineidx)
+				assert step1_ptidx != step2_ptidx
+				direction = (0 if step1_ptidx < step2_ptidx else 1)
+			elif isinstance(step1, Vertex) and isinstance(step2, PosAddr):
+				plineidx = step2.linesegaddr.polylineidx
+				step2_ptidx = step2.linesegaddr.ptidx
+				vert_ptidx = step1.get_ptidx(plineidx)
+				direction = (0 if vert_ptidx <= step2_ptidx else 1)
+			elif isinstance(step1, PosAddr) and isinstance(step2, PosAddr):
+				plineidx = step1.linesegaddr.polylineidx
+				if step1.linesegaddr.ptidx == step2.linesegaddr.ptidx:
+					direction = (0 if step1.pals < step2.pals else 1)
+				else:
+					direction = (0 if step1.linesegaddr.ptidx < step2.linesegaddr.ptidx else 1)
+			else:
+				raise Exception()
+			r.append((plineidx, direction))
 		return uniq(r)
 
 	def piece_latlngs(self):
@@ -416,6 +454,7 @@ class SnapGraph(object):
 		if forsnaps:
 			self.init_gridsquare_to_linesegaddrs()
 		if forpaths:
+			self.polylines = [pline for pline in self.polylines if geom.dist_m_polyline(pline) > forpaths_disttolerance]
 			self.init_path_structures(forpaths_disttolerance)
 			self.init_gridsquare_to_linesegaddrs() # rebuilding it because for those 
 				# linesegs that were split within init_path_structures() - 
@@ -441,11 +480,11 @@ class SnapGraph(object):
 
 	# return list of (dist, pathsteps) pairs.  Dist is a float, in meters.   List is sorted in ascending order of dist. 
 	@lru_cache(maxsize=60000, posargkeymask=[1,1,0,1,0])
-	def find_paths(self, startlatlng_, startlocs_, destlatlng_, destlocs_, snap_tolerance=100, out_visited_vertexes=None):
+	def find_paths(self, startlatlng_, startlocs_, destlatlng_, destlocs_, snap_tolerance=100, k=1, out_visited_vertexes=None):
 		assert out_visited_vertexes is None # (temporarily?) unsupported due to caching of return value based on arguments. 
 
 		# We could almost decorate this function with mc.decorate instead of calling mc.get() ourselves, 
-		# but that's won't quite work, because we can't store anything with a reference to a SnapGraph object to in memcache, 
+		# but that won't quite work, because we can't store anything with a reference to a SnapGraph object to in memcache, 
 		# because they're large.  Vertexes have those.  So we will nullify those references before the result is put 
 		# into memcache, and un-nullify them before we return from this function.
 		# It probably wouldn't be that hard to make Vertex not have a reference to it's owner snapgraph.  Maybe later.
@@ -458,7 +497,7 @@ class SnapGraph(object):
 
 		assert self.name is not None
 		def find_paths_and_nullify_vertex_sgs(sgname__, startlatlng__, startlocs__, destlatlng__, destlocs__, snap_tolerance__=100):
-			r = self.find_paths_impl(startlatlng__, startlocs__, destlatlng__, destlocs__, snap_tolerance=snap_tolerance__)
+			r = self.find_paths_impl(startlatlng__, startlocs__, destlatlng__, destlocs__, snap_tolerance=snap_tolerance__, k=k)
 			set_sg_of_vertexes(r, None)
 			return r
 
@@ -467,25 +506,28 @@ class SnapGraph(object):
 		set_sg_of_vertexes(r, self)
 		return r
 
-	def find_paths_impl(self, startlatlng_, startlocs_, destlatlng_, destlocs_, snap_tolerance=c.GRAPH_SNAP_RADIUS, out_visited_vertexes=None):
+	def find_paths_impl(self, startlatlng_, startlocs_, destlatlng_, destlocs_, snap_tolerance=c.GRAPH_SNAP_RADIUS, k=1, out_visited_vertexes=None):
 		assert out_visited_vertexes is None # (temporarily?) unsupported due to caching of return value based on arguments. 
 		start_locs = (startlocs_ if startlocs_ is not None else self.multisnap(startlatlng_, snap_tolerance))
 		dest_locs = (destlocs_ if destlocs_ is not None else self.multisnap(destlatlng_, snap_tolerance))
 		if not(start_locs and dest_locs):
 			return []
 		else:
-			dists_n_paths = []
+			r_dists_n_paths = []
 			for start_loc, dest_loc in product(start_locs, dest_locs):
 				# Multiplying these by a certain factor because otherwise some strange choices will be made for shortest path 
 				# when going around corners.  I don't know how to explain this in comments, without pictures. 
 				start_latlng_to_loc_dist = self.get_latlng(start_loc).dist_m(startlatlng_)*PATHS_GPS_ERROR_FACTOR
 				dest_latlng_to_loc_dist = self.get_latlng(dest_loc).dist_m(destlatlng_)*PATHS_GPS_ERROR_FACTOR
-				dist, path = self.find_path_by_locs(start_loc, dest_loc, out_visited_vertexes)
-				if dist is not None:
-					dist += start_latlng_to_loc_dist + dest_latlng_to_loc_dist
-					dists_n_paths.append((dist, path))
-			dists_n_paths.sort(key=lambda e: e[0])
-			return dists_n_paths
+				distnpaths = self.find_path_by_locs(start_loc, dest_loc, k=k, out_visited_vertexes=out_visited_vertexes)
+				if k == 1:
+					distnpaths = [distnpaths]
+				for dist, path in distnpaths:
+					if dist is not None:
+						dist += start_latlng_to_loc_dist + dest_latlng_to_loc_dist
+						r_dists_n_paths.append((dist, path))
+			r_dists_n_paths.sort(key=lambda e: e[0])
+			return r_dists_n_paths
 
 	# return A (dist, Path) pair, or (None, None) if no path is possible.  'dist' is a float, in meters.   
 	def find_multipath(self, latlngs_, locses=None, snap_tolerance=c.GRAPH_SNAP_RADIUS, log_=False):
@@ -496,7 +538,7 @@ class SnapGraph(object):
 		if len(latlngs_) == 2:
 			dists_n_pieces = self.find_paths(latlngs_[0], our_locses[0], latlngs_[1], our_locses[1])
 			if len(dists_n_pieces) > 0:
-				return (dists_n_pieces[0][0], Path([dists_n_pieces[0][1]], self, snap_tolerance))
+				return (dists_n_pieces[0][0], Path([dists_n_pieces[0][1]], self))
 			else:
 				return (None, None)
 		else:
@@ -539,7 +581,7 @@ class SnapGraph(object):
 					chosen_pathsteps_bc = chosen_dists_n_pieces[1][1]
 					r_pieces.append(chosen_pathsteps_bc)
 					r_dist += chosen_dists_n_pieces[1][0]
-			return ((r_dist, Path(r_pieces, self, snap_tolerance)) if r_pieces is not None else (None, None))
+			return ((r_dist, Path(r_pieces, self)) if r_pieces is not None else (None, None))
 
 	def get_combined_cost(self, distnpiece1_, distnpiece2_, snap_tolerance_):
 		return distnpiece1_[0] + distnpiece2_[0] + self.get_doubleback_cost(distnpiece1_, distnpiece2_, snap_tolerance_)
@@ -633,14 +675,15 @@ class SnapGraph(object):
 			dist_between_bounding_pts = ptidx_to_mapl[ptidx+1] - ptidx_to_mapl[ptidx]
 			return dist_between_bounding_pts*posaddr_.pals
 
-	# Returns shortest path, as one (dist, pathsteps) (i.e. (float, list<PosAddr|Vertex>)) pair.   If no path is possible, 
+	# Returns shortest path (or paths of key > 1), 
+	# each path as a (dist, pathsteps) (i.e. (float, list<PosAddr|Vertex>)) pair.   If no path is possible, 
 	# then both dist and path will be None. 
 	# We pass a fancy 'get connected vertexes' function to dijkstra, to support path finding from somewhere along an edge 
 	# (which dijkstra doesn't do) by pretending like we've inserted a temporary vertex at the start and dest positions. 
 	# In the code below, 'vvert' is short for 'virtual vertex' which is a term I made up for this function, 
 	# to describe something that is a vertex in the graph theory sense and from the dijkstra function's perspective, 
 	# but is not necessarily one of our Vertex objects.  A virtual vertex could be a Vertex, or it could be a PosAddr. 
-	def find_path_by_locs(self, startloc_, destloc_, out_visited_vertexes=None):
+	def find_path_by_locs(self, startloc_, destloc_, k=1, out_visited_vertexes=None):
 		assert isloc(startloc_) and isloc(destloc_)
 
 		all_vverts = self.get_vertexes() + [loc for loc in (startloc_, destloc_) if isinstance(loc, PosAddr)]
@@ -701,10 +744,10 @@ class SnapGraph(object):
 		def heuristic(vvert1__, vvert2__):
 			return self.get_latlng(vvert1__).dist_m(self.get_latlng(vvert2__))
 
-		dist, pathsteps = a_star(startloc_, destloc_, all_vverts, get_connected_vertexndists, heuristic, 
-				out_visited_vertexes=out_visited_vertexes)
+		r = a_star(startloc_, destloc_, all_vverts, get_connected_vertexndists, heuristic, 
+				k=k, out_visited_vertexes=out_visited_vertexes)
 
-		return (dist, pathsteps)
+		return r
 
 	# returns None if that vertex ID does not exist.
 	def get_vertex(self, id_):
@@ -712,11 +755,63 @@ class SnapGraph(object):
 
 	def init_path_structures(self, disttolerance_):
 		self.paths_disttolerance = disttolerance_
-		self.init_polylineidx_to_ptidx_to_vertex(disttolerance_)
+
+		# These data structures will be built twice: once before and once after removing the island plines. 
+		# We do it the first time (before) because in order to figure out which plines are part of those 
+		# undesirable islands, we need these data structures.  
+		# We do it the second time (after) because the act of removing plines changes (subsequent) pline indexes, 
+		# and might remove some vertexes too - so it invalidates the data structures.  
+		# It would be possible to massage the data structures to deal with this, but that would require writing some bug-prone code. 
+		self.init_path_structures_business()
+
+		self.remove_island_plines()
+
+		# This is the second time.  For good this time. 
+		self.init_path_structures_business()
+
+		assert len(self.get_island_plineidxes()) == 0
+
+	def init_path_structures_business(self):
+		self.init_polylineidx_to_ptidx_to_vertex()
 		self.init_polylineidx_to_ptidx_to_mapl()
 		self.init_vertex_to_connectedvertex_n_dists()
 		self.init_plineidx_to_connected_plineidxes()
 		self.vertexid_to_vertex = dict((vert.id, vert) for vert in self.get_vertexes())
+
+	def remove_island_plines(self):
+		for plineidx in sorted(self.get_island_plineidxes(), reverse=True):
+			del self.polylines[plineidx]
+		
+	def get_island_plineidxes(self):
+		# We can have polylines that have no vertexes, so first get those: 
+		r = set(range(len(self.polylines))) - set(self.plineidx_to_connected_plineidxes)
+
+		# Also check all vertexes connectivity to each other in a graph theory type of way. 
+		# Thanks to http://stackoverflow.com/questions/15394254/graph-algorithm-finding-if-graph-is-connected-bipartite-has-cycle-and-is-a-tre 
+		visited = dict((vert, False) for vert in self.get_vertexes())
+		components = []
+		for vert in self.get_vertexes():
+			if not visited[vert]:
+				cur_component = set()
+				to_traverse = [vert]
+				while len(to_traverse) > 0:
+					vert2 = to_traverse.pop()
+					to_traverse += [vert3 for vert3 in self.get_connected_vertexes(vert2.id) if not visited[vert3]]
+					visited[vert2] = True
+					cur_component.add(vert2)
+				components.append(cur_component)
+
+		largest_component = max(components, key=len)
+		for non_largest_component in [c for c in components if c is not largest_component]:
+			for vert in non_largest_component:
+				for plineidx in [ptaddr.polylineidx for ptaddr in vert.ptaddrs]:
+					r.add(plineidx)
+
+		if len(r) > len(largest_component)/200:
+			# This is meant to handle rare cases.  If it's handling common cases, then that's probably a bug. 
+			raise Exception()
+
+		return r
 
 	def init_plineidx_to_connected_plineidxes(self):
 		self.plineidx_to_connected_plineidxes = defaultdict(lambda: set())
@@ -725,8 +820,8 @@ class SnapGraph(object):
 				self.plineidx_to_connected_plineidxes[ptaddr1.polylineidx].add(ptaddr2.polylineidx)
 		self.plineidx_to_connected_plineidxes = dict(self.plineidx_to_connected_plineidxes)
 
-	def init_polylineidx_to_ptidx_to_vertex(self, disttolerance_):
-		addr_to_vertex = self.get_addr_to_vertex(disttolerance_)
+	def init_polylineidx_to_ptidx_to_vertex(self):
+		addr_to_vertex = self.get_addr_to_vertex()
 		vertexes = set(addr_to_vertex.values())
 		self.polylineidx_to_ptidx_to_vertex = defaultdict(lambda: {})
 		for vertex in vertexes:
@@ -760,9 +855,9 @@ class SnapGraph(object):
 			for linesegaddr in linesegaddrs:
 				print '\t\t%s' % linesegaddr
 		for vert, connectedvert_n_dists in iteritemssorted(self.vertex_to_connectedvertex_n_dists):
-			print '\t%s' % vert
+			print '\t%s' % (vert.strlong())
 			for connectedvert, dist in connectedvert_n_dists:
-				print '\t\t%s' % connectedvert
+				print '\t\t%s - %.1f' % (connectedvert.strlong(), dist)
 		print '}'
 
 	# mapl = 'meters along polyline' 
@@ -824,8 +919,9 @@ class SnapGraph(object):
 			posaddr_of_vertex = PosAddr(ptaddr_of_vertex_on_posaddrs_pline, 0.0)
 			return self.get_dist_between_posaddrs(posaddr, posaddr_of_vertex)
 
-	def get_addr_to_vertex(self, disttolerance_):
-		latlngid_to_ontop_latlngids = self.get_graph_latlngid_to_ontop_latlngids(disttolerance_)
+	def get_addr_to_vertex(self):
+		self.deloop_polylines()
+		latlngid_to_ontop_latlngids = self.get_graph_latlngid_to_ontop_latlngids()
 		latlngid_to_addr = self.get_latlngid_to_addr(latlngid_to_ontop_latlngids)
 		ptaddr_to_vertex = defaultdict(lambda: Vertex.create_open(self))
 
@@ -855,6 +951,24 @@ class SnapGraph(object):
 
 		return dict(ptaddr_to_vertex)
 
+	# This function might modify self.polylines. 
+	# This function exists because we don't handle polylines that are loops at all.  
+	# (I forget and why.  But such polylines are removed when the graph is built.  Currently this happens in 
+	# get_addr_to_vertex - "if len(vertex.get_looping_polylineidxes()) > 0: del ptaddr_to_vertex[ptaddr]".)  
+	# But if we split a looping polyline into two, then we handle that fine.  So here we try to split them.
+	def deloop_polylines(self):
+		for plineidx in range(len(self.polylines)):
+			pline = self.polylines[plineidx]
+			if pline[0].dist_m(pline[-1]) <= self.paths_disttolerance:
+				midpt_idx = len(pline)/2
+				midpt = pline[midpt_idx]
+				assert pline[0].dist_m(midpt) > self.paths_disttolerance and pline[-1].dist_m(midpt) > self.paths_disttolerance
+					# ^^ I don't know what to do with a polyline like that.  Sounds useless anyway. 
+				new_pline = [pt.copy() for pt in pline[midpt_idx:]] # copying latlngs b/c of the things we do w/ latlng object ids. 
+				pline[:] = pline[:midpt_idx+1]
+				self.polylines.append(new_pline)
+		self.init_gridsquare_to_linesegaddrs() # b/c this function might have added new polylines.   
+
 	def get_latlngid_to_addr(self, latlngid_to_ontop_latlngids_):
 		r = {}
 		for polylineidx, polyline in enumerate(self.polylines):
@@ -863,31 +977,31 @@ class SnapGraph(object):
 		return r
 
 	# Might modify self.polylines. 
-	def get_graph_latlngid_to_ontop_latlngids(self, disttolerance_):
+	def get_graph_latlngid_to_ontop_latlngids(self):
 		latlngid_to_ontop_latlngids = defaultdict(lambda: set())
 		def add(pt1_, pt2_):
 			assert isinstance(pt1_, geom.LatLng) and isinstance(pt2_, geom.LatLng)
 			latlngid_to_ontop_latlngids[id(pt1_)].add(id(pt2_))
 			latlngid_to_ontop_latlngids[id(pt2_)].add(id(pt1_))
-		for ptaddr1, ptaddr2 in self.get_addr_combos_near_each_other(False, False, disttolerance_):
+		for ptaddr1, ptaddr2 in self.get_addr_combos_near_each_other(False, False, self.paths_disttolerance):
 			pt1 = self.get_point(ptaddr1)
 			pt2 = self.get_point(ptaddr2)
 			#print '-------- testing pt/pt    ', ptaddr1, ptaddr2
-			if pt1.dist_m(pt2) <= disttolerance_:
+			if pt1.dist_m(pt2) <= self.paths_disttolerance:
 				#print '-------- adding pt/pt    ', ptaddr1, ptaddr2, pt1
 				add(pt1, pt2)
-		for ptaddr, linesegaddr in self.get_addr_combos_near_each_other(False, True, disttolerance_):
+		for ptaddr, linesegaddr in self.get_addr_combos_near_each_other(False, True, self.paths_disttolerance):
 			pt = self.get_point(ptaddr)
 			lineseg = self.get_lineseg(linesegaddr)
 			t0 = time.time()
 
 			#print '-------- testing pt/line  ', ptaddr, linesegaddr
-			snapped_pt, dist_to_lineseg = pt.snap_to_lineseg_opt(lineseg, disttolerance_)
-			if (dist_to_lineseg is not None) and (dist_to_lineseg < disttolerance_):
+			snapped_pt, dist_to_lineseg = pt.snap_to_lineseg_opt(lineseg, self.paths_disttolerance)
+			if (dist_to_lineseg is not None) and (dist_to_lineseg < self.paths_disttolerance):
 
 			#snapped_pt, snapped_to_lineseg_ptidx, dist_to_lineseg = pt.snap_to_lineseg(lineseg)
-			#if dist_to_lineseg < disttolerance_ and snapped_to_lineseg_ptidx is None \
-			#		and (snapped_pt.dist_m(lineseg.start) > disttolerance_ and snapped_pt.dist_m(lineseg.end) > disttolerance_):
+			#if dist_to_lineseg < self.paths_disttolerance and snapped_to_lineseg_ptidx is None \
+			#		and (snapped_pt.dist_m(lineseg.start) > self.paths_disttolerance and snapped_pt.dist_m(lineseg.end) > self.paths_disttolerance):
 
 				# The point of that last test (not being too close to either end of the lineseg) is because those cases will 
 				# be picked up by the point/point combos above.  Also, splitting a lineseg that close to one end would be ridiculous. 
@@ -896,12 +1010,12 @@ class SnapGraph(object):
 				linesegaddr.ptidx += 1
 				add(pt, snapped_pt)
 
-		for linesegaddr1, linesegaddr2 in self.get_addr_combos_near_each_other(True, True, disttolerance_):
+		for linesegaddr1, linesegaddr2 in self.get_addr_combos_near_each_other(True, True, self.paths_disttolerance):
 			lineseg1 = self.get_lineseg(linesegaddr1)
 			lineseg2 = self.get_lineseg(linesegaddr2)
 			intersection_pt = lineseg1.get_intersection(lineseg2)
 			if intersection_pt is not None:
-				if all(pt.dist_m(intersection_pt) > disttolerance_ for pt in lineseg1.ptlist() + lineseg2.ptlist()):
+				if all(pt.dist_m(intersection_pt) > self.paths_disttolerance for pt in lineseg1.ptlist() + lineseg2.ptlist()):
 					#print '-------- adding line/line', linesegaddr1, linesegaddr2, intersection_pt
 					self.polylines[linesegaddr1.polylineidx].insert(linesegaddr1.ptidx+1, intersection_pt)
 					# Need to do this because we're building our maps based on object ID of the latlngs and that code 
@@ -1527,9 +1641,11 @@ def dijkstra(srcvertex_, destvertex_, all_vertexes_, get_connected_vertexndists_
 		path.insert(0, srcvertex_)
 		return (info[destvertex_].dist, path)
 
+# Returns a single (dist, pathsteps) pair if k==1.
+# 	otherwise returns a list of (dist, pathsteps) pairs.
 # The A* path-finding algorithm.  Thanks to http://en.wikipedia.org/wiki/A*_search_algorithm
 # This version assumes, and exploits, a monotonic heuristic function. 
-def a_star(srcvertex_, destvertex_, all_vertexes_, get_connected_vertexndists_, heuristic_cost_estimate_, out_visited_vertexes=None):
+def a_star(srcvertex_, destvertex_, all_vertexes_, get_connected_vertexndists_, heuristic_cost_estimate_, k=1, out_visited_vertexes=None):
 	closedset = set() # The set of nodes already evaluated.
 	openset = set([srcvertex_]) # The set of tentative nodes to be evaluated, initially containing the start node
 	came_from = {} # The map of navigated nodes.
@@ -1545,7 +1661,11 @@ def a_star(srcvertex_, destvertex_, all_vertexes_, get_connected_vertexndists_, 
 			path = [destvertex_]
 			while path[0] in came_from:
 				path.insert(0, came_from[path[0]])
-			return (g_score[destvertex_], path)
+			r = (g_score[destvertex_], path)
+			if k > 1:
+				r = [r] + yen_k_shortest_path(k, r[0], r[1], srcvertex_, destvertex_, 
+						all_vertexes_, get_connected_vertexndists_, heuristic_cost_estimate_)
+			return r
  
 		openset.remove(current)
 		closedset.add(current)
@@ -1561,7 +1681,57 @@ def a_star(srcvertex_, destvertex_, all_vertexes_, get_connected_vertexndists_, 
 				if neighbor not in openset:
 					openset.add(neighbor)
 
-	return (None, None)
+	return ((None, None) if k==1 else [(None, None)])
+
+# Thanks to http://en.wikipedia.org/wiki/Yen%27s_algorithm 
+def yen_k_shortest_path(k_, shortest_dist_, shortest_path_, srcvertex_, destvertex_, 
+		all_vertexes_, get_connected_vertexndists_, heuristic_cost_estimate_):
+	A = [(shortest_dist_, shortest_path_)]
+	# Initialize the heap to store the potential kth shortest path.
+	B = []
+	
+	for k in range(1, k_+1):
+		# The spur node ranges from the first node to the next to last node in the shortest path.
+		for i in range(len(A[k - 1][1])-1):
+			
+			# Spur node is retrieved from the previous k-shortest path, k - 1.
+			spurNode = A[k-1][1][i]
+			# The sequence of nodes from the source to the spur node of the previous k-shortest path.
+			rootPath = A[k-1][1][:i+1]
+			rootPath = (get_dist_from_pathsteps(rootPath, get_connected_vertexndists_), rootPath)
+			
+			edges_to_omit = []
+			for p in [x[1] for x in A]:
+				if rootPath[1] == p[:i+1]:
+					# Remove the links that are part of the previous shortest paths which share the same root path.
+					edges_to_omit.append((p[i], p[i+1]))
+
+			def get_connected_vertexndists(vert__):
+				r = get_connected_vertexndists_(vert__)
+				r = [x for x in r if (vert__, x[0]) not in edges_to_omit and (x[0], vert__) not in edges_to_omit]
+				return r
+
+			# Calculate the spur path from the spur node to the sink.
+			spurPath = a_star(spurNode, destvertex_, all_vertexes_, get_connected_vertexndists, heuristic_cost_estimate_)
+
+			# Entire path is made up of the root path and spur path.
+			totalPath = (rootPath[0] + spurPath[0], rootPath[1] + spurPath[1][1:])
+			# Add the potential k-shortest path to the heap.
+			B.append(totalPath)
+
+		# Sort the potential k-shortest paths by cost.
+		B.sort(key=lambda x: x[0])
+		# Add the lowest cost path becomes the k-shortest path.
+		A.append(B[0])
+		B.pop(0)
+
+	return A
+
+def get_dist_from_pathsteps(pathsteps_, get_connected_vertexndists_):
+	r = 0.0
+	for step1, step2 in hopscotch(pathsteps_):
+		r += min(x[1] for x in get_connected_vertexndists_(step1) if x[0] == step2)
+	return r
 
 def isloc(obj_):
 	return isinstance(obj_, Vertex) or isinstance(obj_, PosAddr)

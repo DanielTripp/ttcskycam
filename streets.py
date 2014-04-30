@@ -94,6 +94,15 @@ def join_connected_plines(plines_):
 				del plines_[pline2idx]
 				joined_something = True
 				break
+			# Because we can't assume that these plines will be in an order in the shapefile that is sensible for joining
+			# them end-to-end (i.e. visual order, when looking at the whole street, all plines included.)  
+			# The order of the latlngs of one pline could be in the reverse order compared to its neighbours.  
+			# Most of them aren't, but I found at least one that is.
+			elif pline1[0].is_close(pline2[0]):
+				pline1[:] = pline2[-1::-1] + pline1[1:]
+				del plines_[pline2idx]
+				joined_something = True
+				break
 		if not joined_something:
 			break
 
