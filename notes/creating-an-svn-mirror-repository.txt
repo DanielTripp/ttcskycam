@@ -1,4 +1,5 @@
 mkdir ~/svn-mirror
+cd ~/svn-mirror
 
 svnadmin create repos
 
