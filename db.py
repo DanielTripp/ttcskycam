@@ -33,7 +33,7 @@ from lru_cache import lru_cache
 import vinfo, geom, traffic, routes, yards, tracks, streets, snapgraph, predictions, mc, c, util
 from misc import *
 
-HOSTMONIKER_TO_IP = {'theorem': '72.2.4.176', 'black': '24.52.231.206', 'u': 'localhost'}
+HOSTMONIKER_TO_IP = {'theorem': '72.2.4.176', 'black': '24.52.231.206', 'u': 'localhost', 'v': 'localhost'}
 
 VI_COLS = ' dir_tag, heading, vehicle_id, lat, lon, predictable, fudgeroute, route_tag, secs_since_report, time_retrieved, time, mofr, widemofr, graph_locs, graph_version '
 
@@ -52,7 +52,7 @@ def force_host(hostmoniker_):
 
 def connect():
 	global g_conn
-	DATABASE_CONNECT_POSITIONAL_ARGS = ("dbname='postgres' user='postgres' host='%s' password='doingthis'" % (get_host()),)
+	DATABASE_CONNECT_POSITIONAL_ARGS = ("dbname='postgres' user='dt' host='%s' password='doingthis'" % (get_host()),)
 	DATABASE_CONNECT_KEYWORD_ARGS = {}
 	DATABASE_DRIVER_MODULE_NAME = 'psycopg2'
 	USE_DB_DRIVER_IN_CURRENT_DIRECTORY = socket.gethostname().endswith('theorem.ca')
@@ -74,7 +74,9 @@ def get_host():
 		with open('HOST') as fin:
 			hostmoniker = fin.read().strip()
 	if hostmoniker == 'local':
-		if socket.gethostname() == 'unofficialttctrafficreport.ca':
+		if socket.gethostname().startswith('ip-'):
+			hostmoniker = 'v'
+		elif socket.gethostname() == 'unofficialttctrafficreport.ca':
 			hostmoniker = 'u'
 		elif socket.gethostname().endswith('theorem.ca'):
 			hostmoniker = 'theorem'
