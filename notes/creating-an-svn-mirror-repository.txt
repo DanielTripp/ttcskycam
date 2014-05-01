@@ -3,19 +3,17 @@ cd ~/svn-mirror
 
 svnadmin create repos
 
-create this file: repos/hooks/pre-revprop-change
-with these contents:
-
-#!/bin/sh
+echo '#!/bin/sh
 USER="$3"
 if [ "$USER" = "svnsync" ]; then exit 0; fi
 echo "Only the svnsync user can change revprops" >&2
 exit 1
+' > repos/hooks/pre-revprop-change
 
 chmod u=rwx,g=rwx,o=rx  repos/hooks/pre-revprop-change
 
+#	(then enter svnsync password.  then 'dt' for username.  then dt's password.)
 svnsync initialize --username svnsync file://$(abspath repos)  https://173.230.189.111/svn/ttc
-	(then enter svnsync password.  then 'dt' for username.  then dt's password.)
 
 svnsync sync file://$(abspath repos)
 
