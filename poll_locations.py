@@ -17,10 +17,11 @@ def get_data_from_web_as_str(route_, time_es_):
 		raise Exception('Got no output from NextBus.  stderr from wget:_%s_' % stderr)
 	return stdout
 
-def get_data_from_web_as_xml(route_, time_es_, xml_fout_):
+def get_data_from_web_as_xml(route_, time_es_, xml_filename_):
 	data_str = get_data_from_web_as_str(route_, time_es_)
-	if xml_fout_:
-		print >> xml_fout_, data_str
+	if xml_filename_:
+		with open(xml_filename_, 'a') as fout:
+			print >> fout, data_str
 	def print_data_str(msg_):
 		print >> sys.stderr, '--- %s - %s:' % (now_str(), msg_)
 		print >> sys.stderr, '---'
@@ -35,7 +36,7 @@ def get_data_from_web_as_xml(route_, time_es_, xml_fout_):
 		print_data_str('Detected error(s) in output from NextBus.  (Will try to get data from this document regardless.)')
 	return r
 
-def deal_with_xml(xmldoc_, insert_into_db_, vis_fout_):
+def deal_with_xml(xmldoc_, insert_into_db_, vis_filename_):
 	vehicles = []
 	nextbus_lasttime = None
 	for elem in (node for node in xmldoc_.documentElement.childNodes if isinstance(node, xml.dom.minidom.Element)):
@@ -53,8 +54,9 @@ def deal_with_xml(xmldoc_, insert_into_db_, vis_fout_):
 		vehicle_info.calc_time()
 		if insert_into_db_:
 			db.insert_vehicle_info(vehicle_info)
-		if vis_fout_:
-			print >> vis_fout_, vehicle_info.str_long()
+		if vis_filename_:
+			with open(vis_filename_, 'a') as fout:
+				print >> fout, vehicle_info.str_long()
 
 	return {'nextbus_lasttime': nextbus_lasttime, 'our_system_time_on_poll_finish': now_em()}
 
@@ -74,29 +76,41 @@ def deal_with_xml(xmldoc_, insert_into_db_, vis_fout_):
 # 	return a lastTime several minutes in the past for NextBus - so if, when deciding which routes to poll first, we sorted
 #	by nextbus_lasttime, this would bias towards those night routes being polled first and possibly, no other routes being polled
 #	at all.  So that's why we maintain our_system_time_on_poll_finish and use it to decide which routes to poll first.
-def poll_once(routelist_, insert_into_db_, pollstate_filename_, xml_fout_, vis_fout_):
+def poll_once(routelist_, insert_into_db_, pollstate_filename_, xml_filename_, vis_filename_):
+	pool = multiprocessing.Pool(8)
 	try:
-		with open(pollstate_filename_) as fin:
-			route_to_times = json.load(fin)
-	except:
-		route_to_times = {}
-	# Sorting like this will make sure that any routes that were left unpolled on the last run (due to poll period 
-	# running out) will be polled first on this run: 
-	sortkey = lambda route: route_to_times[route]['our_system_time_on_poll_finish'] if route in route_to_times else 0
-	routelist_in_priority_order = sorted(routelist_, key=sortkey)
-	for routei, route in enumerate(routelist_in_priority_order):
-		if (time.time() - T0) > POLL_PERIOD_SECS - 5:
-			sys.exit('poll_locations - poll period has passed, with %d of %d route(s) left unpolled.' \
-					% (len(routelist_in_priority_order) - routei, len(routelist_in_priority_order)))
 		try:
-			nextbus_lasttime = route_to_times[route]['nextbus_lasttime'] if route in route_to_times else 0
-			data_xmldoc = get_data_from_web_as_xml(route, nextbus_lasttime, xml_fout_)
-			route_to_times[route] = deal_with_xml(data_xmldoc, insert_into_db_, vis_fout_)
-		except Exception, e:
-			print 'At %s: error getting route %s' % (em_to_str(now_em()), route)
-			traceback.print_exc(e)
-		with open(pollstate_filename_, 'w') as fout:
-			json.dump(route_to_times, fout, indent=0)
+			with open(pollstate_filename_) as fin:
+				route_to_times = json.load(fin)
+		except:
+			route_to_times = {}
+		# Sorting like this will make sure that any routes that were left unpolled on the last run (due to poll period 
+		# running out) will be polled first on this run: 
+		sortkey = lambda route: route_to_times[route]['our_system_time_on_poll_finish'] if route in route_to_times else 0
+		routelist_in_priority_order = sorted(routelist_, key=sortkey)
+		route_to_poolresult = {}
+		for routei, route in enumerate(routelist_in_priority_order):
+			if (time.time() - T0) > POLL_PERIOD_SECS - 5:
+				sys.exit('poll_locations - poll period has passed, with %d of %d route(s) left unpolled.' \
+						% (len(routelist_in_priority_order) - routei, len(routelist_in_priority_order)))
+			try:
+				nextbus_lasttime = route_to_times[route]['nextbus_lasttime'] if route in route_to_times else 0
+				route_to_poolresult[route] = pool.apply_async(get_data_from_web_and_deal_with_it, \
+						(route, nextbus_lasttime, insert_into_db_, xml_filename_, vis_filename_))
+			except Exception, e:
+				print 'At %s: error getting route %s' % (em_to_str(now_em()), route)
+				traceback.print_exc(e)
+			with open(pollstate_filename_, 'w') as fout:
+				json.dump(route_to_times, fout, indent=0)
+		for route, poolresult in route_to_poolresult.iteritems():
+			route_to_times[route] = poolresult.get()
+	finally:
+		pool.close()
+		pool.join()
+
+def get_data_from_web_and_deal_with_it(route_, nextbus_lasttime_, insert_into_db_, xml_filename_, vis_filename_):
+	data_xmldoc = get_data_from_web_as_xml(route_, nextbus_lasttime_, xml_filename_)
+	return deal_with_xml(data_xmldoc, insert_into_db_, vis_filename_)
 
 def get_graphs_into_ram():
 	# Doing this because this is currently called as a cron job every minute i.e. new process every minute. 
@@ -124,18 +138,13 @@ if __name__ == '__main__':
 	else:
 		routelist = list(routes.CONFIGROUTES)
 
-	xml_fout = (open(get_opt(opts, 'dump-xml'), 'a') if get_opt(opts, 'dump-xml') else None)
-	vis_fout = (open(get_opt(opts, 'dump-vis'), 'a') if get_opt(opts, 'dump-vis') else None)
+	xml_filename = get_opt(opts, 'dump-xml')
+	vis_filename = get_opt(opts, 'dump-vis')
 	insert_into_db = not get_opt(opts, 'dont-insert-into-db')
 
 	get_graphs_into_ram()
 
-	poll_once(routelist, insert_into_db, pollstate_filename, xml_fout, vis_fout)
-
-	if xml_fout:
-		xml_fout.close()
-	if vis_fout:
-		vis_fout.close()
+	poll_once(routelist, insert_into_db, pollstate_filename, xml_filename, vis_filename)
 
 	if get_opt(opts, 'touch-flag-file-on-finish'):
 		touch('/tmp/ttc-poll-locations-finished-flag')
