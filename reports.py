@@ -133,19 +133,21 @@ def wait_for_locations_poll_to_finish():
 
 def make_all_reports_and_insert_into_db_once():
 	report_time = round_up_by_minute(now_em())
-	for froute in sorted(FROUTES):
-		for direction in (0, 1):
-			reporttype_to_datazoom_to_reportdataobj = defaultdict(lambda: {})
-			for datazoom in c.VALID_DATAZOOMS:
-				try:
-					traffic_data = traffic.get_traffics_impl(froute, direction, datazoom, report_time)
-					reporttype_to_datazoom_to_reportdataobj['traffic'][datazoom] = traffic_data
-					locations_data = traffic.get_recent_vehicle_locations_impl(froute, direction, datazoom, report_time)
-					reporttype_to_datazoom_to_reportdataobj['locations'][datazoom] = locations_data
-				except:
-					printerr('%s: Problem during %s / dir=%d / datazoom=%d' % (now_str(), froute, direction, datazoom))
-					raise
-			db.insert_reports(froute, direction, report_time, reporttype_to_datazoom_to_reportdataobj)
+	multiproc(8, make_reports_and_insert_into_db_single_route, [(report_time, froute) for froute in FROUTES])
+
+def make_reports_and_insert_into_db_single_route(report_time_, froute_):
+	for direction in (0, 1):
+		reporttype_to_datazoom_to_reportdataobj = defaultdict(lambda: {})
+		for datazoom in c.VALID_DATAZOOMS:
+			try:
+				traffic_data = traffic.get_traffics_impl(froute_, direction, datazoom, report_time_)
+				reporttype_to_datazoom_to_reportdataobj['traffic'][datazoom] = traffic_data
+				locations_data = traffic.get_recent_vehicle_locations_impl(froute_, direction, datazoom, report_time_)
+				reporttype_to_datazoom_to_reportdataobj['locations'][datazoom] = locations_data
+			except:
+				printerr('%s: Problem during %s / dir=%d / datazoom=%d' % (now_str(), froute_, direction, datazoom))
+				raise
+		db.insert_reports(froute_, direction, report_time_, reporttype_to_datazoom_to_reportdataobj)
 
 def make_all_reports_and_insert_into_db_forever():
 	routes.prime_routeinfos()
