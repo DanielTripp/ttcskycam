@@ -1,0 +1,240 @@
+List intentionally installed packages on old machine with this: 
+
+( zcat $( ls -tr /var/log/apt/history.log*.gz ) ; cat /var/log/apt/history.log ) | egrep '^(Start-Date:|Commandline:)' | grep -v aptdaemon | egrep '^Commandline:'
+
+Then make the output of that into a script that calls "apt-get -y".  
+
+Here is one such script from April 2014: 
+
+#!/usr/bin/env bash
+
+apt-get -y install subversion
+apt-get -y install memcached
+apt-get -y install postgresql
+apt-get -y install libneon27
+apt-get -y remove libneon27
+apt-get -y install libssl0.9.8
+apt-get -y install python-psycopg2
+apt-get -y install openjdk-7-jre
+apt-get -y install php5
+apt-get -y remove php5
+apt-get -y install php5
+apt-get -y remove php5
+apt-get -y install php5
+apt-get -y install netcat
+apt-get -y install python-setuptools
+apt-get -y install apache2-prefork-dev
+apt-get -y install python-dev
+apt-get -y install sysstat
+apt-get -y install iotop
+apt-get -y install quota quotatool
+apt-get -y install ntp
+apt-get -y install ntpdate
+apt-get -y install bc
+apt-get -y install git
+apt-get -y install cmake
+apt-get -y install aptitude
+apt-get -y install libboost-all-dev
+apt-get -y install libzip2
+apt-get -y install libbz2-dev
+apt-get -y install lua5.2
+apt-get -y install liblua5.2-dev
+apt-get -y install luajit
+apt-get -y install libluajit-5.1-dev
+apt-get -y install libxml2-dev
+apt-get -y install libluabind-dev
+apt-get -y install libstxxl-dev
+apt-get -y install libosmpbf-dev
+apt-get -y install libprotobuf-dev
+apt-get -y remove lua5.2
+apt-get -y install lua5.1
+apt-get -y remove liblua5.2-dev
+apt-get -y install liblua5.2-dev
+apt-get -y remove liblua5.2-0
+apt-get -y install build-essential git cmake pkg-config libprotoc-dev libprotobuf7 protobuf-compiler libprotobuf-dev libosmpbf-dev libpng12-dev libbz2-dev libstxxl-dev libstxxl-doc libstxxl1 libxml2-dev libzip-dev libboost-all-dev lua5.1 liblua5.1-0-dev libluabind-dev libluajit-5.1-dev
+apt-get -y install python-numpy
+apt-get -y install python-scipy
+apt-get -y install zlib1g-dev libshp-dev libsqlite3-dev libgd2-xpm-dev libexpat1-dev libgeos-dev libgeos++-dev libxml2-dev libsparsehash-dev libv8-dev libicu-dev libgdal1-dev libprotobuf-dev protobuf-compiler devscripts debhelper fakeroot doxygen libboost-dev git-core
+apt-get -y install libprotobuf-java ant default-jdk maven-repo-helper
+apt-get -y install graphviz
+apt-get -y install postgresql-contrib
+
+
+sudo passwd postgres
+sudo passwd root
+
+
+Install .dt-init etc for ubuntu, postgres, and root users.
+bin and app dirs too.
+Maybe get from old machine with something like this:
+tar zcf /tmp/u.tar.gz .dt-init* .vimrc  .inputrc  .bash_profile .bashrc  .profile  .screenrc  bin/ apps/
+
+For each user, in .dt-init-local: 
+- might want to unalias svn and svnsync 
+- Change PS1 to reflect new machine name
+
+
+
+# Creating an svn mirror repository: 
+# (as 'default' user): 
+
+cd
+mkdir ~/svn-mirror
+cd ~/svn-mirror
+
+svnadmin create repos
+
+echo '#!/bin/sh
+USER="$3"
+if [ "$USER" = "svnsync" ]; then exit 0; fi
+echo "Only the svnsync user can change revprops" >&2
+exit 1
+' > repos/hooks/pre-revprop-change
+
+chmod u=rwx,g=rwx,o=rx  repos/hooks/pre-revprop-change
+
+# (then enter svnsync password.  then 'dt' for username.  then dt's password.)
+svnsync initialize --username svnsync file://$(abspath repos)  https://173.230.189.111/svn/ttc
+
+svnsync sync file://$(abspath repos)
+
+# Also - might want to edit path in ~/bin/svn-sync-mirror 
+
+
+
+
+
+
+
+In psql: 
+
+create user dt;
+alter user dt password 'doingthis';
+
+add this line to pg_hba.conf:
+local   all             dt                                      password
+
+modify /etc/postgresql/9.3/main/postgresql.conf like this: 
+
+< #effective_cache_size = 128MB
+> effective_cache_size = 228MB
+
+< #default_statistics_target = 100  # range 1-10000
+> default_statistics_target = 1000  # range 1-10000
+
+< #log_destination = 'stderr'   # Valid values are combinations of
+> log_destination = 'stderr'    # Valid values are combinations of
+
+< #logging_collector = off    # Enable capturing of stderr and csvlog
+> logging_collector = on    # Enable capturing of stderr and csvlog
+
+< #log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'  # log file name pattern,
+> log_filename = 'postgresql-%Y-%m-%d.log'  # log file name pattern,
+
+> log_truncate_on_rotation = on
+
+< #log_rotation_age = 1d      # Automatic rotation of logfiles will
+> log_rotation_age = 7d     # Automatic rotation of logfiles will
+
+< #log_rotation_size = 10MB   # Automatic rotation of logfiles will
+> log_rotation_size = 10MB    # Automatic rotation of logfiles will
+
+< #log_min_messages = warning   # values in order of decreasing detail:
+> log_min_messages = error # values in order of decreasing detail:
+
+> log_min_error_statement = error # values in order of decreasing detail:
+
+< #track_counts = on
+> track_counts = on
+
+< #autovacuum = on      # Enable autovacuum subprocess?  'on'
+> autovacuum = off      # Enable autovacuum subprocess?  'on'
+
+
+
+/usr/lib/postgresql/9.3/bin/pg_ctl -D ~/postgres-data  initdb
+
+/etc/init.d/postgresql restart
+
+in psql, create tables from table defs in db.py
+
+
+
+# Because of backward compatibility with developing on cygwin desktop: 
+
+sudo ln -s /usr/bin/python2.7 /usr/bin/python2.6
+
+
+'default' user's crontab: 
+
+*   * * * *  if ! [ -e ~/ttc-disable-cronjobs ] ; then cd ~/ttc-dbman; ./poll_locations.py   --redir --touch-flag-file-on-finish ; date >> ~/poll_locations_time_log.txt; fi
+
+*/2 * * * *  if ! [ -e ~/ttc-disable-cronjobs ] ; then cd ~/ttc-dbman; ./mc.py start-if-not-running prod ; fi
+0   5 * * *  ~/bin/svn-sync-mirror >/dev/null
+
+0 5 * * *  date >> ~/df-log
+0 5 * * *  sleep 1; df | grep -v ^Filesystem >> ~/df-log
+
+0 4 * * *  if ! [ -e ~/ttc-disable-cronjobs ] ; then cd ~/ttc-dbman; ./purgedb.py 60d; fi
+
+root's crontab: 
+
+SHELL=/bin/bash
+
+0 * * * * ~/bin/supervisorctl-restart-if-running ttc-make-reports-main > /dev/null
+0 * * * * ~/bin/supervisorctl-restart-if-running ttc-make-reports-dev  > /dev/null
+
+
+
+Check system time zone with 'date'.  If it needs changing, then: 
+
+sudo dpkg-reconfigure tzdata
+
+
+
+
+
+# For mc.py to tell who owns ports: 
+
+sudo chmod u+s $(which netstat )
+
+
+# Check out a sandbox:
+
+svn co https://173.230.189.111/svn/ttc/trunk
+mv trunk ttc-sandbox
+
+# Maybe start the memcacheds: 
+
+cd ttc-sandbox
+./mc.py start dev
+./mc.py start prod
+
+
+as root: 
+
+easy_install supervisor
+echo_supervisord_conf >  /etc/supervisord.conf
+
+then add something like this to /etc/supervisord.conf - 
+
+[program:ttc-make-reports-dev]
+command=/home/ubuntu/ttc-sandbox/reports.py
+directory=/home/ubuntu/ttc-sandbox
+user=ubuntu
+
+supervisord  # To start supervisord for the first time
+
+
+
+--
+Put the following in /etc/rc.local 
+
+~dt/ttc-dbman/mc.py start prod
+~dt/ttc-dbman/mc.py start dev
+
+/usr/local/bin/supervisord
+
+exit 0
+--
+
