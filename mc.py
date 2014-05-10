@@ -194,7 +194,10 @@ def close_connection():
 		except:
 			pass
 		g_memcache_client = None
-	
+
+def forget_connection():
+	global g_memcache_client
+	g_memcache_client = None
 
 if __name__ == '__main__':
 

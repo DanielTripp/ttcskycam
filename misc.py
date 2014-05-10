@@ -874,18 +874,6 @@ def rein_in(x_, min_, max_):
 	else:
 		return x_
 
-def multiproc(n_, func_, argses_):
-	pool = multiprocessing.Pool(n_)
-	results = []
-	for args in argses_:
-		results.append(pool.apply_async(func_, args))
-	returnvals = []
-	for result in results:
-		returnvals.append(result.get())
-	pool.close()
-	pool.join()
-	return returnvals
-
 if __name__ == '__main__':
 
 	pass

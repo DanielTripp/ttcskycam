@@ -2,7 +2,7 @@
 
 from collections import *
 import sys, os, os.path, json, getopt
-import vinfo, db, routes, geom, mc, yards, traffic, c, util
+import vinfo, db, routes, geom, mc, yards, traffic, c, util, multiproc
 from misc import *
 
 GET_CURRENT_REPORTS_FROM_DB = os.path.exists('GET_CURRENT_REPORTS_FROM_DB')
@@ -131,9 +131,14 @@ def wait_for_locations_poll_to_finish():
 	if cur_wait_secs > MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS:
 		printerr('%s: reports: watched poll locations flag file for %d seconds before it was touched.' % (now_str(), cur_wait_secs))
 
-def make_all_reports_and_insert_into_db_once():
+def make_all_reports_and_insert_into_db_once(froute_to_multiprocpool_):
 	report_time = round_up_by_minute(now_em())
-	multiproc(8, make_reports_and_insert_into_db_single_route, [(report_time, froute) for froute in FROUTES])
+	asyncresults = []
+	for froute in FROUTES:
+		asyncresults.append(froute_to_multiprocpool_[froute].apply_async(\
+				make_reports_and_insert_into_db_single_route, (report_time, froute)))
+	for asyncresult in asyncresults:
+		asyncresult.get()
 
 def make_reports_and_insert_into_db_single_route(report_time_, froute_):
 	for direction in (0, 1):
@@ -151,20 +156,49 @@ def make_reports_and_insert_into_db_single_route(report_time_, froute_):
 
 def make_all_reports_and_insert_into_db_forever():
 	routes.prime_routeinfos()
+	froute_to_multiprocpool = make_froute_to_multiprocpool()
 	while True:
 		wait_for_locations_poll_to_finish()
 		t0 = time.time()
-		make_all_reports_and_insert_into_db_once()
+		make_all_reports_and_insert_into_db_once(froute_to_multiprocpool)
 		t1 = time.time()
 		reports_took_secs = t1 - t0
 		if reports_took_secs > 60:
 			printerr('Reports took too long to generate - %s seconds.  (Finished at %s.)' % (int(reports_took_secs), now_str()))
 
+def make_froute_to_multiprocpool():
+	froute_to_poolnum = {
+		'queen': 0,
+		'stclair': 0,
+		'dundas': 0,
+		'king': 1,
+		'spadina': 1,
+		'ossington': 1,
+		'bathurst': 2,
+		'carlton': 2,
+		'dupont': 2,
+		'dufferin': 3,
+		'keele': 3,
+		'lansdowne': 3
+	}
+	num_procs = max(froute_to_poolnum.values()) + 1
+	pools = [multiprocessing.Pool(1, multiproc.initializer) for i in range(num_procs)]
+	r = dict([(froute, pools[froute_to_poolnum[froute]]) for froute in FROUTES])
+
+	assert set(r.keys()) == set(FROUTES)
+	return r
+
+#	NUM_PROCS = multiprocessing.cpu_count()
+#	pools = [multiprocessing.Pool(1, multiproc.initializer) for i in range(NUM_PROCS)]
+#	r = {}
+#	for i, froute in enumerate(FROUTES):
+#		r[froute] = pools[i % NUM_PROCS]
+#	return r
 
 if __name__ == '__main__':
 
 	if len(sys.argv) == 2 and sys.argv[1] == '--once':
-		make_all_reports_and_insert_into_db_once()
+		make_all_reports_and_insert_into_db_once(make_froute_to_multiprocpool())
 	else:
 		make_all_reports_and_insert_into_db_forever()
 
