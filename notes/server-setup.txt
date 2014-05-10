@@ -58,6 +58,7 @@ apt-get -y install zlib1g-dev libshp-dev libsqlite3-dev libgd2-xpm-dev libexpat1
 apt-get -y install libprotobuf-java ant default-jdk maven-repo-helper
 apt-get -y install graphviz
 apt-get -y install postgresql-contrib
+apt-get -y install python-pip
 
 
 sudo passwd postgres
@@ -199,17 +200,6 @@ sudo dpkg-reconfigure tzdata
 sudo chmod u+s $(which netstat )
 
 
-# Check out a sandbox:
-
-svn co https://173.230.189.111/svn/ttc/trunk
-mv trunk ttc-sandbox
-
-# Maybe start the memcacheds: 
-
-cd ttc-sandbox
-./mc.py start dev
-./mc.py start prod
-
 
 as root: 
 
@@ -218,23 +208,367 @@ echo_supervisord_conf >  /etc/supervisord.conf
 
 then add something like this to /etc/supervisord.conf - 
 
-[program:ttc-make-reports-dev]
-command=/home/ubuntu/ttc-sandbox/reports.py
-directory=/home/ubuntu/ttc-sandbox
+[program:ttc-make-reports-main]
+command=/var/www/html/main/reports.py
+directory=/var/www/html/main
 user=ubuntu
+
+[program:ttc-make-reports-dev]
+command=/var/www/html/t20396746274628946240298200/reports.py
+directory=/var/www/html/t20396746274628946240298200
+user=ubuntu
+
 
 supervisord  # To start supervisord for the first time
 
 
 
 --
-Put the following in /etc/rc.local 
+Put something like the following in /etc/rc.local 
 
-~dt/ttc-dbman/mc.py start prod
-~dt/ttc-dbman/mc.py start dev
+~ubuntu/ttc-dbman/mc.py start prod
+~ubuntu/ttc-dbman/mc.py start dev
 
 /usr/local/bin/supervisord
+
+aws ec2 associate-address --public-ip 54.83.12.28 --instance-id i-43c33410 > ~/ec2-associate-address-output 2>&1
 
 exit 0
 --
 
+
+as root: 
+pip install awscli
+
+aws configure
+# ^^ Get the keys, region: us-east-1, output: table
+
+
+Setting up apache.  As root:
+
+cd ~www-data
+groupadd www-pub
+usermod -a -G www-pub ubuntu
+groups ubuntu
+chown -R root:www-pub /var/www/
+chmod 2775 /var/www
+find /var/www -type d -exec chmod 2775 {} +
+find /var/www -type f -exec chmod 0664 {} +
+
+(At this point, as a normal user eg. ubuntu, a touch /var/www/a didn't work.  But then days later, after a reboot, it did.
+I don't know why.  Maybe I am confused.)
+
+As normal user: 
+
+cd ~www-data
+mkdir t20396746274628946240298200 t32958476003967462729584067 main
+
+as root: 
+
+apache-restart
+
+Sample apache2.conf is at the end of this file. 
+
+
+# Check out a sandbox:
+
+(as normal user)
+cd /tmp
+svn co https://173.230.189.111/svn/ttc/trunk
+mv trunk /var/www/t20396746274628946240298200
+
+# Maybe start the memcacheds: 
+
+cd /var/www/t20396746274628946240298200
+./mc.py start dev
+./mc.py start prod
+
+
+As root:
+
+ttc-update-main-on-local
+
+
+
+
+
+
+
+
+
+
+
+
+
+-----------------------------
+Sample apache2.conf file:
+-----------------------------
+# This is the main Apache server configuration file.  It contains the
+# configuration directives that give the server its instructions.
+# See http://httpd.apache.org/docs/2.4/ for detailed information about
+# the directives and /usr/share/doc/apache2/README.Debian about Debian specific
+# hints.
+#
+#
+# Summary of how the Apache 2 configuration works in Debian:
+# The Apache 2 web server configuration in Debian is quite different to
+# upstream's suggested way to configure the web server. This is because Debian's
+# default Apache2 installation attempts to make adding and removing modules,
+# virtual hosts, and extra configuration directives as flexible as possible, in
+# order to make automating the changes and administering the server as easy as
+# possible.
+
+# It is split into several files forming the configuration hierarchy outlined
+# below, all located in the /etc/apache2/ directory:
+#
+#	/etc/apache2/
+#	|-- apache2.conf
+#	|	`--  ports.conf
+#	|-- mods-enabled
+#	|	|-- *.load
+#	|	`-- *.conf
+#	|-- conf-enabled
+#	|	`-- *.conf
+# 	`-- sites-enabled
+#	 	`-- *.conf
+#
+#
+# * apache2.conf is the main configuration file (this file). It puts the pieces
+#   together by including all remaining configuration files when starting up the
+#   web server.
+#
+# * ports.conf is always included from the main configuration file. It is
+#   supposed to determine listening ports for incoming connections which can be
+#   customized anytime.
+#
+# * Configuration files in the mods-enabled/, conf-enabled/ and sites-enabled/
+#   directories contain particular configuration snippets which manage modules,
+#   global configuration fragments, or virtual host configurations,
+#   respectively.
+#
+#   They are activated by symlinking available configuration files from their
+#   respective *-available/ counterparts. These should be managed by using our
+#   helpers a2enmod/a2dismod, a2ensite/a2dissite and a2enconf/a2disconf. See
+#   their respective man pages for detailed information.
+#
+# * The binary is called apache2. Due to the use of environment variables, in
+#   the default configuration, apache2 needs to be started/stopped with
+#   /etc/init.d/apache2 or apache2ctl. Calling /usr/bin/apache2 directly will not
+#   work with the default configuration.
+
+
+# Global configuration
+#
+
+#
+# ServerRoot: The top of the directory tree under which the server's
+# configuration, error, and log files are kept.
+#
+# NOTE!  If you intend to place this on an NFS (or otherwise network)
+# mounted filesystem then please read the Mutex documentation (available
+# at <URL:http://httpd.apache.org/docs/2.4/mod/core.html#mutex>);
+# you will save yourself a lot of trouble.
+#
+# Do NOT add a slash at the end of the directory path.
+#
+#ServerRoot "/etc/apache2"
+
+#
+# The accept serialization lock file MUST BE STORED ON A LOCAL DISK.
+#
+Mutex file:${APACHE_LOCK_DIR} default
+
+#
+# PidFile: The file in which the server should record its process
+# identification number when it starts.
+# This needs to be set in /etc/apache2/envvars
+#
+PidFile ${APACHE_PID_FILE}
+
+#
+# Timeout: The number of seconds before receives and sends time out.
+#
+Timeout 300
+
+#
+# KeepAlive: Whether or not to allow persistent connections (more than
+# one request per connection). Set to "Off" to deactivate.
+#
+KeepAlive On
+
+#
+# MaxKeepAliveRequests: The maximum number of requests to allow
+# during a persistent connection. Set to 0 to allow an unlimited amount.
+# We recommend you leave this number high, for maximum performance.
+#
+MaxKeepAliveRequests 100
+
+#
+# KeepAliveTimeout: Number of seconds to wait for the next request from the
+# same client on the same connection.
+#
+KeepAliveTimeout 5
+
+
+# These need to be set in /etc/apache2/envvars
+User ${APACHE_RUN_USER}
+Group ${APACHE_RUN_GROUP}
+
+#
+# HostnameLookups: Log the names of clients or just their IP addresses
+# e.g., www.apache.org (on) or 204.62.129.132 (off).
+# The default is off because it'd be overall better for the net if people
+# had to knowingly turn this feature on, since enabling it means that
+# each client request will result in AT LEAST one lookup request to the
+# nameserver.
+#
+HostnameLookups Off
+
+# ErrorLog: The location of the error log file.
+# If you do not specify an ErrorLog directive within a <VirtualHost>
+# container, error messages relating to that virtual host will be
+# logged here.  If you *do* define an error logfile for a <VirtualHost>
+# container, that host's errors will be logged there and not here.
+#
+ErrorLog ${APACHE_LOG_DIR}/error.log
+
+#
+# LogLevel: Control the severity of messages logged to the error_log.
+# Available values: trace8, ..., trace1, debug, info, notice, warn,
+# error, crit, alert, emerg.
+# It is also possible to configure the log level for particular modules, e.g.
+# "LogLevel info ssl:warn"
+#
+LogLevel warn
+
+# Include module configuration:
+IncludeOptional mods-enabled/*.load
+IncludeOptional mods-enabled/*.conf
+
+# Include list of ports to listen on
+Include ports.conf
+
+
+# Sets the default security model of the Apache2 HTTPD server. It does
+# not allow access to the root filesystem outside of /usr/share and /var/www.
+# The former is used by web applications packaged in Debian,
+# the latter may be used for local directories served by the web server. If
+# your system is serving content from a sub-directory in /srv you must allow
+# access here, or in any related virtual host.
+<Directory />
+	Options FollowSymLinks
+	AllowOverride None
+	Require all denied
+</Directory>
+
+<Directory /usr/share>
+	AllowOverride None
+	Require all granted
+</Directory>
+
+<Directory /var/www/>
+	Options Indexes FollowSymLinks
+	AllowOverride None
+	Require all granted
+</Directory>
+
+#<Directory /srv/>
+#	Options Indexes FollowSymLinks
+#	AllowOverride None
+#	Require all granted
+#</Directory>
+
+
+
+
+# AccessFileName: The name of the file to look for in each directory
+# for additional configuration directives.  See also the AllowOverride
+# directive.
+#
+AccessFileName .htaccess
+
+#
+# The following lines prevent .htaccess and .htpasswd files from being
+# viewed by Web clients.
+#
+<Files "^\.ht">
+	Require all denied
+</Files>
+
+<Files ~ "^.*\.py.?">
+    Order allow,deny
+    Deny from all
+    Satisfy all
+</Files>
+
+<Directory ~ ".*\.svn.*">
+    Order allow,deny
+    Deny from all
+    Satisfy all
+</Directory>
+
+#
+# The following directives define some format nicknames for use with
+# a CustomLog directive.
+#
+# These deviate from the Common Log Format definitions in that they use %O
+# (the actual bytes sent including headers) instead of %b (the size of the
+# requested file), because the latter makes it impossible to detect partial
+# requests.
+#
+# Note that the use of %{X-Forwarded-For}i instead of %h is not recommended.
+# Use mod_remoteip instead.
+#
+LogFormat "%v:%p %h %l %u %t \"%r\" %>s %O \"%{Referer}i\" \"%{User-Agent}i\"" vhost_combined
+LogFormat "%h %l %u %t \"%r\" %>s %O \"%{Referer}i\" \"%{User-Agent}i\"" combined
+LogFormat "%h %l %u %t \"%r\" %>s %O" common
+LogFormat "%{Referer}i -> %U" referer
+LogFormat "%{User-agent}i" agent
+
+# Include of directories ignores editors' and dpkg's backup files,
+# see README.Debian for details.
+
+# Include generic snippets of statements
+IncludeOptional conf-enabled/*.conf
+
+# Include the virtual host configurations:
+IncludeOptional sites-enabled/*.conf
+
+LoadModule wsgi_module /usr/lib/apache2/modules/mod_wsgi.so
+
+WSGIDaemonProcess ttc-dev user=ubuntu threads=10 maximum-requests=1000 home=/var/www/t20396746274628946240298200
+WSGIProcessGroup ttc-dev
+WSGIDaemonProcess ttc-dev3 user=ubuntu threads=10 maximum-requests=1000 home=/var/www/t32958476003967462729584067
+WSGIProcessGroup ttc-dev3
+
+WSGIDaemonProcess ttc-main user=ubuntu threads=10 maximum-requests=1000 home=/var/www/main
+WSGIProcessGroup ttc-main
+
+SetEnv PROCESS_GROUP default
+WSGIProcessGroup %{ENV:PROCESS_GROUP}
+
+<Directory /var/www/html/t20396746274628946240298200>
+Options ExecCGI
+AllowOverride All
+AddHandler wsgi-script .wsgi
+WSGIRestrictProcess ttc-dev
+SetEnv PROCESS_GROUP ttc-dev
+</Directory>
+
+<Directory /var/www/html/t32958476003967462729584067>
+Options ExecCGI
+AllowOverride All
+AddHandler wsgi-script .wsgi
+WSGIRestrictProcess ttc-dev3
+SetEnv PROCESS_GROUP ttc-dev3
+</Directory>
+
+<Directory /var/www/html/main>
+Options ExecCGI
+AllowOverride All
+AddHandler wsgi-script .wsgi
+WSGIRestrictProcess ttc-main
+SetEnv PROCESS_GROUP ttc-main
+</Directory>
+
+# vim: syntax=apache ts=4 sw=4 sts=4 sr noet
