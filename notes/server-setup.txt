@@ -182,8 +182,8 @@ root's crontab:
 
 SHELL=/bin/bash
 
-0 * * * * ~/bin/supervisorctl-restart-if-running ttc-make-reports-main > /dev/null
-0 * * * * ~/bin/supervisorctl-restart-if-running ttc-make-reports-dev  > /dev/null
+0 5 * * * ~/bin/supervisorctl-restart-if-running ttc-make-reports-main > /dev/null
+0 5 * * * ~/bin/supervisorctl-restart-if-running ttc-make-reports-dev  > /dev/null
 
 
 
@@ -287,6 +287,34 @@ cd /var/www/t20396746274628946240298200
 As root:
 
 ttc-update-main-on-local
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
