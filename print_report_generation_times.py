@@ -30,19 +30,26 @@ if __name__ == '__main__':
 		raise Exception()
 	if len(sys.argv) == 3:
 		yyyymmdd = sys.argv[2]
+		date_was_cmdline_arg = True
 	else:
 		if em_to_str_hm(now_em())[:2] in ('00', '01', '02', '03'):
 			yyyymmdd = em_to_str_ymd(now_em() - 1000*60*60*24)
 		else:
 			yyyymmdd = em_to_str_ymd(now_em())
+		date_was_cmdline_arg = False
 		print yyyymmdd
 
-	for hour in range(0, 23+1):
+	for hour in range(24):
 	#for hour in [10]:
 		for minute in range(0, 60, 5):
 		#for minute in [30]:
 			report_timestr = '%s %02d:%02d' % (yyyymmdd, hour, minute)
 			report_time = str_to_em(report_timestr)
+			if not date_was_cmdline_arg:
+				if report_time < now_em() - 1000*60*60:
+					continue
+				elif report_time > now_em() + 1000*60*5:
+					break
 			curs = db.conn().cursor()
 			sqlstr = 'select time_inserted_str from reports where time = %s and app_version '\
 					+('like' if appversiontype == 'dev' else 'not like' )+' \'dev%%\' order by time_inserted_str' 
