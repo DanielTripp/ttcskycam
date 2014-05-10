@@ -102,6 +102,10 @@ def reconnect():
 	g_conn = None
 	connect()
 
+def forget_connection():
+	global g_conn
+	g_conn = None
+
 def trans(f):
 	"""Decorator that calls commit() after the method finishes normally, or rollback() if an
 	exception is raised.  

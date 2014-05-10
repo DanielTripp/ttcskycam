@@ -4,7 +4,7 @@ import sys, subprocess, re, time, xml.dom, xml.dom.minidom, traceback, json, get
 T0 = time.time()
 from collections import *
 from xml.parsers.expat import ExpatError
-import db, vinfo, routes, tracks, streets
+import db, vinfo, routes, tracks, streets, multiproc
 from misc import *
 
 POLL_PERIOD_SECS = 60
@@ -77,7 +77,7 @@ def deal_with_xml(xmldoc_, insert_into_db_, vis_filename_):
 #	by nextbus_lasttime, this would bias towards those night routes being polled first and possibly, no other routes being polled
 #	at all.  So that's why we maintain our_system_time_on_poll_finish and use it to decide which routes to poll first.
 def poll_once(routelist_, insert_into_db_, pollstate_filename_, xml_filename_, vis_filename_):
-	pool = multiprocessing.Pool(8)
+	pool = multiprocessing.Pool(8, multiproc.initializer)
 	try:
 		try:
 			with open(pollstate_filename_) as fin:
