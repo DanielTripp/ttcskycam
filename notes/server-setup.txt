@@ -289,6 +289,22 @@ As root:
 ttc-update-main-on-local
 
 
+Put something like this at ~www-data/index.html: 
+
+<!DOCTYPE HTML>
+<html lang="en-US">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="refresh" content="1;url=http://unofficialttctrafficreport.ca/main/traffic.php">
+    <script type="text/javascript">
+        window.location.href = "http://unofficialttctrafficreport.ca/main/traffic.php"
+    </script>
+    <title>Redirecting...</title>
+</head>
+<body>
+If you are not redirected automatically, go <a href='http://unofficialttctrafficreport.ca/main/traffic.php'>here</a>.
+</body>
+</html>
 
 
 
@@ -564,12 +580,12 @@ IncludeOptional sites-enabled/*.conf
 
 LoadModule wsgi_module /usr/lib/apache2/modules/mod_wsgi.so
 
-WSGIDaemonProcess ttc-dev user=ubuntu threads=10 maximum-requests=1000 home=/var/www/t20396746274628946240298200
+WSGIDaemonProcess ttc-dev user=ubuntu threads=10 maximum-requests=1000 home=/var/www/html/t20396746274628946240298200
 WSGIProcessGroup ttc-dev
-WSGIDaemonProcess ttc-dev3 user=ubuntu threads=10 maximum-requests=1000 home=/var/www/t32958476003967462729584067
+WSGIDaemonProcess ttc-dev3 user=ubuntu threads=10 maximum-requests=1000 home=/var/www/html/t32958476003967462729584067
 WSGIProcessGroup ttc-dev3
 
-WSGIDaemonProcess ttc-main user=ubuntu threads=10 maximum-requests=1000 home=/var/www/main
+WSGIDaemonProcess ttc-main user=ubuntu threads=10 maximum-requests=1000 home=/var/www/html/main
 WSGIProcessGroup ttc-main
 
 SetEnv PROCESS_GROUP default
