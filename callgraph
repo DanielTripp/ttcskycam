@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+
+if [ "$#" -lt 1 ] ; then
+	echo 'Need at least one argument - python filenames'
+	exit 1
+fi
+
+code2flow -o callgraph.svg $* && ./add-panzoom-to-svg.py callgraph.svg
+
