@@ -4,7 +4,7 @@ import sys, os, urlparse, json, pprint, time, pickle, xml.dom, xml.dom.minidom, 
 from itertools import *
 from misc import *
 from backport_OrderedDict import *
-import routes, traffic, db, vinfo, geom, mc, tracks, util, predictions, paths, c, reports, streetlabels, snapgraph, picklestore
+import routes, traffic, db, vinfo, geom, mc, tracks, util, predictions, c, reports, streetlabels, snapgraph, picklestore
 #from routes import *
 
 def dots(val_, min_, max_):
