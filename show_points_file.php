@@ -369,30 +369,24 @@ function draw_objects() {
 	var draw_dots = is_selected('dots_checkbox');
 	var draw_lines = is_selected('polyline_checkbox');
 
-	var lineidx=0, ptidx=0;
-	for(var i=0; i<g_polyline_latlngs.length; i++) {
-		var line_latlngs = g_polyline_latlngs[i];
-		var color = get_polyline_color(i);
-		line_latlngs.forEach(function(latlng) {
-
+	for(var lineidx=0; lineidx<g_polyline_latlngs.length; lineidx++) {
+		var line_latlngs = g_polyline_latlngs[lineidx];
+		var color = get_polyline_color(lineidx);
+		for(var ptidx=0; ptidx<line_latlngs.length; ptidx++) {
+			var latlng = line_latlngs[ptidx];
 			if(draw_dots) {
 				var label = sprintf('%d/%d -&nbsp;&nbsp;&nbsp;&nbsp;(%.8f,%.8f)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;', lineidx, ptidx, latlng.lat(), latlng.lng());
-				make_marker(latlng, color, label, i);
-			}
-
-			if(draw_lines) {
-				draw_polyline(line_latlngs, color, i);
+				make_marker(latlng, color, label, ptidx);
 			}
 
 			minlat = Math.min(minlat, latlng.lat());
 			maxlat = Math.max(maxlat, latlng.lat());
 			minlng = Math.min(minlng, latlng.lng());
 			maxlng = Math.max(maxlng, latlng.lng());
-
-			ptidx += 1;
-		});
-		lineidx += 1;
-		ptidx = 0;
+		}
+		if(draw_lines) {
+			draw_polyline(line_latlngs, color, lineidx);
+		}
 	}
 
 	var rect_bounds = new google.maps.LatLngBounds(
@@ -404,8 +398,10 @@ function draw_objects() {
 }
 
 function draw_polyline(latlngs_, color_, i_) {
-	var polylineOptions = {path: latlngs_, strokeWeight: POLYLINE_STROKEWEIGHT, strokeOpacity: 0.7, 
+	console.log('drawing polyline'); // tdr 
+	var polylineOptions = {path: latlngs_, strokeWeight: POLYLINE_STROKEWEIGHT, etrokeOpacity: 0.7, 
 			strokeColor: color_, clickable: false, 
+			strokeOpacity: g_opacity, 
 			icons: (is_selected('arrows_checkbox') 
 					? make_polyline_arrow_icons(g_map.getZoom(), is_selected('lots_of_arrows_checkbox'), latlngs_) 
 					: null), 
@@ -538,8 +534,9 @@ function reset_show_dist_everything() {
 	g_show_dist_pt2 = null;
 }
 
-function on_opacity_down_clicked() {
-	g_opacity = Math.max(g_opacity-0.1, 0.0);
+function on_opacity_button_clicked(amount_) {
+	g_opacity += amount_;
+	g_opacity = Math.min(Math.max(g_opacity, 0.0), 1.0);
 	redraw_objects();
 }
 
@@ -556,7 +553,14 @@ function on_grid_checkbox_clicked() {
 	}
 }
 
-function on_submit_contents_clicked() {
+function scroll_to_visible() {
+	if(g_polylines.length > 0) {
+		var middle_plineidx = Math.round(g_polylines.length/2);
+		var middle_pline = g_polylines[middle_plineidx];
+		var pts = middle_pline.getPath();
+		var middle_pt = pts.getAt(Math.round(pts.getLength()/2));
+		g_map.panTo(middle_pt);
+	}
 }
 
 
@@ -569,9 +573,8 @@ function on_submit_contents_clicked() {
 		OR Contents:<br>
 		<textarea id="contents_textarea" cols="140" rows="5"></textarea>
 		<input type="button" onclick="refresh_from_textarea()" value="Submit (text area)" />
+		<input type="button" onclick="scroll_to_visible()" value="Pan To" />
 		<br>
-		<input type="button" onclick="on_opacity_down_clicked()" value="Opacity DOWN" />
-		<input type="button" onclick="on_opacity_up_clicked()" value="Opacity UP" />
 		<input checked type="checkbox" id="dots_checkbox" name="dots_checkbox" onclick="redraw_objects()"/>
 		<label for="dots_checkbox">Dots</label>
 
@@ -593,6 +596,12 @@ function on_submit_contents_clicked() {
 		<label for="grid_checkbox">Grid</label>
 ///
 		<label><input id="map_sync_checkbox" type="checkbox"/>Map Sync</label>
+///
+		Opacity: 
+		<input type="button" onclick="on_opacity_button_clicked(-0.1)" value="-0.1" />
+		<input type="button" onclick="on_opacity_button_clicked(-0.01)" value="-0.01" />
+		<input type="button" onclick="on_opacity_button_clicked(0.01)" value="+0.01" />
+		<input type="button" onclick="on_opacity_button_clicked(0.1)" value="+0.1" />
 
 		<p id="p_clicked_pt"/>
 		<p id="p_zoom"/>
