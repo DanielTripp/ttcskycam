@@ -27,6 +27,9 @@ var g_bounding_rect = null;
 var g_opacity = 0.5;
 // array of google polylines 
 var g_polylines = [];
+// -1 ==> no solo. 
+var g_solo_plineidx=-1;
+var g_hidden_plineidxes = new buckets.Set();
 
 var g_show_dist_pt1 = null, g_show_dist_pt2 = null;
 var g_show_dist_infowindow = null, g_show_dist_polyline = null;
@@ -230,8 +233,15 @@ function on_zoom_changed() {
 
 function refresh_from_file() {
 	forget_drawn_objects();
+	forget_solo_and_show_settings();
 	get_latlngs_from_file();
 	draw_objects();
+	refresh_pline_controls();
+}
+
+function forget_solo_and_show_settings() {
+	g_solo_plineidx = -1;
+	g_hidden_plineidxes.clear();
 }
 
 function get_latlngs_from_file() {
@@ -243,8 +253,10 @@ function get_latlngs_from_file() {
 
 function refresh_from_textarea() {
 	forget_drawn_objects();
+	forget_solo_and_show_settings();
 	get_latlngs_from_textarea();
 	draw_objects();
+	refresh_pline_controls();
 }
 
 function get_latlngs_from_textarea() {
@@ -369,13 +381,20 @@ function draw_objects() {
 	var draw_dots = is_selected('dots_checkbox');
 	var draw_lines = is_selected('polyline_checkbox');
 
-	for(var lineidx=0; lineidx<g_polyline_latlngs.length; lineidx++) {
-		var line_latlngs = g_polyline_latlngs[lineidx];
-		var color = get_polyline_color(lineidx);
+	for(var plineidx=0; plineidx<g_polyline_latlngs.length; plineidx++) {
+		if(g_solo_plineidx!=-1) {
+			if(g_solo_plineidx!=plineidx) {
+				continue;
+			}
+		} else if(g_hidden_plineidxes.contains(plineidx)) {
+			continue;
+		}
+		var line_latlngs = g_polyline_latlngs[plineidx];
+		var color = get_polyline_color(plineidx);
 		for(var ptidx=0; ptidx<line_latlngs.length; ptidx++) {
 			var latlng = line_latlngs[ptidx];
 			if(draw_dots) {
-				var label = sprintf('%d/%d -&nbsp;&nbsp;&nbsp;&nbsp;(%.8f,%.8f)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;', lineidx, ptidx, latlng.lat(), latlng.lng());
+				var label = sprintf('%d/%d -&nbsp;&nbsp;&nbsp;&nbsp;(%.8f,%.8f)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;', plineidx, ptidx, latlng.lat(), latlng.lng());
 				make_marker(latlng, color, label, ptidx);
 			}
 
@@ -385,7 +404,7 @@ function draw_objects() {
 			maxlng = Math.max(maxlng, latlng.lng());
 		}
 		if(draw_lines) {
-			draw_polyline(line_latlngs, color, lineidx);
+			draw_polyline(line_latlngs, color, plineidx);
 		}
 	}
 
@@ -394,11 +413,9 @@ function draw_objects() {
 	g_bounding_rect = new google.maps.Rectangle({bounds: rect_bounds, map: g_map, strokeColor: 'rgb(0,0,0)', 
 			strokeOpacity: 0.5, strokeWeight: 1, fillOpacity: 0, zIndex: -10, clickable: false});
 
-	refresh_dists();
 }
 
 function draw_polyline(latlngs_, color_, i_) {
-	console.log('drawing polyline'); // tdr 
 	var polylineOptions = {path: latlngs_, strokeWeight: POLYLINE_STROKEWEIGHT, etrokeOpacity: 0.7, 
 			strokeColor: color_, clickable: false, 
 			strokeOpacity: g_opacity, 
@@ -411,22 +428,43 @@ function draw_polyline(latlngs_, color_, i_) {
 	g_polylines.push(polyline);
 }
 
-function refresh_dists() {
+function refresh_pline_controls() {
 	var contents = '';
 	var all_polylines_dist_m = 0;
-	for(var i=0; i<g_polyline_latlngs.length; i++) {
-		var pline_latlngs = g_polyline_latlngs[i];
+	for(var plineidx=0; plineidx<g_polyline_latlngs.length; plineidx++) {
+		var pline_latlngs = g_polyline_latlngs[plineidx];
 		var polyline_dist_m = 0;
 		for(var j=0; j<pline_latlngs.length-1; j++) {
 			var pt1 = pline_latlngs[j]; pt2 = pline_latlngs[j+1];
 			var lineseg_dist_m = dist_m(pt1, pt2);
 			polyline_dist_m += lineseg_dist_m;
 		}
-		contents += sprintf('polyline [%d]: %d points, %.2f meters<br>', i, pline_latlngs.length, polyline_dist_m);
+		contents += sprintf('[%3d] ', plineidx).replace(' ', '&nbsp;');
+		contents += sprintf('<input type="button" onclick="on_pline_solo_button_clicked(%d)" /> ', plineidx);
+		contents += sprintf('<input type="checkbox" onclick="on_pline_show_button_clicked(%d)" checked /> ', plineidx);
+		contents += sprintf('(%d points, %.2fm)<br>', pline_latlngs.length, polyline_dist_m);
 		all_polylines_dist_m += polyline_dist_m;
 	}
-	contents += sprintf('sum total of all polyline lengths: %.2f meters<br>', all_polylines_dist_m);
-	set_contents('p_dists', contents);
+	contents = sprintf('Total of all polyline lengths: %.2fm<br>', all_polylines_dist_m) + contents;
+	set_contents('pline_controls', contents);
+}
+
+function on_pline_solo_button_clicked(plineidx_) {
+	if(plineidx_ == g_solo_plineidx) {
+		g_solo_plineidx = -1;
+	} else {
+		g_solo_plineidx = plineidx_;
+	}
+	redraw_objects();
+}
+
+function on_pline_show_button_clicked(plineidx_) {
+	if(g_hidden_plineidxes.contains(plineidx_)) {
+		g_hidden_plineidxes.remove(plineidx_);
+	} else {
+		g_hidden_plineidxes.add(plineidx_);
+	}
+	redraw_objects();
 }
 
 function get_polyline_color(i_) {
@@ -567,11 +605,13 @@ function scroll_to_visible() {
     </script>
   </head>
   <body onload="initialize()" >
-		<div id="map_canvas" style="width:100%; height:100%"></div>
+		<div id="map_canvas" style="width:80%; height:100%; float:left"></div>
+		<div id="pline_controls" style="width:20%; height:100%; float:right; overflow:scroll"></div>
+		<br>
 		Filename: <input type="text" size="80" name="filename_field" id="filename_field" /> 
 		<input type="button" onclick="refresh_from_file()" value="Submit (file)" /> <br>
 		OR Contents:<br>
-		<textarea id="contents_textarea" cols="140" rows="5"></textarea>
+		<textarea id="contents_textarea" cols="100" rows="5"></textarea>
 		<input type="button" onclick="refresh_from_textarea()" value="Submit (text area)" />
 		<input type="button" onclick="scroll_to_visible()" value="Pan To" />
 		<br>
