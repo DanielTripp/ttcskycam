@@ -19,17 +19,14 @@
 
 var POLYLINE_STROKEWEIGHT = 3;
 
-// array of array of google LatLngs. 
+// array of array of google LatLngs.  This is the data from which objects are drawn.
 var g_polyline_latlngs = [];
-// array of google Markers. 
+// array of google Markers.  Might not contain anything if the checkbox for drawing dots is not selected.
 var g_markers = []; 
 var g_bounding_rect = null;
 var g_opacity = 0.5;
-// array of google polylines 
+// array of google polylines.  Might not contain anything if the checkbox for drawing polylines is not selected.
 var g_polylines = [];
-// -1 ==> no solo. 
-var g_solo_plineidx=-1;
-var g_hidden_plineidxes = new buckets.Set();
 
 var g_show_dist_pt1 = null, g_show_dist_pt2 = null;
 var g_show_dist_infowindow = null, g_show_dist_polyline = null;
@@ -233,15 +230,9 @@ function on_zoom_changed() {
 
 function refresh_from_file() {
 	forget_drawn_objects();
-	forget_solo_and_show_settings();
 	get_latlngs_from_file();
-	draw_objects();
 	refresh_pline_controls();
-}
-
-function forget_solo_and_show_settings() {
-	g_solo_plineidx = -1;
-	g_hidden_plineidxes.clear();
+	draw_objects();
 }
 
 function get_latlngs_from_file() {
@@ -253,10 +244,9 @@ function get_latlngs_from_file() {
 
 function refresh_from_textarea() {
 	forget_drawn_objects();
-	forget_solo_and_show_settings();
 	get_latlngs_from_textarea();
-	draw_objects();
 	refresh_pline_controls();
+	draw_objects();
 }
 
 function get_latlngs_from_textarea() {
@@ -381,12 +371,13 @@ function draw_objects() {
 	var draw_dots = is_selected('dots_checkbox');
 	var draw_lines = is_selected('polyline_checkbox');
 
+	var solo_plineidx = get_solo_plineidx_according_to_gui();
 	for(var plineidx=0; plineidx<g_polyline_latlngs.length; plineidx++) {
-		if(g_solo_plineidx!=-1) {
-			if(g_solo_plineidx!=plineidx) {
+		if(solo_plineidx!=-1) {
+			if(solo_plineidx!=plineidx) {
 				continue;
 			}
-		} else if(g_hidden_plineidxes.contains(plineidx)) {
+		} else if(!is_plineidx_visible_according_to_gui(plineidx)) {
 			continue;
 		}
 		var line_latlngs = g_polyline_latlngs[plineidx];
@@ -415,6 +406,19 @@ function draw_objects() {
 
 }
 
+function get_solo_plineidx_according_to_gui() {
+	for(var plineidx=0; plineidx<g_polyline_latlngs.length; plineidx++) {
+		if(is_selected(get_pline_solo_checkbox_id(plineidx))) {
+			return plineidx;
+		}
+	}
+	return -1;
+}
+
+function is_plineidx_visible_according_to_gui(plineidx_) {
+	return is_selected(get_pline_visible_checkbox_id(plineidx_));
+}
+
 function draw_polyline(latlngs_, color_, i_) {
 	var polylineOptions = {path: latlngs_, strokeWeight: POLYLINE_STROKEWEIGHT, etrokeOpacity: 0.7, 
 			strokeColor: color_, clickable: false, 
@@ -440,13 +444,33 @@ function refresh_pline_controls() {
 			polyline_dist_m += lineseg_dist_m;
 		}
 		contents += sprintf('[%3d] ', plineidx).replace(' ', '&nbsp;');
-		contents += sprintf('<input type="button" onclick="on_pline_solo_button_clicked(%d)" /> ', plineidx);
-		contents += sprintf('<input type="checkbox" onclick="on_pline_show_button_clicked(%d)" checked /> ', plineidx);
+		var checkbox_style = 'style="width: 20px; height: 20px""';
+		contents += sprintf('<input type="checkbox" onclick="on_pline_solo_checkbox_clicked(%d)" id="%s" %s/> ', 
+				plineidx, get_pline_solo_checkbox_id(plineidx), checkbox_style);
+		contents += sprintf('<input type="checkbox" onclick="redraw_objects()" id="%s" %s checked /> ', 
+				get_pline_visible_checkbox_id(plineidx), checkbox_style);
 		contents += sprintf('(%d points, %.2fm)<br>', pline_latlngs.length, polyline_dist_m);
 		all_polylines_dist_m += polyline_dist_m;
 	}
 	contents = sprintf('Total of all polyline lengths: %.2fm<br>', all_polylines_dist_m) + contents;
 	set_contents('pline_controls', contents);
+}
+
+function on_pline_solo_checkbox_clicked(plineidx_) {
+	for(var plineidx=0; plineidx<g_polyline_latlngs.length; plineidx++) {
+		if(plineidx != plineidx_) {
+			set_selected(get_pline_solo_checkbox_id(plineidx), false);
+		}
+	}
+	redraw_objects();
+}
+
+function get_pline_solo_checkbox_id(plineidx_) {
+	return sprintf('pline_%d_solo_checkbox', plineidx_);
+}
+
+function get_pline_visible_checkbox_id(plineidx_) {
+	return sprintf('pline_%d_visible_checkbox', plineidx_);
 }
 
 function on_pline_solo_button_clicked(plineidx_) {
@@ -458,7 +482,7 @@ function on_pline_solo_button_clicked(plineidx_) {
 	redraw_objects();
 }
 
-function on_pline_show_button_clicked(plineidx_) {
+function on_pline_visible_button_clicked(plineidx_) {
 	if(g_hidden_plineidxes.contains(plineidx_)) {
 		g_hidden_plineidxes.remove(plineidx_);
 	} else {
@@ -592,11 +616,10 @@ function on_grid_checkbox_clicked() {
 }
 
 function scroll_to_visible() {
-	if(g_polylines.length > 0) {
-		var middle_plineidx = Math.round(g_polylines.length/2);
-		var middle_pline = g_polylines[middle_plineidx];
-		var pts = middle_pline.getPath();
-		var middle_pt = pts.getAt(Math.round(pts.getLength()/2));
+	if(g_polyline_latlngs.length > 0) {
+		var middle_plineidx = Math.round(g_polyline_latlngs.length/2);
+		var middle_pline = g_polyline_latlngs[middle_plineidx];
+		var middle_pt = middle_pline[Math.round(middle_pline.length/2)];
 		g_map.panTo(middle_pt);
 	}
 }
