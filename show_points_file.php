@@ -420,15 +420,19 @@ function is_plineidx_visible_according_to_gui(plineidx_) {
 }
 
 function draw_polyline(latlngs_, color_, i_) {
-	var polylineOptions = {path: latlngs_, strokeWeight: POLYLINE_STROKEWEIGHT, etrokeOpacity: 0.7, 
-			strokeColor: color_, clickable: false, 
+	var polylineOptions = {path: latlngs_, strokeWeight: POLYLINE_STROKEWEIGHT, 
+			strokeColor: color_, 
 			strokeOpacity: g_opacity, 
 			icons: (is_selected('arrows_checkbox') 
 					? make_polyline_arrow_icons(g_map.getZoom(), is_selected('lots_of_arrows_checkbox'), latlngs_) 
 					: null), 
 			zIndex: i_, map: g_map};
 	var polyline = new google.maps.Polyline(polylineOptions);
-	add_marker_mouseover_listener_for_infowin(polyline, sprintf('line #%d', i_));
+	add_hover_listener(polyline, function(pos__) {
+		var infowin = new google.maps.InfoWindow({disableAutoPan: true, content: sprintf('line #%d', i_), position: pos__});
+		infowin.open(g_map);
+		return infowin;
+	}, 250, 750);
 	g_polylines.push(polyline);
 }
 
@@ -443,7 +447,7 @@ function refresh_pline_controls() {
 			var lineseg_dist_m = dist_m(pt1, pt2);
 			polyline_dist_m += lineseg_dist_m;
 		}
-		contents += sprintf('[%3d] ', plineidx).replace(' ', '&nbsp;');
+		contents += sprintf('<code>[%3d] </code>', plineidx).replace(' ', '&nbsp;');
 		var checkbox_style = 'style="width: 20px; height: 20px""';
 		contents += sprintf('<input type="checkbox" onclick="on_pline_solo_checkbox_clicked(%d)" id="%s" %s/> ', 
 				plineidx, get_pline_solo_checkbox_id(plineidx), checkbox_style);
@@ -618,7 +622,11 @@ function on_grid_checkbox_clicked() {
 function scroll_to_visible() {
 	if(g_polyline_latlngs.length > 0) {
 		var middle_plineidx = Math.round(g_polyline_latlngs.length/2);
+		if(middle_plineidx == g_polyline_latlngs.length) { // b/c if ...length is 1, then length/2 will be 0.5, 
+			middle_plineidx = 0; // and that rounds UP, to 1.
+		}
 		var middle_pline = g_polyline_latlngs[middle_plineidx];
+		console.log('', Math.round(g_polyline_latlngs.length/2)); // tdr 
 		var middle_pt = middle_pline[Math.round(middle_pline.length/2)];
 		g_map.panTo(middle_pt);
 	}
