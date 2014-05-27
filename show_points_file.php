@@ -621,13 +621,11 @@ function on_grid_checkbox_clicked() {
 
 function scroll_to_visible() {
 	if(g_polyline_latlngs.length > 0) {
-		var middle_plineidx = Math.round(g_polyline_latlngs.length/2);
-		if(middle_plineidx == g_polyline_latlngs.length) { // b/c if ...length is 1, then length/2 will be 0.5, 
-			middle_plineidx = 0; // and that rounds UP, to 1.
-		}
+		var middle_plineidx = Math.round((g_polyline_latlngs.length-1)/2);
 		var middle_pline = g_polyline_latlngs[middle_plineidx];
 		console.log('', Math.round(g_polyline_latlngs.length/2)); // tdr 
-		var middle_pt = middle_pline[Math.round(middle_pline.length/2)];
+		var middle_pt_idx = Math.round(middle_pline.length/2);
+		var middle_pt = middle_pline[Math.round((middle_pline.length-1)/2)];
 		g_map.panTo(middle_pt);
 	}
 }
