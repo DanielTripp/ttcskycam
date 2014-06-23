@@ -15,7 +15,7 @@
 # matter), to be re-created on the next incoming request. 
 
 
-import sys, os, os.path, subprocess, signal, re, time, functools, collections, functools
+import sys, os, os.path, subprocess, signal, re, time, functools, collections, functools, hashlib
 from itertools import ifilterfalse
 from heapq import nsmallest
 from operator import itemgetter
@@ -80,13 +80,14 @@ def get(func_, args_=[], kwargs_={}, key=None, posargkeymask=None):
 		key2 = make_key(func_, args_, kwargs_, posargkeymask=posargkeymask)
 	else:
 		key2 = key
-	r = get_memcache_client().get(key2)
+	sha1_key = hashlib.sha1(key2).hexdigest()
+	r = get_memcache_client().get(sha1_key)
 	if r is None:
-		if LOG: printerr('Not found in memcache:     %s' % key2)
+		if LOG: printerr('Not found in memcache:     %s / "%s"' % (sha1_key, key2))
 		r = func_(*args_, **kwargs_)
-		get_memcache_client().set(key2, r)
+		get_memcache_client().set(sha1_key, r)
 	else:
-		if LOG: printerr('Found in memcache:         %s' % key2)
+		if LOG: printerr('Found in memcache:         %s / "%s"' % (sha1_key, key2))
 	return r
 
 def get_from_memcache(func_, args_, kwargs_):
