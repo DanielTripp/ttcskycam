@@ -1,11 +1,12 @@
 #!/usr/bin/python2.6
 
 from collections import *
-import sys, os, os.path, json, getopt
+import sys, os, os.path, json, getopt, traceback
 import vinfo, db, routes, geom, mc, yards, traffic, c, util, multiproc
 from misc import *
 
 GET_CURRENT_REPORTS_FROM_DB = os.path.exists('GET_CURRENT_REPORTS_FROM_DB')
+GET_HISTORICAL_REPORTS_FROM_DB = os.path.exists('GET_HISTORICAL_REPORTS_FROM_DB')
 DISALLOW_HISTORICAL_REPORTS = os.path.exists('DISALLOW_HISTORICAL_REPORTS')
 
 if os.path.exists('MAKE_REPORTS_FROUTES'):
@@ -40,7 +41,10 @@ def get_historical_report(report_type_, froute_, dir_, datazoom_, time_, log_=Fa
 	if DISALLOW_HISTORICAL_REPORTS:
 		raise Exception('Historical reports are disallowed.')
 	time_arg = round_down_by_minute(time_)
-	return calc_report_json(report_type_, froute_, dir_, datazoom_, time_arg)
+	if GET_HISTORICAL_REPORTS_FROM_DB:
+		return get_historical_report_from_db(report_type_, froute_, dir_, datazoom_, time_)
+	else:
+		return calc_report_json(report_type_, froute_, dir_, datazoom_, time_arg)
 
 def get_current_report(report_type_, froute_, dir_, datazoom_, last_gotten_timestr_, log_=False):
 	if GET_CURRENT_REPORTS_FROM_DB:
@@ -82,6 +86,10 @@ def get_current_report_from_db(report_type_, froute_, dir_, datazoom_, last_gott
 		else:
 			report_json = db.get_report(report_type_, froute_, dir_, datazoom_, latest_report_time)
 			return '[%s, %s, %d]' % (json.dumps(em_to_str(latest_report_time)), report_json, dir_)
+
+def get_historical_report_from_db(report_type_, froute_, dir_, datazoom_, time_):
+	report_json = db.get_report(report_type_, froute_, dir_, datazoom_, time_)
+	return '[%s, %s, %d]' % (json.dumps(em_to_str(time_)), report_json, dir_)
 
 # return: JSON string.  array.  elements of it: [time, data, direction].  data = [visuals, speeds]. 
 def get_traffic_report(froute_, dir_, datazoom_, time_, last_gotten_timestr_, log_=False):
@@ -131,14 +139,12 @@ def wait_for_locations_poll_to_finish():
 	if cur_wait_secs > MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS:
 		printerr('%s: reports: watched poll locations flag file for %d seconds before it was touched.' % (now_str(), cur_wait_secs))
 
-def make_all_reports_and_insert_into_db_once(froute_to_multiprocpool_):
-	report_time = round_up_by_minute(now_em())
-	asyncresults = []
-	for froute in FROUTES:
-		asyncresults.append(froute_to_multiprocpool_[froute].apply_async(\
-				make_reports_and_insert_into_db_single_route, (report_time, froute)))
-	for asyncresult in asyncresults:
-		asyncresult.get()
+def make_all_reports_and_insert_into_db_once(report_time_, multiproc_):
+	if multiproc_:
+		multiproc.run(8, make_reports_and_insert_into_db_single_route, [(report_time_, froute) for froute in FROUTES])
+	else:
+		for froute in FROUTES:
+			make_reports_and_insert_into_db_single_route(report_time_, froute)
 
 def make_reports_and_insert_into_db_single_route(report_time_, froute_):
 	for direction in (0, 1):
@@ -150,7 +156,8 @@ def make_reports_and_insert_into_db_single_route(report_time_, froute_):
 				locations_data = traffic.get_recent_vehicle_locations_impl(froute_, direction, datazoom, report_time_)
 				reporttype_to_datazoom_to_reportdataobj['locations'][datazoom] = locations_data
 			except:
-				printerr('%s: Problem during %s / dir=%d / datazoom=%d' % (now_str(), froute_, direction, datazoom))
+				printerr('%s: Problem during %s / %s / dir=%d / datazoom=%d' % (now_str(), em_to_str(report_time_), froute_, direction, datazoom))
+				traceback.print_exc()
 				raise
 		db.insert_reports(froute_, direction, report_time_, reporttype_to_datazoom_to_reportdataobj)
 
@@ -160,7 +167,7 @@ def make_all_reports_and_insert_into_db_forever():
 	while True:
 		wait_for_locations_poll_to_finish()
 		t0 = time.time()
-		make_all_reports_and_insert_into_db_once(froute_to_multiprocpool)
+		make_all_reports_and_insert_into_db_once(round_up_by_minute(now_em()), True)
 		t1 = time.time()
 		reports_took_secs = t1 - t0
 		if reports_took_secs > 60:
@@ -197,9 +204,14 @@ def make_froute_to_multiprocpool():
 
 if __name__ == '__main__':
 
-	if len(sys.argv) == 2 and sys.argv[1] == '--once':
-		make_all_reports_and_insert_into_db_once(make_froute_to_multiprocpool())
-	else:
+	if len(sys.argv) == 3:
+		report_time = (round_down_by_minute(now_em()) if sys.argv[1] == 'now' else str_to_em(sys.argv[1]))
+		assert sys.argv[2] in ('--multiproc', '--nomultiproc')
+		do_multiproc = (sys.argv[2] == '--multiproc')
+		make_all_reports_and_insert_into_db_once(report_time, do_multiproc)
+	elif len(sys.argv) == 1:
 		make_all_reports_and_insert_into_db_forever()
+	else:
+		raise Exception()
 
 

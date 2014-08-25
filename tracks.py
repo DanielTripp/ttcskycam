@@ -31,31 +31,8 @@ def get_polyline_from_file(filename_):
 		printerr('error with %s' % track_filename)
 		raise
 	
-# This uses no search radius for the snap.  That is - it is unlimited, and will keep going until a line segment is found, 
-# no matter how far away.  This is okay here for a few reasons:
-# 
-# 1) There are not that very many streetcar tracks in Toronto, therefore we know about all of them, 
-# 2) New streetcar tracks are not being built, 
-# 3) We're confident that well not be incorrectly identifying something that is not a streetcar as a streetcar. 
-# 
-# The difference in real-world results between us putting None here as the search radius and us putting 1000 meters 
-# is probably nothing. 
-@lru_cache(1000)
-def snap(latlng_):
-	assert isinstance(latlng_, geom.LatLng)
-	return get_snapgraph().snap(latlng_, None)
-
-def heading(linesegaddr_, referencing_lineseg_aot_point_):
-	return get_snapgraph().heading(linesegaddr_, referencing_lineseg_aot_point_)
-
-def get_all_tracks_polylines():
-	return get_snapgraph().polylines
-
-def get_latlng(posaddr_):
-	return get_snapgraph().get_latlng(posaddr_)
-
 if __name__ == '__main__':
 
-	print get_all_tracks_polylines()
+	pass
 
 

@@ -300,9 +300,6 @@ def get_bounding_mofr_vis(mofr_, mofrstep_, mofrchunk_to_vis_, usewidemofr_):
 	else:
 		return (vi_lo, vi_hi)
 
-def kmph_to_mps(kmph_):
-	return kmph_*1000.0/(60*60)
-
 # return -1 if one or more parts of the route have no traffic data.
 # otherwise - return value is in seconds.
 def get_est_riding_time_secs(froute_, start_mofr_, dest_mofr_, current_, time_):

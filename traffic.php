@@ -18,7 +18,7 @@
 		<script type="text/javascript" src="js/jquery-ui-timepicker-addon.js"></script>
 		<script type="text/javascript" src="js/buckets-minified.js"></script>
 		<script type="text/javascript" src="common.js"></script>
-		<script type="text/javascript" src="snaptogrid.js"></script>
+		<script type="text/javascript" src="spatialindex.js"></script>
     <script type="text/javascript">
 
 var DONT_SHOW_INSTRUCTIONS = false;
@@ -27,12 +27,12 @@ var DISABLE_OVERTIME = false;
 var SHOW_FRAMERATE = false;
 
 var SHOW_DEV_CONTROLS = false;
+var CLICKABLE_VEHICLES = false;
 var SHOW_HISTORICAL_ON_LOAD = false;
 var HISTORICAL_TIME_DEFAULT = '2013-02-17 12:35';
 var SHOW_ZOOM = false;
 
 var SHOW_PATHS_TEXT = false;
-var SHOW_PATH_GRID_SQUARES = false;
 var SHOW_LOADING_URLS = false;
 var DISABLE_GEOLOCATION = true;
 
@@ -121,7 +121,7 @@ var g_force_show_froutes = new buckets.Set(), g_force_hide_froutes = new buckets
 var g_force_dir0_froutes = new buckets.Set(), g_force_dir1_froutes = new buckets.Set();
 var g_main_path = [], g_extra_path_froutendirs = [];
 var g_use_rendered_aot_arrow_vehicle_icons = g_browser_is_desktop;
-var g_froute_to_snaptogridcache = null;
+var g_froute_to_spatialindex = null;
 
 var HEADING_ROUNDING_DEGREES = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
 	readfile('HEADING_ROUNDING'); ?>;
@@ -393,7 +393,7 @@ function all_froutes() {
 }
 
 function refresh_vid_checkboxes_html() {
-	if(!SHOW_DEV_CONTROLS) {
+	if(!CLICKABLE_VEHICLES) {
 		return;
 	}
 	var html = 'Showing vehicle IDs:<br>';
@@ -856,10 +856,10 @@ function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
 			icon: new google.maps.MarkerImage(get_vehicle_url(vid_, size, heading_, static_aot_moving_), 
 					null, null, new google.maps.Point(size/2, size/2)),
 			visible: false, 
-			clickable: SHOW_DEV_CONTROLS,
+			clickable: CLICKABLE_VEHICLES,
 			zIndex: 5
 		});
-	if(SHOW_DEV_CONTROLS) {
+	if(CLICKABLE_VEHICLES) {
 		add_solo_vid_click_listener(marker, vid_);
 		add_vid_mouseover_infowin(marker, size, vid_);
 	}
@@ -923,7 +923,7 @@ function add_vid_mouseover_infowin(vehicle_marker_, vehicle_marker_size_, vid_) 
 			position: vehicle_marker_.getPosition()});
 		infowin.open(g_map);
 		return infowin;
-	}, 1000);
+	}, 250, 1500);
 
 }
 
@@ -1207,10 +1207,6 @@ function init_everything_that_depends_on_map() {
 
 	create_invisible_clickable_route_grid();
 
-	if(SHOW_PATH_GRID_SQUARES) {
-		show_pathgridsquares();
-	}
-
 	add_delayed_event_listener(g_map, 'bounds_changed', refresh_streetlabels_allroutes, 500);
 
 	if(SHOW_HISTORICAL_ON_LOAD) {
@@ -1235,8 +1231,8 @@ function on_map_click(mouseevent_) {
 	var latlng = new LatLng(mouseevent_.latLng.lat(), mouseevent_.latLng.lng());
 	var nearby_froutes = [];
 	var search_radius = get_map_click_route_search_radius_for_cur_guizoom();
-	g_froute_to_snaptogridcache.forEach(function(froute, snaptogridcache) {
-		if(snaptogridcache.snap(latlng, search_radius) != null) {
+	g_froute_to_spatialindex.forEach(function(froute, spatialindex) {
+		if(spatialindex.snap(latlng, search_radius) != null) {
 			nearby_froutes.push(froute);
 		}
 	});
@@ -1510,11 +1506,11 @@ function is_subway(froute_) {
 function create_invisible_clickable_route_grid() {
 	var froute_to_routepts = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
 				passthru('python -c "import routes; print routes.get_froute_to_routepts_min_datazoom_json_str()"'); ?>;
-	g_froute_to_snaptogridcache = new buckets.Dictionary();
+	g_froute_to_spatialindex = new buckets.Dictionary();
 	for(var froute in froute_to_routepts) {
 		var routepts = froute_to_routepts[froute];
 		g_all_froutes.push(froute); // using this opportunity to build a complete list of froute names on the client side here. 
-		g_froute_to_snaptogridcache.set(froute, new SnapToGridCache(routepts));
+		g_froute_to_spatialindex.set(froute, new SpatialIndex(routepts, 'plines'));
 	}
 }
 
@@ -1604,59 +1600,6 @@ function show_route_select_dialog(froutes_) {
 function on_route_select_button_clicked(froute_) {
 	$("#route-select-dialog").dialog('close');
 	show_route_options_dialog(froute_);
-}
-
-function show_pathgridsquares() {
-	show_pathgridsquares_draw_grid();
-	show_pathgridsquares_add_rightclick_listener();
-}
-
-function show_pathgridsquares_add_rightclick_listener() {
-	google.maps.event.addListener(g_map, 'rightclick', function(mouse_event) {	
-		var click_latlng = mouse_event.latLng;
-		callpy('paths.get_pathgridsquare', click_latlng, 
-			function(r_) {
-				var infowin = new google.maps.InfoWindow({content: r_, position: click_latlng});
-				infowin.open(g_map);
-			});
-	});
-}
-
-function show_pathgridsquares_draw_grid() {
-	var LATSTEP = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
-	  passthru('python -c "import paths; print paths.LATSTEP"'); ?>;
-	var LNGSTEP = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
-	  passthru('python -c "import paths; print paths.LNGSTEP"'); ?>;
-	var LATREF = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
-	  passthru('python -c "import paths; print paths.LATREF"'); ?>;
-	var LNGREF = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
-	  passthru('python -c "import paths; print paths.LNGREF"'); ?>;
-
-	var minlat = LATREF-30*LATSTEP, maxlat = LATREF+60*LATSTEP;
-	var minlng = LNGREF-40*LNGSTEP, maxlng = LNGREF+60*LNGSTEP;
-
-	for(var lat=minlat; lat<=maxlat; lat+=LATSTEP) {
-		new google.maps.Polyline({map: g_map, path: [google_LatLng([lat, minlng]), google_LatLng([lat, maxlng])], 
-				strokeColor: 'rgb(0,0,0)', strokeWeight: 0.6, zIndex: -100});
-		new google.maps.Polyline({map: g_map, path: [google_LatLng([lat+LATSTEP/2, minlng]), google_LatLng([lat+LATSTEP/2, maxlng])], 
-				strokeColor: 'rgb(0,0,0)', strokeWeight: 0.2, zIndex: -100});
-	}
-	for(var lat=LATREF; lat<=LATREF+100*LATSTEP; lat+=10*LATSTEP) {
-		new google.maps.Polyline({map: g_map, path: [google_LatLng([lat, minlng]), google_LatLng([lat, maxlng])], 
-				strokeColor: 'rgb(0,255,0)', strokeWeight: 3, zIndex: -100});
-	}
-	for(var lng=minlng; lng<=maxlng; lng+=LNGSTEP) {
-		new google.maps.Polyline({map: g_map, path: [google_LatLng([minlat, lng]), google_LatLng([maxlat, lng])], 
-				strokeColor: 'rgb(0,0,0)', strokeWeight: 0.6, zIndex: -100});
-		new google.maps.Polyline({map: g_map, path: [google_LatLng([minlat, lng+LNGSTEP/2]), google_LatLng([maxlat, lng+LNGSTEP/2])], 
-				strokeColor: 'rgb(0,0,0)', strokeWeight: 0.2, zIndex: -100});
-	}
-	for(var lng=LNGREF; lng<=LNGREF+100*LNGSTEP; lng+=10*LNGSTEP) {
-		new google.maps.Polyline({map: g_map, path: [google_LatLng([minlat, lng]), google_LatLng([maxlat, lng])], 
-				strokeColor: 'rgb(0,255,0)', strokeWeight: 3, zIndex: -100});
-	}
-
-	draw_polygon('paths_db_hires_bounding_polygon.json');
 }
 
 function init_trip_markers() {
@@ -1749,7 +1692,7 @@ function round(x_, step_) {
 
 function get_paths_from_server() {
 	var orig = g_trip_orig_marker.getPosition(), dest = g_trip_dest_marker.getPosition();
-	callpy('paths.get_paths_by_latlngs', orig, dest, 
+	callpy('system.get_packed_ways', orig, dest, 
 		function(r_) {
 			if(SHOW_PATHS_TEXT) {
 				set_contents('p_paths_text', sprintf('%.5f, %.5f -> %.5f, %.5f&nbsp;&nbsp;&nbsp;&nbsp;%s', 

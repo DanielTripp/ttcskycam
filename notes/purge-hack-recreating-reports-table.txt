@@ -1,6 +1,8 @@
 
 select relname, relkind, pg_size_pretty(pg_table_size(oid)) as size from pg_class  order by pg_relation_size(oid) desc;
 
+Expect to see a pg_toast_... taking a lot of space.  (reports table will also - but that includes the pg_toast...)
+
 
 as root:
 (necessary?)
@@ -14,7 +16,7 @@ as postgres:
 
 pg_dump -t reports  -c -s > /tmp/d.sql
 psql
-postgres=> \i /tmp/d.sql;
+\i /tmp/d.sql;
 
 
 as root: 

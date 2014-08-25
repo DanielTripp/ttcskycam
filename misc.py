@@ -1,6 +1,6 @@
 #!/usr/bin/python2.6
 
-import sys, os, os.path, time, math, datetime, calendar, bisect, tempfile, subprocess, StringIO, re, multiprocessing
+import sys, os, os.path, time, math, datetime, calendar, bisect, tempfile, subprocess, StringIO, re, multiprocessing, heapq, random
 from collections import Sequence, MutableSequence, defaultdict, MutableSet
 from itertools import *
 
@@ -74,20 +74,26 @@ def hopscotch(iterable_, n=2):
 		pass
 
 # eg. given ['a', 'b', 'c', 'd'], this yields (0, 'a', 1, 'b'), then (1, 'b', 2, 'c'), then (2, 'c', 3, 'd')
-def hopscotch_enumerate(iterable_, n=2):
+def hopscotch_enumerate(iterable_, n=2, reverse=False):
 	assert n >= 2
-	it = iter(iterable_)
-	try:
-		e = ()
-		for i in range(n):
-			e += (i, it.next())
-		i = n
-		while True:
-			yield e
-			e = e[2:] + (i, it.next(),)
-			i += 1
-	except StopIteration:
-		pass
+	if reverse:
+		if not isinstance(iterable_, Sequence):
+			raise Exception()
+		for i in xrange(len(iterable_)-n, -1, -1):
+			yield sum(((j, iterable_[j]) for j in xrange(i, i+n)), ())
+	else:
+		it = iter(iterable_)
+		try:
+			e = ()
+			for i in range(n):
+				e += (i, it.next())
+			i = n
+			while True:
+				yield e
+				e = e[2:] + (i, it.next(),)
+				i += 1
+		except StopIteration:
+			pass
 
 # This is the counterpart to common.js - encode_url_paramval(). 
 def decode_url_paramval(str_):
@@ -277,22 +283,24 @@ def round_down_off_step(x_, step_):
 	assert type(x_) == int and type(step_) == int
 	return ((x_-step_/2)/step_)*step_ + step_/2
 
-def round_up(x_, step_):
-	r = round_down(x_, step_)
+def round_up(x_, step_, ref_=0):
+	r = round_down(x_, step_, ref_)
 	if isinstance(x_, float):
 		return r if abs(r - x_) < 0.00001 else r+step_
 	else:
 		return r if r == x_ else r+step_
 
-def round_down(x_, step_):
+def round_down(x_, step_, ref_=0):
 	assert type(x_) in (int, long, float)
-	if type(x_) in (int, long):
-		r = (long(x_)/step_)*step_
-		if type(x_) is int:
+	x = x_ - ref_
+	if type(x) in (int, long):
+		r = (long(x)/step_)*step_
+		if type(x) is int:
 			r = int(r)
-		return r
 	else:
-		return fdiv(x_, step_)*step_
+		r = fdiv(x, step_)*step_
+	r += ref_
+	return r
 
 def roundbystep(x_, step_):
 	rd = round_down(x_, step_)
@@ -747,6 +755,9 @@ def get_local_minima_indexes(list_, key_):
 				r.append(i)
 		return r
 
+def get_local_minima(list_, key_):
+	return [list_[idx] for idx in get_local_minima_indexes(list_, key_)]
+
 def permutation_2_indexes(list_):
 	assert isinstance(list_, Sequence)
 	for i in range(len(list_)):
@@ -862,6 +873,12 @@ def is_seq_like(candidate_, reference_seq_):
 				return False
 		return True
 
+def is_seq_of(obj_, type_or_types_):
+	if isinstance(type_or_types_, Sequence):
+		return isinstance(obj_, Sequence) and all(any(isinstance(e, tipe) for tipe in type_or_types_) for e in obj_)
+	else:
+		return isinstance(obj_, Sequence) and all(isinstance(e, type_or_types_) for e in obj_)
+
 # Thanks to http://stackoverflow.com/questions/11263172/what-is-the-pythonic-way-to-find-the-longest-common-prefix-of-a-list-of-lists 
 def get_common_prefix(seq1_, seq2_):
 	return [i[0] for i in takewhile(lambda elems: len(set(elems)) == 1, izip(seq1_, seq2_))]
@@ -873,6 +890,97 @@ def rein_in(x_, min_, max_):
 		return max_
 	else:
 		return x_
+
+def kmph_to_mps(kmph_):
+	return kmph_*1000.0/(60*60)
+
+def mps_to_kmph(mps_):
+	return mps_*60.0*60/1000;
+
+# Like the built-in sum() function, but this one multiplies instead of adds. 
+def mult(seq_):
+	return reduce(lambda x, y: x*y, seq_)
+
+def print_est_time_remaining(str_, t0_, i_, N_, every=1):
+	if every == 1 or random.randrange(every) == 0:
+		if i_ == 0:
+			printerr('??? hours remaining.')
+		else:
+			rate = (i_+1)/(time.time() - t0_)
+			est_time_remaining_secs = (N_-(i_+1))/rate
+			if est_time_remaining_secs > 60*60*48:
+				timestr = '%.1f days' % (est_time_remaining_secs/(60*60*24))
+			elif est_time_remaining_secs > 60*60:
+				timestr = '%.1f hours' % (est_time_remaining_secs/(60*60))
+			else:
+				timestr = '%.1f minutes' % (est_time_remaining_secs/(60))
+			percent = i_*100/N_
+			printerr('%s%d/%d - %d%% done - est. %s remaining.' % (('%s: ' % str_ if str_ else ''), i_, N_, percent, timestr))
+
+# Thanks to http://stackoverflow.com/questions/23598973/intercepting-heapq 
+# http://stackoverflow.com/questions/1465662/how-can-i-implement-decrease-key-functionality-in-pythons-heapq 
+# and http://hg.python.org/cpython/file/2.7/Lib/heapq.py 
+class Heap(list):
+	
+	def __init__(self, list_):
+		assert isinstance(list_, list)
+		for e in list_:
+			assert len(e) == 2 and (isinstance(e[0], int) or isinstance(e[0], float))
+		self[:] = list_
+		heapq.heapify(self)
+		self._value_to_listindex = {}
+		for i, (priority, value) in enumerate(self):
+			self._value_to_listindex[value] = i
+
+	def __setitem__(self,i,v):
+		super(Heap,self).__setitem__(i,v)
+		self._value_to_listindex[v[1]] = i
+
+	def pop(self):
+		lastelt = super(Heap,self).pop()		# raises appropriate IndexError if heap is empty
+		del self._value_to_listindex[lastelt[1]]
+		if self:
+			returnitem = self[0]
+			self[0] = lastelt
+			heapq._siftup(self, 0)
+		else:
+			returnitem = lastelt
+		return returnitem[1]
+
+	def push(self, priority_, value_):
+		assert isinstance(priority_, int) or isinstance(priority_, float)
+		self.append((priority_, value_))
+		idx = len(self)-1
+		self._value_to_listindex[value_] = idx
+		heapq._siftdown(self, 0, idx)
+
+	def __contains__(self, item):
+		return item in self._value_to_listindex
+
+	def decrease_priority(self, new_priority_, value_):
+		listidx = self._value_to_listindex[value_]
+		if new_priority_ > self[listidx][0]:
+			raise Exception()
+		self[listidx] = (new_priority_, value_)
+		heapq._siftdown(self, 0, listidx)
+
+# Will also return true if sublist_ == list_.
+def is_sublist(sublist_, list_):
+	assert all(isinstance(x, Sequence) for x in (sublist_, list_))
+
+	if len(sublist_) > len(list_):
+		return False
+
+	def get_length_n_slices(n__, list__):
+		for i in xrange(len(list__) + 1 - n__):
+			yield list__[i:i+n__]
+
+	for slyce in get_length_n_slices(len(sublist_), list_):
+		if slyce == sublist_:
+			return True
+
+	return False
+	
 
 if __name__ == '__main__':
 
