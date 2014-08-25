@@ -163,7 +163,6 @@ def make_reports_and_insert_into_db_single_route(report_time_, froute_):
 
 def make_all_reports_and_insert_into_db_forever():
 	routes.prime_routeinfos()
-	froute_to_multiprocpool = make_froute_to_multiprocpool()
 	while True:
 		wait_for_locations_poll_to_finish()
 		t0 = time.time()
@@ -172,28 +171,6 @@ def make_all_reports_and_insert_into_db_forever():
 		reports_took_secs = t1 - t0
 		if reports_took_secs > 60:
 			printerr('Reports took too long to generate - %s seconds.  (Finished at %s.)' % (int(reports_took_secs), now_str()))
-
-def make_froute_to_multiprocpool():
-	froute_to_poolnum = {
-		'queen': 0,
-		'stclair': 0,
-		'dundas': 0,
-		'king': 1,
-		'spadina': 1,
-		'ossington': 1,
-		'bathurst': 2,
-		'carlton': 2,
-		'dupont': 2,
-		'dufferin': 3,
-		'keele': 3,
-		'lansdowne': 3
-	}
-	num_procs = max(froute_to_poolnum.values()) + 1
-	pools = [multiprocessing.Pool(1, multiproc.initializer) for i in range(num_procs)]
-	r = dict([(froute, pools[froute_to_poolnum[froute]]) for froute in FROUTES])
-
-	assert set(r.keys()) == set(FROUTES)
-	return r
 
 #	NUM_PROCS = multiprocessing.cpu_count()
 #	pools = [multiprocessing.Pool(1, multiproc.initializer) for i in range(NUM_PROCS)]
