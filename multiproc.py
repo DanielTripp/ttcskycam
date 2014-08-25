@@ -6,7 +6,10 @@ from itertools import *
 import db, mc
 
 def run(n_, func_, argses_):
-	pool = multiprocessing.Pool(n_, initializer)
+	def initializer():
+		db.forget_connection()
+		mc.forget_connection()
+	pool = multiprocessing.Pool(n_, initializer=initializer)
 	results = []
 	for args in argses_:
 		results.append(pool.apply_async(func_, args))
@@ -17,12 +20,7 @@ def run(n_, func_, argses_):
 	pool.join()
 	return returnvals
 
-def initializer():
-	db.forget_connection()
-	mc.forget_connection()
-
 if __name__ == '__main__':
 
 	pass
-
 

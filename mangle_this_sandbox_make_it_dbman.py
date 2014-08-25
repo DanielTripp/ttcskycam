@@ -41,9 +41,9 @@ if __name__ == '__main__':
 		
 		# The big part - deleting most of the sandbox: 
 		for dirpath, dirnames, filenames in os.walk('.'):
-			for dirname in [x for x in dirnames if x not in ['psycopg2', 'picklestore']]:
+			for dirname in [x for x in dirnames if x not in ['psycopg2', 'picklestore', 'yaml']]:
 				shutil.rmtree(os.path.join(dirpath, dirname))
 			break
 
-		os.remove('paths.sqlitedb')
+		os.remove('system.sqlitedb')
 

@@ -16,7 +16,7 @@
 		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
 		<script type="text/javascript" src="js/jquery-ui-1.8.17.custom.min.js"></script>
 		<script type="text/javascript" src="common.js"></script>
-		<script type="text/javascript" src="snaptogrid.js"></script>
+		<script type="text/javascript" src="spatialindex.js"></script>
     <script type="text/javascript">
 
 var g_map;
@@ -25,7 +25,7 @@ var g_route_markers = new buckets.LinkedList();
 var g_snapped_marker = null;
 var g_resnapped_markers = [null, null];
 var g_stops_dir_to_stoptag_to_latlng = null;
-var g_snaptogridcache = new SnapToGridCache([]);
+var g_spatialindex = new SpatialIndex([], 'plines');
 
 
 function add_info_win(mark_, text_) {
@@ -81,7 +81,7 @@ function initialize() {
 	google.maps.event.addListenerOnce(g_map, 'bounds_changed', function() {
 		google.maps.event.addListener(g_map, 'click', function(e) {
 			add_route_marker(e.latLng);
-			rebuild_snaptogridcache();
+			rebuild_spatialindex();
 		});
 		init_snaptest_marker();
 
@@ -140,7 +140,7 @@ function init_snaptest_marker() {
 		forget_resnapped_markers();
 		var snapped_pt = null;
 		if(is_selected('useclientsidesnap_checkbox')) {
-			var snap_result = g_snaptogridcache.snap(new LatLng(pos.lat(), pos.lng()), 1000);
+			var snap_result = g_spatialindex.snap(new LatLng(pos.lat(), pos.lng()), 1000);
 			if(snap_result != null) {
 				snapped_pt = [snap_result[0].lat, snap_result[0].lng];
 				set_contents('snaptest_result_snappedpt', sprintf("Snapped (client-side): (%.6f, %.6f)", snap_result[0].lat, snap_result[0].lng));
@@ -280,7 +280,7 @@ function refresh_config_route() {
 function refresh_fudge_route() {
 	remove_objects_of_all_kinds();
 	set_fudge_route_routepts(radio_val('fudgeroute'), (is_selected('dir0button') ? 0 : 1));
-	set_fudge_route_stops_bothdirs(radio_val('fudgeroute'));
+	//set_fudge_route_stops_bothdirs(radio_val('fudgeroute'));
 }
 
 function set_fudge_route_stops_bothdirs(route_) {
@@ -337,7 +337,7 @@ function set_fudge_route_routepts(route_, dir_) {
 	for(var i=0; i<glatlons.length; i++) {
 		add_route_marker(glatlons[i]);
 	}
-	rebuild_snaptogridcache();
+	rebuild_spatialindex();
 }
 
 function latlonfloatarrays_to_googlemaps(l_) {
@@ -427,7 +427,7 @@ function split_line(lo_marker_ptaddr_, new_latlng_) {
 	marker_latlngs.forEach(function(latlng) {
 		add_route_marker(latlng);
 	});
-	rebuild_snaptogridcache();
+	rebuild_spatialindex();
 }
 
 function radio_val(groupname_) {
@@ -487,17 +487,17 @@ function delete_marker(marker_ptaddr_) {
 		add_route_marker(latlng);
 	});
 
-	rebuild_snaptogridcache();
+	rebuild_spatialindex();
 }
 
-function rebuild_snaptogridcache() {
+function rebuild_spatialindex() {
 	var marker_latlngs = [];
 	g_route_markers.forEach(function(marker) {
 		var google_latlng = marker.getPosition();
 		marker_latlngs.push(new LatLng(google_latlng.lat(), google_latlng.lng()));
 	});
 
-	g_snaptogridcache = new SnapToGridCache([marker_latlngs]);
+	g_spatialindex = new SpatialIndex([marker_latlngs], 'plines');
 }
 
 function constrain_latlng_by_map_bounds(latlng_) {
@@ -557,7 +557,7 @@ function on_zoom_changed() {
 
 function on_add_marker_button_clicked() {
 	add_route_marker(null);
-	rebuild_snaptogridcache();
+	rebuild_spatialindex();
 }
 
     </script>
@@ -609,6 +609,7 @@ function on_add_marker_button_clicked() {
 						<input id="dufferinradiobutton" type="radio" name="fudgeroute" value="dufferin" /><label for="dufferinradiobutton">Dufferin</label><br/>
 						<input id="dundasradiobutton" type="radio" name="fudgeroute" value="dundas" checked="checked" /><label for="dundasradiobutton">Dundas</label><br/>
 						<input id="dupontradiobutton" type="radio" name="fudgeroute" value="dupont" /><label for="dupontradiobutton">Dupont</label><br/>
+						<label><input type="radio" name="fudgeroute" value="harbourfront" />Harbourfront</label><br/>
 						<input id="keeleradiobutton" type="radio" name="fudgeroute" value="keele" /><label for="keeleradiobutton">Keele</label><br/>
 						<input id="kingradiobutton" type="radio" name="fudgeroute" value="king" checked="checked" /><label for="kingradiobutton">King</label><br/>
 						<input id="lansdowneradiobutton" type="radio" name="fudgeroute" value="lansdowne" /><label for="lansdowneradiobutton">Lansdowne</label><br/>
@@ -616,6 +617,7 @@ function on_add_marker_button_clicked() {
 						<input id="queenradiobutton" type="radio" name="fudgeroute" value="queen" /><label for="queenradiobutton">Queen</label><br/>
 						<input id="spadinaradiobutton" type="radio" name="fudgeroute" value="spadina" /><label for="spadinaradiobutton">Spadina</label><br/>
 						<input id="stclairradiobutton" type="radio" name="fudgeroute" value="stclair" /><label for="stclairradiobutton">St. Clair</label><br/>
+						<label><input type="radio" name="fudgeroute" value="wellesley" />Wellesley</label><br/>
 						<input id="bloordanforthradiobutton" type="radio" name="fudgeroute" value="bloor_danforth" /><label for="bloordanforthradiobutton">Bloor Danforth</label><br/>
 						<input id="yongeuniversityspadinaradiobutton" type="radio" name="fudgeroute" value="yonge_university_spadina" /><label for="yongeuniversityspadinaradiobutton">Yonge University Spadina</label><br/>
 					</td>
@@ -653,9 +655,11 @@ function on_add_marker_button_clicked() {
 			<b>--> CLICK TO ADD POINT <-- </b>
 			<p id="p_zoom">zoom...</p>
 			<form name="form1">
+				<!--
 				stoptag:<input type="text" size="15" name="stoptag_field" id="stoptag_field" /> 
 				<input type="button" onclick="show_stoptag(this.form.stoptag_field.value)" value="Submit" id="stoptag_submit_button" />
 				///
+				-->
 				<label><input id="map_sync_checkbox" type="checkbox"/>Map Sync</label><br>
 			</form>
 			<p id="dist">...</p>

@@ -69,7 +69,8 @@ function init_everything_that_depends_on_map() {
 
 	google.maps.event.addListener(g_map, 'click', function(mouseevent_) {
 		var latlng = mouseevent_.latLng;
-		var latlng_str = sprintf('%.8f,%.8f', latlng.lat(), latlng.lng());
+		var latlng_str = sprintf('%.8f,%.8f %s geom.LatLng(%.8f,%.8f)', 
+				latlng.lat(), latlng.lng(), repeat('&nbsp;', 20), latlng.lat(), latlng.lng());
 		set_contents('p_clicked_pt', latlng_str);
 	});
 
@@ -279,6 +280,8 @@ function get_latlngs_from_string(str_) {
 			}
 			if(typeof raw_polylines[0][0] === 'number') { // file contains a polyline, not a list of polylines? 
 				raw_polylines = [raw_polylines]; // now it's a list of polylines. 
+			} else if(typeof raw_polylines[0] === 'number') { // or maybe it's just a single lat/lng 
+				raw_polylines = [[raw_polylines]];
 			}
 		} catch(e) {
 			console.log('All massaged JSON parse attempts failed.');
@@ -292,11 +295,12 @@ function get_latlngs_from_string(str_) {
 						polyline.push([lat, lng]);
 					}
 				});
-				raw_polylines.push(polyline);
+				raw_polylines = [polyline];
 			} catch(err) {
 				console.log('XML parse failed.');
+				console.log('Doing line-by-line.');
 				var polyline = [];
-				raw_polylines.push(polyline);
+				raw_polylines = [polyline];
 				var filelines = str_.split('\n');
 				for(var filelinei in filelines) {
 					var fileline = filelines[filelinei];

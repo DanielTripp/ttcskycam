@@ -6,7 +6,7 @@ from lru_cache import lru_cache
 import vinfo, routes
 from misc import *
 
-RADIUS_OF_EARTH = 6367.44465
+RADIUS_OF_EARTH_KM = 6367.44465
 
 class LineSegSnapResult(object):
 
@@ -25,6 +25,10 @@ class LineSegSnapResult(object):
 		return self.__str__()
 
 class LatLng:
+
+	@classmethod
+	def make(cls_, raw_):
+		return (LatLng(raw_) if raw_ is not None else None)
 
 	def __init__(self, lat_, lng_=None):
 		if type(lat_) == float:
@@ -48,7 +52,7 @@ class LatLng:
 		dlat = lat2 - lat1
 		dlng = lng2 - lng1
 		central_angle = 2*asin(sqrt(sin(dlat/2)**2 + cos(lat1)*cos(lat2)*(sin(dlng/2)**2)))
-		r = central_angle*RADIUS_OF_EARTH*1000
+		r = central_angle*RADIUS_OF_EARTH_KM*1000
 		return r
 
 	def add(self, other_):
@@ -88,13 +92,20 @@ class LatLng:
 		assert isinstance(other_, LatLng)
 		return LatLng(avg(self.lat, other_.lat, ratio_), avg(self.lng, other_.lng, ratio_))
 
-	# This only works for concave polygons.  TODO: handle all polygons. 
+	# Only pass an 'open' polygon in here please.  i.e. last point of poly_ is not the same as the first point. 
+	# Thanks to http://en.wikipedia.org/wiki/Point_in_polygon#Ray_casting_algorithm 
 	def inside_polygon(self, poly_):
-		assert all(isinstance(x, LatLng) for x in poly_)
-		sum_angles = 0
+		assert is_seq_of(poly_, LatLng) and not poly_[0].is_close(poly_[-1], 5)
+		# For the arbitrary direction of the ray required for this test, we'll use a horizontal eastward one.
+		# Not really infinite, because I don't feel like coding that, but instead we'll use the lng value of 
+		# the most-eastward point in the poly.   Plus 1.0 for safety. 
+		ray_lineseg = LineSeg(self, LatLng(self.lat, max(pt.lng for pt in poly_)+1.0))
+		num_intersections = 0
 		for polypt1, polypt2 in hopscotch(poly_ + [poly_[0]]):
-			sum_angles += angle(polypt1, self, polypt2)
-		return (2*math.pi - sum_angles) < 0.0001
+			intersect_pt = get_line_segment_intersection(polypt1, polypt2, ray_lineseg.start, ray_lineseg.end)
+			if intersect_pt is not None:
+				num_intersections += 1
+		return (num_intersections % 2 == 1)
 
 	def is_within_box(self, southwest_, northeast_):
 		assert isinstance(southwest_, LatLng) and isinstance(northeast_, LatLng)
@@ -112,14 +123,19 @@ class LatLng:
 		return (self.lat, self.lng)
 
 	def __eq__(self, other_):
-		assert isinstance(other_, LatLng)
-		return self._key() == other_._key()
+		if not isinstance(other_, LatLng):
+			return False
+		else:
+			return self._key() == other_._key()
 
 	def __ne__(self, other_):
-		assert isinstance(other_, LatLng)
-		return self._key() != other_._key()
+		if not isinstance(other_, LatLng):
+			return True
+		else:
+			return self._key() != other_._key()
 
 	def __cmp__(self, other_):
+		assert isinstance(other_, LatLng)
 		return cmp(self._key(), other_._key())
 
 	def __hash__(self):
@@ -179,6 +195,9 @@ class LatLng:
 		else:
 			return self.dist_m(other_) <= tolerance_
 
+	def tuple(self):
+		return (self.lat, self.lng)
+
 def angle(arm1_, origin_, arm2_):
 	assert isinstance(arm1_, LatLng) and isinstance(origin_, LatLng) and isinstance(arm2_, LatLng)
 	abs_ang1 = origin_.abs_angle(arm1_)
@@ -215,10 +234,14 @@ def get_pass_point_and_ratio(standpt_, forept_, post_):
 
 def get_pass_ratio(standpt_, forept_, post_):
 	assert isinstance(standpt_, LatLng) and isinstance(forept_, LatLng) and isinstance(post_, LatLng)
-	ang = angle(post_, standpt_, forept_)
-	hypot = standpt_.dist_m(post_)
-	adjacent = hypot*math.cos(ang)
-	return adjacent/forept_.dist_m(standpt_)
+	standpt_forept_dist = standpt_.dist_m(forept_)
+	if standpt_forept_dist < 0.0001:
+		return 0.0
+	else:
+		ang = angle(post_, standpt_, forept_)
+		hypot = standpt_.dist_m(post_)
+		adjacent = hypot*math.cos(ang)
+		return adjacent/standpt_forept_dist
 
 def get_passing_vehicles(vilist_, dest_):
 	r = []
@@ -256,12 +279,6 @@ def remove_bad_gps_readings(vis_):
 		r += vis_single_vid
 	r.sort(key=lambda vi: vi.time, reverse=True)
 	vis_[:] = r
-
-def kmph_to_mps(kmph_):
-	return kmph_*1000.0/(60*60)
-
-def mps_to_kmph(mps_):
-	return mps_*60.0*60/1000;
 
 # Note [1]: This is to account for the small gps inaccuracies that nearly all readings seem to have.
 # One can see this by drawing many vehicle locations on a google map with satellite view on.  Otherwise
@@ -424,16 +441,65 @@ def heading_to_degrees(heading_):
 
 class BoundingBox:
 	
-	def __init__(self, polygon_pts_):
-		assert all(isinstance(e, LatLng) for e in polygon_pts_)
-		self.southwest = LatLng(min(pt.lat for pt in polygon_pts_), min(pt.lng for pt in polygon_pts_))
-		self.northeast = LatLng(max(pt.lat for pt in polygon_pts_), max(pt.lng for pt in polygon_pts_))
+	def __init__(self, pts_):
+		assert all(isinstance(e, LatLng) for e in pts_)
+		minlat = float('inf'); minlng = float('inf'); maxlat = float('-inf'); maxlng = float('-inf')
+		for pt in pts_:
+			minlat = min(minlat, pt.lat)
+			minlng = min(minlng, pt.lng)
+			maxlat = max(maxlat, pt.lat)
+			maxlng = max(maxlng, pt.lng)
+		self.southwest = LatLng(minlat, minlng)
+		self.northeast = LatLng(maxlat, maxlng)
+
+	@property
+	def northwest(self):
+		return LatLng(self.northeast.lat, self.southwest.lng)
+
+	@property
+	def southeast(self):
+		return LatLng(self.southwest.lat, self.northeast.lng)
+
+	@property
+	def minlng(self):
+		return self.southwest.lng
+
+	@property
+	def maxlng(self):
+		return self.northeast.lng
+
+	@property
+	def minlat(self):
+		return self.southwest.lat
+
+	@property
+	def maxlat(self):
+		return self.northeast.lat
 
 	def __str__(self):
 		return 'box:(%s, %s)' % (self.southwest, self.northeast)
 
 	def __repr__(self):
 		return self.__str__()
+
+	def get_enlarged(self, radius_):
+		latheadroom = math.degrees(radius_/(RADIUS_OF_EARTH_KM*1000))
+		latheadroom *= 1.1 # Giving it extra room, to make me feel feel safer. 
+		r_maxlat = self.maxlat + latheadroom
+		r_minlat = self.minlat - latheadroom
+
+		r_minlng = self.minlng
+		while True:
+			r_nw = LatLng(self.maxlat, r_minlng)
+			r_sw = LatLng(self.minlat, r_minlng)
+			if r_nw.dist_m(self.northwest) > radius_ and r_sw.dist_m(self.southwest) > radius_:
+				break
+			r_minlng -= 0.005
+		r_maxlng = self.maxlng + (self.minlng - r_minlng)
+
+		r_sw = LatLng(r_minlat, r_minlng)
+		r_ne = LatLng(r_maxlat, r_maxlng)
+		return BoundingBox([r_sw, r_ne])
 
 class LineSeg(object):
 

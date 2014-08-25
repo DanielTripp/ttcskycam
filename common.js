@@ -156,7 +156,8 @@ function init_map() {
 		center: new google.maps.LatLng(43.65431690357294, -79.40920715332034),
 		zoom: 14,
 		scaleControl: true, 
-		mapTypeId: google.maps.MapTypeId.ROADMAP
+		mapTypeId: google.maps.MapTypeId.ROADMAP, 
+		disableDoubleClickZoom: true 
 	};
 	g_map = new google.maps.Map(document.getElementById("map_canvas"),
 			myOptions);
@@ -214,8 +215,23 @@ function get_range_val(x1_, y1_, x2_, y2_, domain_val_) {
 	return (y2_ - y1_)*(domain_val_ - x1_)/(x2_ - x1_) + y1_;
 }
 
-function google_LatLng(latlon_) {
-	return new google.maps.LatLng(latlon_[0], latlon_[1]);
+function get_range_val_latlng(x1_, latlng1_, x2_, latlng2_, domain_val_) {
+	var lat = get_range_val(x1_, latlng1_.lat(), x2_, latlng2_.lat(), domain_val_);
+	var lng = get_range_val(x1_, latlng1_.lng(), x2_, latlng2_.lng(), domain_val_);
+	return new google.maps.LatLng(lat, lng);
+}
+
+
+function google_LatLng(obj_) {
+	if(typeof obj_.lat == 'number' && typeof obj_.lng == 'number') {
+		return new google.maps.LatLng(obj_.lat, obj_.lng);
+	} else if(obj_ instanceof google.maps.LatLng) {
+		return obj_;
+	} else if(obj_.length == 2 && typeof obj_[0] == 'number' && typeof obj_[1] == 'number') {
+		return new google.maps.LatLng(obj_[0], obj_[1]);
+	} else {
+		throw sprintf('Can\'t recognize latlng %s %s', typeof obj_, obj_);
+	}
 }
 
 function from_google_LatLng(glatlng_) {
@@ -458,6 +474,7 @@ var g_hover_listener_listenee_objectid_to_show_timer = new buckets.Dictionary();
 var g_hover_listener_listenee_objectid_to_close_timer = new buckets.Dictionary();
 
 // listener_func_ can return something that we can all close() or setMap(null) on, or an array of same. 
+//							and can take one arg: a google LatLng. 
 function add_hover_listener(listenee_, listener_func_, show_delay_millis_, close_delay_millis_) {
 	var objid = object_id(listenee_);
 	google.maps.event.addListener(listenee_, 'mouseover', function(mouseevent__) { 
@@ -553,6 +570,15 @@ function sorted_keys(dict_) {
         }
     }
     return keys.sort();
+}
+
+function minkey(dict_) {
+	return sorted_keys(dict_)[0];
+}
+
+function maxkey(dict_) {
+	var k = sorted_keys(dict_);
+	return k[k.length-1];
 }
 
 function draw_polygon(filename_) {
@@ -755,6 +781,31 @@ function get_map_sync_params_from_str(str_) {
 	var raw_latlng = raw_params[0], zoom = raw_params[1];
 	var latlng = google_LatLng(raw_latlng);
 	return [latlng, zoom];
+}
+
+// Like python's dict.values(). 
+function values(dict_) {
+	var r = [];
+	for(var k in dict_) {
+		r.push(dict_[k]);
+	}
+	return r;
+}
+
+String.prototype.startsWith = function(prefix) {
+	return this.substr(0, prefix.length) === prefix;
+};
+
+String.prototype.endsWith = function(suffix) {
+	return this.indexOf(suffix, this.length - suffix.length) !== -1;
+};
+
+function repeat(str_, n_){
+	var a = [];
+	while(a.length < n_) {
+		a.push(str_);
+	}
+	return a.join('');
 }
 
 eval(get_sync("js/json2.js"));

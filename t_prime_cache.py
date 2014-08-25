@@ -11,5 +11,4 @@ if __name__ == '__main__':
 	for froute in routes.FUDGEROUTES:
 		routes.routeinfo(froute)
 
-	tracks.get_all_tracks_polylines()
 

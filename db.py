@@ -652,7 +652,7 @@ def interp_by_time(vilist_, be_clever_, current_conditions_, dir_=None, datazoom
 					if (interptime - lo_vi.time > 3*60*1000) or dirs_disagree(dir_, lo_vi.dir_tag_int):
 						continue
 					if vi_to_grade[lo_vi] == 'g':
-						latlng, heading = vi_to_path[lo_vi].get_piece(-1).mapl_to_latlonnheading('max')
+						latlng, heading = vi_to_path[lo_vi].get_piece(-1).mapl_to_latlngnheading('max')
 					else:
 						latlng, heading = get_latlonnheadingnmofr_from_lo_sample(lolo_vi, lo_vi, datazoom_, be_clever_)[:2]
 					i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, heading, vid, latlng.lat, latlng.lng,
@@ -676,7 +676,7 @@ def interp_with_path_latlonnheadingnmofr(lo_vi_, hi_vi_, time_ratio_, lo_idx_, v
 	lo_grade = vi_to_grade_[lo_vi_]
 	path = vi_to_path_[lo_vi_ if lo_grade == 'g' else hi_vi_]
 	pieceidx = get_piece_idx(vis_, lo_idx_, vi_to_grade_)
-	i_latlng, i_heading = get_latlonnheading_from_path(path, pieceidx, time_ratio_)
+	i_latlng, i_heading = get_latlngnheading_from_path(path, pieceidx, time_ratio_)
 	i_mofr = None
 	if log_:
 		printerr('vid %s path interp between [%s,%s]:' % (lo_vi_.vehicle_id, lo_vi_.latlng, hi_vi_.latlng))
@@ -685,10 +685,10 @@ def interp_with_path_latlonnheadingnmofr(lo_vi_, hi_vi_, time_ratio_, lo_idx_, v
 		printerr('\tresult=%s' % i_latlng)
 	return (i_latlng, i_heading, i_mofr)
 
-def get_latlonnheading_from_path(path_, pieceidx_, time_ratio_):
+def get_latlngnheading_from_path(path_, pieceidx_, time_ratio_):
 	piece = path_.get_piece(pieceidx_)
 	mapl = piece.length_m() * time_ratio_
-	return piece.mapl_to_latlonnheading(mapl)
+	return piece.mapl_to_latlngnheading(mapl)
 
 def get_piece_idx(vis_, lo_idx_, vi_to_grade_):
 	r = -1
@@ -1198,7 +1198,6 @@ def set_report_in_memcache(report_type_, froute_, dir_, datazoom_, time_, data_)
 
 def insert_reports(froute_, dir_, time_, reporttype_to_datazoom_to_reportdataobj_):
 	assert froute_ in routes.NON_SUBWAY_FUDGEROUTES and dir_ in (0, 1)
-	assert abs(time_ - now_em()) < 1000*60*60
 
 	reporttype_to_datazoom_to_reportjson = defaultdict(lambda: {})
 	for reporttype, datazoom_to_reportdataobj in reporttype_to_datazoom_to_reportdataobj_.iteritems():
@@ -1273,7 +1272,6 @@ def close_connection():
 		except:
 			pass
 		g_conn = None
-
 
 if __name__ == '__main__':
 

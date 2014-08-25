@@ -21,7 +21,9 @@ from lru_cache import lru_cache
 FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301', '502', '503', '508'], 'king': ['504', '508', '503'], \
 'spadina': ['510'], \
 'bathurst': ['511', '310', '7'], 'dufferin': ['29', '329'], 'lansdowne': ['47'], 'ossington': ['63', '316'], 'carlton': ['506', '306'], \
-'dupont': ['26'], 'stclair': ['512', '312'], 'keele': ['41']}
+'dupont': ['26'], 'stclair': ['512', '312'], 'keele': ['41'], \
+}
+# 'wellesley': ['94'], 'harbourfront': ['509']}
 
 CONFIGROUTE_TO_FUDGEROUTES = defaultdict(lambda: [])
 for fudgeroute, configroutes in FUDGEROUTE_TO_CONFIGROUTES.items():
@@ -276,7 +278,12 @@ class RouteInfo:
 	def __init__(self, routename_):
 		self.name = routename_
 		self.init_routepts()
-		self.init_stops()
+		# Note from August 2014: 
+		# I think that I was using stops when I polled predictions as an experiment and/or with old pre-graph 
+		# 'paths' code (now: system.py / SystemSnapGraph).  Regardless of what I used to use stops for, 
+		# I don't use them now, so I don't feel like getting these files as I add new routes. 
+		# So I'm commenting this call to init_stops() out. 
+		#self.init_stops()
 
 	def init_routepts(self):
 		def read_pts_file(filename_):
@@ -308,10 +315,10 @@ class RouteInfo:
 
 		self.datazoom_to_dir_to_routepts[None] = {}
 		if self.is_split_by_dir:
-			self.datazoom_to_dir_to_routepts[None][0] = self.snapgraph.polylines[0]
-			self.datazoom_to_dir_to_routepts[None][1] = self.snapgraph.polylines[1]
+			self.datazoom_to_dir_to_routepts[None][0] = self.snapgraph.plinename2pts['0']
+			self.datazoom_to_dir_to_routepts[None][1] = self.snapgraph.plinename2pts['1']
 		else:
-			self.datazoom_to_dir_to_routepts[None][0] = self.datazoom_to_dir_to_routepts[None][1] = self.snapgraph.polylines[0]
+			self.datazoom_to_dir_to_routepts[None][0] = self.datazoom_to_dir_to_routepts[None][1] = self.snapgraph.plinename2pts['0']
 		self.datazoom_to_dir_to_routeptaddr_to_mofr[None] = self.calc_dir_to_routeptaddr_to_mofr(None)
 
 		for datazoom in c.VALID_DATAZOOMS:

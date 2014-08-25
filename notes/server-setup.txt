@@ -308,6 +308,10 @@ If you are not redirected automatically, go <a href='http://unofficialttctraffic
 
 
 
+wget https://github.com/scottrogowski/code2flow/archive/master.zip
+install into ~/apps or somewhere and make a symlink from bin, because 'python setup.py install' didn't work. 
+
+
 
 
 
