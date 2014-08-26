@@ -2284,7 +2284,7 @@ def yen_k_shortest_path(k_, shortest_dist_, shortest_path_, srcvertex_, destvert
 					for vert, dist in r:
 						printerr('\t%s' % vert)
 					prev_len_r = len(r)
-				r = [x for x in r if (vert__, x[0]) not in edges_to_omit and (x[0], vert__) not in edges_to_omit]
+				r = [x for x in r if (vert__, x[0]) not in edges_to_omit]
 
 				# Omit nodes that are in the root path.  
 				# This part is not in the wikipedia pseudocode but seems to be in the original paper 
