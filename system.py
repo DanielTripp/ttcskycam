@@ -28,6 +28,8 @@ class SystemSnapGraph(snapgraph.SnapGraph):
 		numverts = len(self.verts)
 		self.edge_by_vertidxes = [[None]*numverts for i in range(numverts)]
 		for vertidx, edges in enumerate(self.edges):
+			if len(set(edge.vertidx for edge in edges)) != len(edges):
+				raise Exception('More than one edge from vert %d.')
 			for edge in edges:
 				self.edge_by_vertidxes[vertidx][edge.vertidx] = edge
 
