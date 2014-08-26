@@ -808,6 +808,11 @@ function repeat(str_, n_){
 	return a.join('');
 }
 
+function sleep(sleepMillis_){
+	var funcStartTime = (new Date()).getTime();
+	while((new Date()).getTime() < funcStartTime + sleepMillis_) {} 
+}
+
 eval(get_sync("js/json2.js"));
 
 
