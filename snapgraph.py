@@ -2196,9 +2196,6 @@ def a_star(srcvertex_, destvertex_, all_vertexes_, get_connected_vertexndists_, 
 
 	while len(openset) > 0:
 		current = min(openset, key=lambda v: f_score[v])
-		if 0: # tdr 
-			if current == 113 and came_from[113] == 112 and srcvertex_ == 60:
-				printerr('A*', f_score)
 		if current == destvertex_:
 			path = [destvertex_]
 			while path[0] in came_from:
@@ -2240,12 +2237,10 @@ def a_star(srcvertex_, destvertex_, all_vertexes_, get_connected_vertexndists_, 
 def yen_k_shortest_path(k_, shortest_dist_, shortest_path_, srcvertex_, destvertex_, 
 		all_vertexes_, get_connected_vertexndists_, heuristic_cost_estimate_, 
 		out_visited_vertexes=None, log=False):
-	if 0: # tdr 
-		log = True
 	assert k_ not in (1, None) and is_yen_k_simple(k_)
-	A = [(shortest_dist_, shortest_path_)]
 	if srcvertex_ == destvertex_:
-		return A
+		return [(shortest_dist_, shortest_path_)]
+	A = [(shortest_dist_, shortest_path_, 0)]
 	# Initialize the heap to store the potential kth shortest path.
 	B = []
 	
@@ -2261,22 +2256,24 @@ def yen_k_shortest_path(k_, shortest_dist_, shortest_path_, srcvertex_, destvert
 			prevPathEdgeDists.append(edgeDist)
 		assert len(prevPath) == len(prevPathEdgeDists)
 
-		# The spur node ranges from the first node to the next to last node in the previous k-shortest path.
-		for i in range(len(prevPath)-1):
-
+		# In the simple version of Yen, the spur node ranges from the first node to the next to last 
+		# node in the previous k-shortest path.  But for performance, we use Lawler's modification, which 
+		# might skip the first few spur nodes and starts the spurring at the spur part of prevPath 
+		# (that is, the place in prevPath where /it/ spurred from /it's/ previous path.)
+		prevPathSpurNodeIdx = A[k - 1][2]
+		for i in range(prevPathSpurNodeIdx, len(prevPath)-1):
 			# Spur node is retrieved from the previous k-shortest path, k - 1.
 			spurNode = prevPath[i]
 
 			# The sequence of nodes from the source to the spur node of the previous k-shortest path.
 			rootPath = prevPath[:i+1]
 			rootPath = (sum(prevPathEdgeDists[:i+1]), rootPath)
-			# tdr rootPath = (get_dist_from_pathsteps(rootPath, get_connected_vertexndists_), rootPath)
 			
-			edges_to_omit = []
+			edges_to_omit = set()
 			for p in [x[1] for x in A]:
 				if rootPath[1] == p[:i+1]:
 					# Remove the links that are part of the previous shortest paths which share the same root path.
-					edges_to_omit.append((p[i], p[i+1]))
+					edges_to_omit.add((p[i], p[i+1]))
 
 			if log: printerr('k=%d, rootPath=%s, spurNode=%s -----' % (k, rootPath[1], spurNode))
 			if log: printerr('omitting: %s' % edges_to_omit)
@@ -2312,37 +2309,23 @@ def yen_k_shortest_path(k_, shortest_dist_, shortest_path_, srcvertex_, destvert
 			if log: printerr('got spurPath for spurNode %s: %s' % (spurNode, spurPath))
 			if spurPath[0] is not None:
 				assert spurPath[1] is not None
-				totalPath = (rootPath[0] + spurPath[0], rootPath[1] + spurPath[1][1:])
+				totalPath = (rootPath[0] + spurPath[0], rootPath[1] + spurPath[1][1:], len(rootPath[1])-1)
 				# Add the potential k-shortest path to the heap.
-				if totalPath not in B:
-					if log: printerr('adding to B: %s' % (totalPath,))
-					B.append(totalPath)
+				B.append(totalPath)
 
 		if len(B) == 0:
 			break
 		# Sort the potential k-shortest paths by cost.
 		B.sort(key=lambda x: x[0])
-		if 0: # tdr 
-			printerr('k=%d' % k)
-			printerr('B:')
-			for dist, path in B:
-				printerr(dist, path)
-			printerr('----')
 		# Add the lowest cost path becomes the k-shortest path.
 		shortest_in_B = B.pop(0)
 		if yen_should_stop_because_of_kfloat(A, shortest_in_B, k_):
 			break
 		if log: printerr('adding to A: %s' % (shortest_in_B,))
 		A.append(shortest_in_B)
-		if 0: # tdr 
-			if len(A) >= 2 and (A[-1][0] < A[-2][0]):
-				printerr('out of order')
-				for dist, path in A:
-					printerr(dist, path)
-				raise Exception()
 		k += 1
 
-	return A
+	return [x[:2] for x in A]
 
 def is_yen_k_valid(k_):
 	if k_ is None:
@@ -2398,10 +2381,6 @@ def yen_should_stop_because_of_kint(distsnpaths_so_far_, k_):
 # if k_ is a 4-tuple, then we only enforce the first pass part.
 def yen_should_stop_because_of_kfloat(distsnpaths_so_far_, latest_candidate_distnpath_, k_):
 	assert is_yen_k_simple(k_)
-	if 0: # tdr 
-		if not is_sorted(distsnpaths_so_far_, key=lambda e: e[0]):
-			for dist, path in distsnpaths_so_far_:
-				print 'not sorted assert', dist, path
 	assert is_sorted(distsnpaths_so_far_, key=lambda e: e[0])
 	if isinstance(k_, float) or is_seq_like(k_, (0, 0.0)) or is_seq_like(k_, (0, 0, 0.0, 0.0)):
 		if isinstance(k_, float):
