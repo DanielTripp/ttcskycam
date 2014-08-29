@@ -106,13 +106,18 @@ def decode_url_paramval(str_):
 	return r
 
 def str_to_em(datetimestr_, format_=None):
-	def impl(format__):
-		return int(time.mktime(time.strptime(datetimestr_, format__))*1000)
+	def impl(str__, format__):
+		return int(time.mktime(time.strptime(str__, format__))*1000)
 	if format_ is None:
 		try:
-			return impl('%Y-%m-%d %H:%M:%S')
+			try:
+				if len(datetimestr_) == 23 and datetimestr_[-4] == '.':
+					return impl(datetimestr_[:-4], '%Y-%m-%d %H:%M:%S') + int(datetimestr_[-3:])
+			except ValueError:
+				pass
+			return impl(datetimestr_, '%Y-%m-%d %H:%M:%S')
 		except ValueError:
-			return impl('%Y-%m-%d %H:%M')
+			return impl(datetimestr_, '%Y-%m-%d %H:%M')
 	else:
 		return impl(format_)
 
