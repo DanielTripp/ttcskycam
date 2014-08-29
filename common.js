@@ -68,12 +68,12 @@ function remove_from_loading_urls(url_, success_) {
 g_page_is_unloading = false;
 $(window).unload(function() { g_page_is_unloading = true; });
 
-// funcs_arg_ can be a single callable (success function) or an object with 'success' and/or 'error' members. 
-function get(url_, funcs_arg_) {
+// success_error_funcs_ can be a single callable (success function) or an object with 'success' and/or 'error' members. 
+function get(url_, success_error_funcs_) {
 	add_to_loading_urls(url_);
-	var success_func = funcs_arg_.success, error_func = funcs_arg_.error;
+	var success_func = success_error_funcs_.success, error_func = success_error_funcs_.error;
 	if(success_func == undefined && error_func == undefined) {
-		success_func = funcs_arg_;
+		success_func = success_error_funcs_;
 	}
 	$.ajax({url:url_, async:true, 
 		error: function(jqXHR_, textStatus_, errorThrown_) {
@@ -255,14 +255,58 @@ function to_google_LatLng_polylines(raw_polylines_) {
 	return r;
 }
 
+function callpy_post(module_and_funcname_) {
+	var func_args = new Array();
+	for(var i=1; i<arguments.length-1; i++) {
+		func_args.push(arguments[i]);
+	}
+	var url = callpy_url(module_and_funcname_, []);
+	var success_error_funcs = arguments[arguments.length-1];
+	var args_formdata = get_formdata_from_func_args(func_args);
+	post(url, args_formdata, success_error_funcs);
+}
+
+function get_formdata_from_func_args(args_) {
+	var r = new FormData();
+	for(var i=0; i<args_.length; i++) {
+		r.append('arg', args_[i]);
+	}
+	return r;
+}
+
+// success_error_funcs_ can be a single callable (success function) or an object with 'success' and/or 'error' members. 
+function post(url_, args_formdata_, success_error_funcs_) {
+	add_to_loading_urls(url_);
+	var success_func = success_error_funcs_.success, error_func = success_error_funcs_.error;
+	if(success_func == undefined && error_func == undefined) {
+		success_func = success_error_funcs_;
+	}
+	$.ajax({type: 'POST', url: url_, contentType: false, processData: false, async:true, cache: false, 
+		data: args_formdata_, 
+		error: function(jqXHR_, textStatus_, errorThrown_) {
+			if(g_page_is_unloading) {
+				return;
+			}
+			remove_from_loading_urls(url_, false);
+			if(error_func != undefined) {
+				error_func();
+			}
+		}, 
+		success: function(data_, textStatus_, jqXHR_) {
+			remove_from_loading_urls(url_, true);
+			success_func($.parseJSON(data_));
+		}
+	});
+}
+
 function callpy(module_and_funcname_) {
 	var func_args = new Array();
 	for(var i=1; i<arguments.length-1; i++) {
 		func_args.push(arguments[i]);
 	}
 	var url = callpy_url(module_and_funcname_, func_args);
-	var funcs_arg = arguments[arguments.length-1];
-	get(url, funcs_arg);
+	var success_error_funcs = arguments[arguments.length-1];
+	get(url, success_error_funcs);
 }
 
 function callpy_sync(module_and_funcname_) {
@@ -278,21 +322,27 @@ function callpy_url(module_and_funcname_, func_args_) {
 	var paramstr = "module_and_funcname="+module_and_funcname_;
 	for(var i=0; i<func_args_.length; i++) {
 		var argval = func_args_[i];
-		if(argval instanceof google.maps.LatLng) {
-			argval = [argval.lat(), argval.lng()];
-		} else if(argval instanceof buckets.LinkedList) {
-			new_argval = [];
-			argval.forEach(function(e) {
-				new_argval.push(e);
-			});
-			argval = new_argval;
-		} else if($.isArray(argval) && argval.length > 0 && argval[0] instanceof google.maps.LatLng) {
-			argval = argval.map(function(e) { return [e.lat(), e.lng()]; });
-		}
-		var argval_json = window.JSON.stringify(argval);
+		var argval_json = callpy_object_to_jsonstr(argval);
 		paramstr += "&arg"+i+"="+encode_url_paramval(argval_json);
 	}
 	return "callpy.wsgi?"+paramstr;
+}
+
+function callpy_object_to_jsonstr(obj_) {
+	var r = null;
+	if(obj_ instanceof google.maps.LatLng) {
+		r = [obj_.lat(), obj_.lng()];
+	} else if(obj_ instanceof buckets.LinkedList) {
+		r = [];
+		obj_.forEach(function(e) {
+			r.push(e);
+		});
+	} else if($.isArray(obj_) && obj_.length > 0 && obj_[0] instanceof google.maps.LatLng) {
+		r = obj_.map(function(e) { return [e.lat(), e.lng()]; });
+	} else {
+		r = obj_;
+	}
+	return window.JSON.stringify(r);
 }
 
 function toJsonString(obj_, indent_) {
