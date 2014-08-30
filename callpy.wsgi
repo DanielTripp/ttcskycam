@@ -70,7 +70,7 @@ def call_func(module_and_funcname_, args_, referer_):
 		else:
 			return util.to_json_str(r)
 	else:
-		printerr('Method %s not in allowed list.' % module_and_funcname)
+		printerr('Method %s not in allowed list.' % module_and_funcname_)
 
 def post_get_args(environ_):
 	content_type, pdict = cgi.parse_header(environ_['CONTENT_TYPE'])
