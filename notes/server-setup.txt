@@ -313,6 +313,35 @@ install into ~/apps or somewhere and make a symlink from bin, because 'python se
 
 
 
+For PSQL sprintf etc.:
+as root:
+apt-get install postgresql-server-dev-9.1
+cd /tmp
+wget http://pgfoundry.org/frs/download.php/2911/pltoolbox-1.0.1.tar.gz
+cdh
+cdh
+USE_PGXS=1 make install
+
+as postgres:
+psql -d postgres -U postgres
+> ALTER USER Postgres WITH PASSWORD '..............';   ' can be same as system password 
+
+as root:
+vi /etc/postgresql/9.1/main/pg_hba.conf
+(replace line "local all postgres peer" with "local all postgres md5")
+/etc/init.d/postgresql restart
+psql -d postgres -U postgres -f $(pg_config --sharedir)/contrib/pltoolbox.sql
+
+as postgres:
+psql -d postgres -U postgres
+> GRANT USAGE ON SCHEMA pst TO dt;
+
+to test that this worked:
+as postgres:
+psql -d postgres -U dt
+> select pst.sprintf('_%-3.3s_', fudgeroute  )  from ttc_vehicle_locations limit 1;
+
+
 
 
 
