@@ -538,7 +538,7 @@ def get_outside_overshots(froute_, vilist_, time_window_boundary_, forward_in_ti
 			vid_extreme_time = vis_for_vid[0 if forward_in_time_ else -1].time
 			if log_: printerr('Looking for %s overshots for vid %s.  Time to beat is %s.' % (forward_str, vid, em_to_str(vid_extreme_time)))
 			sqlstr = 'select '+VI_COLS+' from ttc_vehicle_locations ' \
-				+ ' where vehicle_id = %s and fudgeroute in (\'\', %s) and time_retrieved <= %s and time_retrieved >= %s '\
+				+ ' where vehicle_id = %s and fudgeroute in (\'\', %s) and time_retrieved < %s and time_retrieved > %s '\
 				+ ' order by time '+('' if forward_in_time_ else 'desc')+' limit %s'
 			curs = conn().cursor()
 			query_times = [time_window_boundary_+20*60*1000, vid_extreme_time] if forward_in_time_ else [vid_extreme_time, time_window_boundary_-20*60*1000]
