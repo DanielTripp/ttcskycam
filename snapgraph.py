@@ -5,7 +5,7 @@ from collections import defaultdict, Sequence
 from itertools import *
 import pprint, math, json, yaml, random
 from lru_cache import lru_cache
-import geom, mc, c
+import geom, grid, mc, c
 from misc import *
 
 # Some vocabulary: 
@@ -19,17 +19,6 @@ from misc import *
 # si = spatial index 
 
 
-LATSTEP = 0.00175; LNGSTEP = 0.0025
-
-if 1: # TODO: deal with this.  make up mind.
-	fact = 2
-	LATSTEP /= fact
-	LNGSTEP /= fact
-
-# Grid squares are offset from a point that has no large importance, it just makes for more easily
-# readable values during debugging:
-LATREF = 43.62696696859263; LNGREF = -79.4579391022553
-
 # in meters
 DEFAULT_GRAPH_VERTEX_DIST_TOLERANCE = 0.5
 
@@ -37,123 +26,7 @@ DEFAULT_GRAPH_VERTEX_DIST_TOLERANCE = 0.5
 # I tried different values for this until I got the results that I wanted. 
 PATHS_GPS_ERROR_FACTOR=3
 
-class GridSquareSystem(object):
-	
-	def __init__(self, latref_, lngref_, latstep_, lngstep_, boundingbox_):
-		assert all(x > 0 for x in (latstep_, lngstep_))
-		self.latref = latref_
-		self.lngref = lngref_
-		self.latstep = latstep_
-		self.lngstep = lngstep_
-		self.southwest_gridsquare = GridSquare.from_latlng(boundingbox_.southwest, self)
-		self.northeast_gridsquare = GridSquare.from_latlng(boundingbox_.northeast, self)
-
-	def lat_to_gridlat(self, lat_):
-		return fdiv(lat_ - self.latref, self.latstep)
-
-	def gridlat_to_lat(self, gridlat_):
-		return gridlat_*self.latstep + self.latref
-
-	def lng_to_gridlng(self, lng_):
-		return fdiv(lng_ - self.lngref, self.lngstep)
-
-	def gridlng_to_lng(self, gridlng_):
-		return gridlng_*self.lngstep + self.lngref
-
-	def num_idxes(self):
-		sw, ne = self.southwest_gridsquare, self.northeast_gridsquare
-		return (ne.gridlat - sw.gridlat + 1)*(ne.gridlng - sw.gridlng + 1)
-		
-	def idx(self, sq_):
-		sw, ne = self.southwest_gridsquare, self.northeast_gridsquare
-		if not ((sw.gridlat <= sq_.gridlat <= ne.gridlat) and (sw.gridlng <= sq_.gridlng <= ne.gridlng)):
-			return -1
-		else:
-			numlngcolumns = (ne.gridlng - sw.gridlng + 1)
-			latrow = (sq_.gridlat - sw.gridlat)
-			r = (sq_.gridlng - sw.gridlng) + latrow*numlngcolumns
-			return r
-
-	def gridsquare(self, idx_):
-		if not (0 <= idx_ < self.num_idxes()):
-			return None
-		else:
-			numlngcolumns = (self.northeast_gridsquare.gridlng - self.southwest_gridsquare.gridlng + 1)
-			r_gridlat = self.southwest_gridsquare.gridlat + idx_/numlngcolumns
-			r_gridlng = self.southwest_gridsquare.gridlng + idx_ % numlngcolumns
-			return GridSquare.from_ints(r_gridlat, r_gridlng, self)
-
-	def idxes(self, gridsquares_):
-		for gridsquare in gridsquares_:
-			gridsquareidx = self.idx(gridsquare)
-			if gridsquareidx != -1:
-				yield gridsquareidx
-
-	def rein_in_gridsquare(self, sq_):
-		sq_.gridlat = max(sq_.gridlat, self.southwest_gridsquare.gridlat)
-		sq_.gridlat = min(sq_.gridlat, self.northeast_gridsquare.gridlat)
-		sq_.gridlng = max(sq_.gridlng, self.southwest_gridsquare.gridlng)
-		sq_.gridlng = min(sq_.gridlng, self.northeast_gridsquare.gridlng)
-
-# Supposed to be immutable. 
-class GridSquare(object):
-
-	@classmethod
-	def from_ints(cls_, gridlat_, gridlng_, sys_):
-		assert all(isinstance(x, int) for x in (gridlat_, gridlng_)) and isinstance(sys_, GridSquareSystem)
-		r = cls_()
-		r.gridlat = gridlat_
-		r.gridlng = gridlng_
-		r.sys = sys_
-		return r
-
-	@classmethod
-	def from_latlng(cls_, latlng_, sys_):
-		assert isinstance(latlng_, geom.LatLng) and isinstance(sys_, GridSquareSystem)
-		r = cls_()
-		r.gridlat = sys_.lat_to_gridlat(latlng_.lat)
-		r.gridlng = sys_.lng_to_gridlng(latlng_.lng)
-		r.sys = sys_
-		return r
-
-	def __eq__(self, other):
-		return (self.gridlat == other.gridlat) and (self.gridlng == other.gridlng)
-
-	def __hash__(self):
-		return self.gridlat + self.gridlng
-
-	def __str__(self):
-		return '(%d,%d)' % (self.gridlat, self.gridlng)
-
-	def __repr__(self):
-		return self.__str__()
-
-	def latlng(self):
-		return geom.LatLng(self.sys.gridlat_to_lat(self.gridlat), self.sys.gridlng_to_lng(self.gridlng))
-
-	def corner_latlngs(self):
-		r = []
-		r.append(geom.LatLng(self.sys.gridlat_to_lat(self.gridlat+1), self.sys.gridlng_to_lng(self.gridlng+1)))
-		r.append(geom.LatLng(self.sys.gridlat_to_lat(self.gridlat+1), self.sys.gridlng_to_lng(self.gridlng)))
-		r.append(geom.LatLng(self.sys.gridlat_to_lat(self.gridlat), self.sys.gridlng_to_lng(self.gridlng)))
-		r.append(geom.LatLng(self.sys.gridlat_to_lat(self.gridlat), self.sys.gridlng_to_lng(self.gridlng+1)))
-		return r
-
-	def corner_latlng(self, which_):
-		return self.corner_latlngs()[{'ne': 0, 'nw': 1, 'sw': 2, 'se': 3}]
-
-	def center_latlng(self):
-		sw = geom.LatLng(self.sys.gridlat_to_lat(self.gridlat), self.sys.gridlng_to_lng(self.gridlng))
-		ne = geom.LatLng(self.sys.gridlat_to_lat(self.gridlat+1), self.sys.gridlng_to_lng(self.gridlng+1))
-		return sw.avg(ne)
-
-	def diagonal_dist_m(self):
-		sw = geom.LatLng(self.sys.gridlat_to_lat(self.gridlat), self.sys.gridlng_to_lng(self.gridlng))
-		ne = geom.LatLng(self.sys.gridlat_to_lat(self.gridlat+1), self.sys.gridlng_to_lng(self.gridlng+1))
-		return sw.dist_m(ne)
-
-	def idx(self):
-		return self.sys.idx(self)
+POSADDR_PALS_NUM_DIGITS = 4
 
 # Identifies a point or a line segment within a list of polylines - in particular, within 
 # the SnapGraph.plinename2pts field - via a plinename and the index of a point on that pline.
@@ -335,11 +208,12 @@ class PosAddr(object):
 			self.plinename = linesegaddr.plinename
 			self.ptidx = linesegaddr.ptidx
 			self.pals = pals_
+		self.pals = round(self.pals, POSADDR_PALS_NUM_DIGITS)
 		assert 0.0 <= self.pals < 1.0
 
 	def __str__(self):
 		assert 0.0 <= self.pals < 1.0
-		return 'PosAddr(\'%s\', %d, %.3f)' % (self.plinename, self.ptidx, self.pals)
+		return 'PosAddr(\'%s\', %d, %.4f)' % (self.plinename, self.ptidx, self.pals)
 
 	def __hash__(self):
 		return hash(self._key())
@@ -662,33 +536,6 @@ class SnapGraph(object):
 			set_sg_of_vertexes(r, self)
 			return r
 
-	@lru_cache(maxsize=60000, posargkeymask=[1,1,0,1,0])
-	def find_paths_old(self, startlatlng_, startlocs_, destlatlng_, destlocs_, snap_tolerance=100, k=1, out_visited_vertexes=None):
-		assert out_visited_vertexes is None # (temporarily?) unsupported due to caching of return value based on arguments. 
-
-		# We could almost decorate this function with mc.decorate instead of calling mc.get() ourselves, 
-		# but that won't quite work, because we can't store anything with a reference to a SnapGraph object to in memcache, 
-		# because they're large.  Vertexes have those.  So we will nullify those references before the result is put 
-		# into memcache, and un-nullify them before we return from this function.
-		# It probably wouldn't be that hard to make Vertex not have a reference to it's owner snapgraph.  Maybe later.
-
-		def set_sg_of_vertexes(r__, sg__):
-			for dist, pathsteps in r__:
-				for pathstep in pathsteps:
-					if isinstance(pathstep, Vertex):
-						pathstep.snapgraph = sg__
-
-		assert self.name is not None
-		def find_paths_and_nullify_vertex_sgs(sgname__, startlatlng__, startlocs__, destlatlng__, destlocs__, snap_tolerance__=100):
-			r = self.find_paths_impl(startlatlng__, startlocs__, destlatlng__, destlocs__, snap_tolerance__, k)
-			set_sg_of_vertexes(r, None)
-			return r
-
-		r = mc.get(find_paths_and_nullify_vertex_sgs, 
-				[self.name, startlatlng_, startlocs_, destlatlng_, destlocs_], {'snap_tolerance__': snap_tolerance}, posargkeymask=[1,1,0,1,0])
-		set_sg_of_vertexes(r, self)
-		return r
-
 	def find_paths_impl(self, startlatlng_, startlocs_, destlatlng_, destlocs_, snap_tolerance_, 
 			k_, out_visited_vertexes=None):
 		assert (snap_tolerance_ > 0) and is_yen_k_valid(k_)
@@ -783,8 +630,12 @@ class SnapGraph(object):
 							printerr('  ', pieces)
 					r_pieces = None # No path possible for this part.  No path is possible at all. 
 					break
-				chosen_dists_n_pieces = sorted(combined_dists_n_pieces, \
-						key=lambda e: self.get_combined_cost(e[0], e[1], snap_tolerance))[0]
+				combined_dists_n_pieces.sort(key=lambda e: self.get_combined_cost(e[0], e[1], snap_tolerance))
+				if log_:
+					printerr('find_multipath: combined dists/pieces, sorted:')
+					for x in combined_dists_n_pieces:
+						printerr(x)
+				chosen_dists_n_pieces = combined_dists_n_pieces[0]
 				chosen_piece_ab = chosen_dists_n_pieces[0][1]
 				r_pieces.append(chosen_piece_ab)
 				r_dist += chosen_dists_n_pieces[0][0]
@@ -1507,7 +1358,7 @@ class SnapGraph(object):
 	def build_spatial_index(self):
 		all_pts = sum(self.plinename2pts.itervalues(), [])
 		all_pts_boundingbox = geom.BoundingBox(all_pts)
-		self.si_gridsquaresys = GridSquareSystem(LATREF, LNGREF, LATSTEP, LNGSTEP, all_pts_boundingbox)
+		self.si_gridsquaresys = grid.GridSquareSystem(None, None, None, None, all_pts_boundingbox)
 		self.si_linesegaddrs_by_gridsquareidx = [set() for i in range(self.si_gridsquaresys.num_idxes())]
 		self.si_plinename_to_gridsquareidxes = {plinename: set() for plinename in self.plinename2pts.iterkeys()}
 		for plinename, polyline in self.plinename2pts.iteritems():
@@ -1541,7 +1392,7 @@ class SnapGraph(object):
 	def multisnap_with_dists(self, target_, searchradius_, includeverts=True, plineomitflag=None):
 		assert (searchradius_ is not None) and (plineomitflag is None or len(plineomitflag))
 		linesegaddr_to_lssr = {}
-		gridsquare = GridSquare.from_latlng(target_, self.si_gridsquaresys)
+		gridsquare = grid.GridSquare.from_latlng(target_, self.si_gridsquaresys)
 		for linesegaddr in self.get_nearby_linesegaddrs_grid_order(gridsquare, searchradius_):
 			if plineomitflag is not None and has_flag(linesegaddr.plinename, plineomitflag):
 				continue
@@ -1608,7 +1459,7 @@ class SnapGraph(object):
 	# returns: a PosAddr, or None if no lines were found within the search radius.
 	def snap(self, target_, searchradius_):
 		assert isinstance(target_, geom.LatLng) and (searchradius_ > 0)
-		target_gridsquare = GridSquare.from_latlng(target_, self.si_gridsquaresys)
+		target_gridsquare = grid.GridSquare.from_latlng(target_, self.si_gridsquaresys)
 		a_nearby_linesegaddr = self.get_a_nearby_linesegaddr(target_gridsquare, searchradius_)
 		if a_nearby_linesegaddr is None:
 			return None
@@ -1627,14 +1478,14 @@ class SnapGraph(object):
 			return PosAddr(best_yet_linesegaddr.copy(), best_yet_lssr.pals)
 
 	def _snap_get_endgame_linesegaddrs(self, target_gridsquare_, search_radius_):
-		assert isinstance(target_gridsquare_, GridSquare)
+		assert isinstance(target_gridsquare_, grid.GridSquare)
 		r = set()
 		for linesegaddr in self.get_nearby_linesegaddrs_grid_order(target_gridsquare_, search_radius_):
 			r.add(linesegaddr)
 		return r
 
 	def _snap_get_endgame_search_radius(self, a_nearby_lineseg_, target_gridsquare_):
-		assert isinstance(a_nearby_lineseg_, geom.LineSeg) and isinstance(target_gridsquare_, GridSquare)
+		assert isinstance(a_nearby_lineseg_, geom.LineSeg) and isinstance(target_gridsquare_, grid.GridSquare)
 		corners = target_gridsquare_.corner_latlngs()
 		r = max(sr.dist for sr in [latlng.snap_to_lineseg(a_nearby_lineseg_) for latlng in corners])
 		return int(r)
@@ -1666,16 +1517,16 @@ class SnapGraph(object):
 	# because it doesn't give up early if a lineseg is found, so you might not want to use it there.  
 	# I haven't proven this. 
 	def get_nearby_linesegaddrs_grid_order(self, gridsquare_, searchradius_):
-		assert isinstance(gridsquare_, GridSquare)
+		assert isinstance(gridsquare_, grid.GridSquare)
 		for gridsquareidx in self.get_nearby_gridsquareidxes_grid_order(gridsquare_, searchradius_):
 			for linesegaddr in self.si_linesegaddrs_by_gridsquareidx[gridsquareidx]:
 				yield linesegaddr
 
 	def get_nearby_gridsquareidxes_grid_order(self, square_, searchradius_):
 		latreach, lngreach = get_reaches(square_, searchradius_)
-		bottomleft_square = GridSquare.from_ints(square_.gridlat - latreach, square_.gridlng - lngreach, self.si_gridsquaresys)
+		bottomleft_square = grid.GridSquare.from_ints(square_.gridlat - latreach, square_.gridlng - lngreach, self.si_gridsquaresys)
 		self.si_gridsquaresys.rein_in_gridsquare(bottomleft_square)
-		topright_square = GridSquare.from_ints(square_.gridlat + latreach, square_.gridlng + lngreach, self.si_gridsquaresys)
+		topright_square = grid.GridSquare.from_ints(square_.gridlat + latreach, square_.gridlng + lngreach, self.si_gridsquaresys)
 		self.si_gridsquaresys.rein_in_gridsquare(topright_square)
 		r = self.si_gridsquaresys.idx(bottomleft_square)
 		sw, ne = self.si_gridsquaresys.southwest_gridsquare, self.si_gridsquaresys.northeast_gridsquare
@@ -1688,7 +1539,7 @@ class SnapGraph(object):
 			r += numlngcolumns_entire - numlngcolumns_ourbox
 
 	def get_nearby_linesegaddrs_spiral_order(self, gridsquare_, searchradius_):
-		assert isinstance(gridsquare_, GridSquare)
+		assert isinstance(gridsquare_, grid.GridSquare)
 		for gridsquareidx in self.si_gridsquaresys.idxes(gridsquare_spiral_gen_by_geom_vals(gridsquare_, searchradius_)):
 			for linesegaddr in self.si_linesegaddrs_by_gridsquareidx[gridsquareidx]:
 				yield linesegaddr
@@ -1773,7 +1624,7 @@ class SnapGraph(object):
 
 	def get_gridsquares_near_point(self, ptaddr_, searchradius_):
 		r = set()
-		pts_gridsquare = GridSquare.from_latlng(self.get_point(ptaddr_), self.si_gridsquaresys)
+		pts_gridsquare = grid.GridSquare.from_latlng(self.get_point(ptaddr_), self.si_gridsquaresys)
 		r.add(pts_gridsquare)
 		r |= get_nearby_gridsquares(pts_gridsquare, searchradius_)
 		return r
@@ -1812,12 +1663,12 @@ class SnapGraph(object):
 
 	def get_linesegaddrs_for_box(self, sw_, ne_):
 		assert all(isinstance(x, geom.LatLng) for x in [sw_, ne_])
-		sw_gridsquare = GridSquare.from_latlng(sw_, self.si_gridsquaresys)
-		ne_gridsquare = GridSquare.from_latlng(ne_, self.si_gridsquaresys)
+		sw_gridsquare = grid.GridSquare.from_latlng(sw_, self.si_gridsquaresys)
+		ne_gridsquare = grid.GridSquare.from_latlng(ne_, self.si_gridsquaresys)
 		r = set()
 		for gridlat in range(sw_gridsquare.gridlat, ne_gridsquare.gridlat+1):
 			for gridlng in range(sw_gridsquare.gridlng, ne_gridsquare.gridlng+1):
-				gridsquareidx = self.si_gridsquaresys.idx(GridSquare.from_ints(gridlat, gridlng, self.si_gridsquaresys))
+				gridsquareidx = self.si_gridsquaresys.idx(grid.GridSquare.from_ints(gridlat, gridlng, self.si_gridsquaresys))
 				if gridsquareidx == -1:
 					continue
 				r |= self.si_linesegaddrs_by_gridsquareidx[gridsquareidx]
@@ -1860,31 +1711,31 @@ def get_adjusted_addrs_from_polyline_split(plinename_, newptidx_, addrs_):
 
 def get_gridsquares_touched_by_lineseg(lineseg_, gridsquaresys_):
 	assert isinstance(lineseg_, geom.LineSeg)
-	linesegstartgridsquare = GridSquare.from_latlng(lineseg_.start, gridsquaresys_)
-	linesegendgridsquare = GridSquare.from_latlng(lineseg_.end, gridsquaresys_)
+	linesegstartgridsquare = grid.GridSquare.from_latlng(lineseg_.start, gridsquaresys_)
+	linesegendgridsquare = grid.GridSquare.from_latlng(lineseg_.end, gridsquaresys_)
 	# TODO: be more specific in the grid squares considered touched by a line.  We are covering a whole bounding box.
 	# we could narrow down that set of squares a lot.
 	for gridlat in intervalii(linesegstartgridsquare.gridlat, linesegendgridsquare.gridlat):
 		for gridlng in intervalii(linesegstartgridsquare.gridlng, linesegendgridsquare.gridlng):
-			yield GridSquare.from_ints(gridlat, gridlng, gridsquaresys_)
+			yield grid.GridSquare.from_ints(gridlat, gridlng, gridsquaresys_)
 
 # "reach" means how man grid squares one should search in each direction (lat/lng) 
 # in order to cover a given search radius.  
 # return always >= 1. 
 # arg searchradius_ None means unlimited. 
 def get_reaches(target_gridsquare_, searchradius_):
-	assert isinstance(target_gridsquare_, GridSquare)
+	assert isinstance(target_gridsquare_, grid.GridSquare)
 	if searchradius_ is None:
 		return (None, None)
 	else:
 		lat_reach = get_reach_single(target_gridsquare_, searchradius_, True)
 		gridsquaresys = target_gridsquare_.sys
-		lon_reach_top = get_reach_single(GridSquare.from_ints(target_gridsquare_.gridlat+lat_reach+1, target_gridsquare_.gridlng, gridsquaresys), searchradius_, False)
-		lon_reach_bottom = get_reach_single(GridSquare.from_ints(target_gridsquare_.gridlat-lat_reach, target_gridsquare_.gridlng, gridsquaresys), searchradius_, False)
+		lon_reach_top = get_reach_single(grid.GridSquare.from_ints(target_gridsquare_.gridlat+lat_reach+1, target_gridsquare_.gridlng, gridsquaresys), searchradius_, False)
+		lon_reach_bottom = get_reach_single(grid.GridSquare.from_ints(target_gridsquare_.gridlat-lat_reach, target_gridsquare_.gridlng, gridsquaresys), searchradius_, False)
 		return (lat_reach, max(lon_reach_top, lon_reach_bottom))
 
 def get_reach_single(reference_gridsquare_, searchradius_, lat_aot_lng_):
-	assert isinstance(reference_gridsquare_, GridSquare) and (isinstance(searchradius_, int) or isinstance(searchradius_, float)) 
+	assert isinstance(reference_gridsquare_, grid.GridSquare) and (isinstance(searchradius_, int) or isinstance(searchradius_, float)) 
 	assert isinstance(lat_aot_lng_, bool)
 	reference_gridsquare_latlng = reference_gridsquare_.latlng()
 	r = 1
@@ -1928,11 +1779,11 @@ def gridsquare_offset_spiral_gen(latreach_, lngreach_):
 
 # reach args - None means unlimited.
 def gridsquare_spiral_gen_by_grid_vals(center_gridsquare_, latreach_, lngreach_):
-	assert isinstance(center_gridsquare_, GridSquare)
+	assert isinstance(center_gridsquare_, grid.GridSquare)
 	assert (latreach_ is None) == (lngreach_ is None)
 	gridsquaresys = center_gridsquare_.sys
 	for offsetlat, offsetlng in gridsquare_offset_spiral_gen(latreach_, lngreach_):
-		yield GridSquare.from_ints(center_gridsquare_.gridlat + offsetlat, center_gridsquare_.gridlng + offsetlng, gridsquaresys)
+		yield grid.GridSquare.from_ints(center_gridsquare_.gridlat + offsetlat, center_gridsquare_.gridlng + offsetlng, gridsquaresys)
 
 # arg searchradius_ meters or None for unlimited. 
 def gridsquare_spiral_gen_by_geom_vals(center_gridsquare_, searchradius_):
@@ -1965,7 +1816,7 @@ def bresenham2(gridsquare0_, gridsquare1_):
 	gridsquaresys = gridsquare0_.sys
 	r = []
 	def ret(x__, y__):
-		r.append(GridSquare.from_ints(y__, x__, gridsquaresys))
+		r.append(grid.GridSquare.from_ints(y__, x__, gridsquaresys))
 
 	x = gridsquare0_.gridlng; y = gridsquare0_.gridlat
 	x2 = gridsquare1_.gridlng; y2 = gridsquare1_.gridlat
@@ -2021,7 +1872,7 @@ def bresenham1(gridsquare0_, gridsquare1_):
 	x1 = gridsquare1_.gridlng; y1 = gridsquare1_.gridlat
 
 	def ret(x__, y__):
-		r.append(GridSquare.from_ints(y__, x__, gridsquaresys))
+		r.append(grid.GridSquare.from_ints(y__, x__, gridsquaresys))
 
 	dx=x1-x0
 	dy=y1-y0
@@ -2085,7 +1936,7 @@ def get_supercover_first_octant_only(gridsquare1_, gridsquare2_):
 	assert x1 <= x2 and y1 <= y2 and y2-y1 <= x2-x1
 
 	def ret(x__, y__):
-		r.append(GridSquare.from_ints(y__, x__, gridsquaresys))
+		r.append(grid.GridSquare.from_ints(y__, x__, gridsquaresys))
 
 	x = x1
 	y = y1
@@ -2438,7 +2289,7 @@ def graph_locs_to_json_str(locs_):
 		output_list = []
 		for loc in locs_:
 			if isinstance(loc, PosAddr):
-				output_e = [loc.plinename, loc.ptidx, round(loc.pals, 4)]
+				output_e = [loc.plinename, loc.ptidx, loc.pals]
 			elif isinstance(loc, Vertex):
 				output_e = loc.name
 			else:
@@ -2458,7 +2309,7 @@ def parse_graph_locs_json_str(str_, sg_):
 		else:
 			output_loc = PosAddr(PtAddr(e[0], e[1]), e[2])
 		r.append(output_loc)
-	return r
+	return tuple(r)
 
 def set_plinename_weight(plinename_, weight_):
 	assert isinstance(plinename_, str) and isinstance(weight_, float) and (weight_ > 0) and (round(weight_, 2) == weight_)
@@ -2557,12 +2408,7 @@ def parse_posaddr(str_):
 
 if __name__ == '__main__':
 
-	addrs = set()
-	for plinename in range(3, -1, -1):
-		for startptidx in range(3, -1, -1):
-			addrs.add(PtAddr(plinename, startptidx))
-	print sorted(addrs)
-
+	pass
 
 
 

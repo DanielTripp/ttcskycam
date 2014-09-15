@@ -176,7 +176,7 @@ function GridSquare(arg_) {
 		this.gridlat = arg_[0];
 		this.gridlng = arg_[1];
 	} else {
-		var latlng = to_our_LatLng(arg_);
+		var latlng = to_our_latlng(arg_);
 		this.gridlat = lat_to_gridlat(latlng.lat);
 		this.gridlng = lng_to_gridlng(latlng.lng);
 	}
@@ -252,7 +252,7 @@ SpatialIndex.prototype.init_from_points = function(points_) {
 	var thiss = this;
 	points_.forEach(function(point) {
 		assert(point.pos != undefined);
-		point.pos = to_our_LatLng(point.pos);
+		point.pos = to_our_latlng(point.pos);
 		var gridsquare = new GridSquare(point.pos);
 		if(!thiss.gridsquare_to_points.containsKey(gridsquare)) {
 			thiss.gridsquare_to_points.set(gridsquare, []);
@@ -293,21 +293,11 @@ function massage_polylines_to_LatLngs(in_polylines_) {
 		var in_polyline = in_polylines_[plinename];
 		var out_polyline = [];
 		in_polyline.forEach(function(in_pt) {
-			out_polyline.push(to_our_LatLng(in_pt));
+			out_polyline.push(to_our_latlng(in_pt));
 		});
 		out_polylines[plinename] = out_polyline;
 	}
 	return out_polylines;
-}
-
-function to_our_LatLng(point_) {
-	if(isLatLng(point_)) {
-		return point_;
-	} else if(point_.length == 2 && typeof(point_[0]) == 'number' && typeof(point_[1]) == 'number') {
-		return new LatLng(point_[0], point_[1]);
-	} else {
-		throw sprintf("Don't understand point: %s '%s'", typeof(point_), point_);
-	}
 }
 
 SpatialIndex.prototype.get_lineseg = function(linesegaddr_) {
@@ -325,7 +315,7 @@ SpatialIndex.prototype.get_pline_point = function(linesegaddr_) {
 // arg searchradius_ is in metres.
 //
 // if this.plines_aot_points: 
-// returns null, or an array - (geom.LatLng, LineSegAddr, bool)
+// returns null, or an array - (LatLng, LineSegAddr, bool)
 // if null: no line was found within the search radius.;
 // if array:
 //	elem 0: snapped-to point.  geom.LatLng.
@@ -511,14 +501,14 @@ SpatialIndex.prototype.get_nearby_points = function(gridsquare_, searchradius_) 
 }
 
 function to_our_latlng(obj_) {
-	if(obj_ instanceof LatLng) {
+	if(isLatLng(obj_)) {
 		return obj_;
 	} else if(obj_ instanceof google.maps.LatLng) {
 		return new LatLng(obj_.lat(), obj_.lng());
-	} else if(obj_.length == 2 && typeof obj_[0] == 'number' && obj_[1] == 'number') {
+	} else if(obj_.length == 2 && typeof(obj_[0]) == 'number' && typeof(obj_[1]) == 'number') {
 		return new LatLng(obj_[0], obj_[1]);
 	} else {
-		throw new Exception();
+		throw sprintf("Don't understand point: %s '%s'", typeof(obj_), obj_);
 	}
 }
 

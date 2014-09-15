@@ -30,8 +30,11 @@ create index reports_idx_3 on reports ( time desc, time_inserted_str desc ) ;
 import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket, datetime, calendar, math
 from collections import defaultdict, Sequence
 from lru_cache import lru_cache
-import vinfo, geom, traffic, routes, yards, tracks, streets, snapgraph, predictions, mc, c, util
+import vinfo, geom, grid, traffic, routes, yards, tracks, streets, snapgraph, predictions, mc, c, util
 from misc import *
+
+SECSSINCEREPORT_BUG_WORKAROUND_ENABLED = True
+SECSSINCEREPORT_BUG_WORKAROUND_CONSTANT = 12
 
 HOSTMONIKER_TO_IP = {'theorem': '72.2.4.176', 'black': '24.52.231.206', 'u': 'localhost', 'v': 'localhost'}
 
@@ -39,12 +42,12 @@ VI_COLS = ' dir_tag, heading, vehicle_id, lat, lon, predictable, fudgeroute, rou
 
 PREDICTION_COLS = ' fudgeroute, configroute, stoptag, time_retrieved, time_of_prediction, vehicle_id, is_departure, block, dirtag, triptag, branch, affected_by_layover, is_schedule_based, delayed'
 
-WRITE_MOFRS = os.path.exists('WRITE_MOFRS')
-
 DISABLE_GRAPH_PATHS = False
 
 g_conn = None
 g_forced_hostmoniker = None
+
+g_debug_gridsquaresys = grid.GridSquareSystem(None, None, None, None, None)
 
 def force_host(hostmoniker_):
 	global g_forced_hostmoniker
@@ -126,19 +129,15 @@ def trans(f):
 @trans
 def insert_vehicle_info(vi_):
 	curs = conn().cursor()
-	if WRITE_MOFRS:
-		mofr = vi_.mofr; widemofr = vi_.widemofr
-	else:
-		mofr = None; widemofr = None
 	cols = [vi_.vehicle_id, vi_.fudgeroute, vi_.route_tag, vi_.dir_tag, vi_.lat, vi_.lng, vi_.secs_since_report, vi_.time_retrieved, \
-		vi_.predictable, vi_.heading, vi_.time, em_to_str(vi_.time), mofr, widemofr, vi_.get_graph_locs_json_str(), vi_.get_cur_graph_version()]
+		vi_.predictable, vi_.heading, vi_.time, em_to_str(vi_.time), vi_.mofr, vi_.widemofr, vi_.get_graph_locs_json_str(), vi_.get_cur_graph_version()]
 	curs.execute('INSERT INTO ttc_vehicle_locations VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,default,%s,%s,%s,%s)', cols)
 	curs.close()
 
 def vi_select_generator(froute_, end_time_em_, start_time_em_, dir_=None, include_unpredictables_=False, vid_=None, \
 			forward_in_time_order_=False, include_blank_fudgeroute_=True):
 	assert vid_ is None or len(vid_) > 0
-	assert froute_ in routes.NON_SUBWAY_FUDGEROUTES
+	assert froute_ in (routes.NON_SUBWAY_FUDGEROUTES + [''])
 	curs = (conn().cursor('cursor_%d' % (int(time.time()*1000))) if start_time_em_ == 0 else conn().cursor())
 	dir_clause = ('and dir_tag like \'%%%%\\\\_%s\\\\_%%%%\' ' % (str(dir_)) if dir_ != None else ' ')
 	sql = 'select '+VI_COLS+' from ttc_vehicle_locations where '\
@@ -229,7 +228,8 @@ def get_vid_to_vis_bothdirs(fudge_route_, num_minutes_, end_time_em_, log_=False
 		vis[:] = [vi for vi in vis if vi.widemofr != -1]
 		yards.remove_vehicles_in_yards(vis)
 		remove_time_duplicates(vis)
-		geom.remove_bad_gps_readings_single_vid(vis, log_=log_)
+		remove_bad_gps_readings_single_vid(vis, log_=log_)
+		fix_doubleback_gps_noise(vis)
 		fix_dirtags(vis)
 		if len(vis) == 0: del vid_to_vis[vid]
 	for vid, vis in vid_to_vis.items():
@@ -257,13 +257,14 @@ def adopt_or_discard_vis_with_blank_froutes(froute_, vis_, log_=False):
 
 def work_around_secssincereport_bug(vis_):
 	assert all(isinstance(e, vinfo.VehicleInfo) for e in vis_)
-	# I doubt that there will ever be any duplicates w.r.t. time_retrieved, but just in case: 
-	remove_consecutive_duplicates(vis_, key=lambda vi: vi.time_retrieved)
-	vis_.sort(key=lambda vi: vi.time_retrieved)
-	for vi in vis_:
-		vi.secs_since_report = 12
-		vi.calc_time()
-	vis_.reverse()
+	if SECSSINCEREPORT_BUG_WORKAROUND_ENABLED:
+		# I doubt that there will ever be any duplicates w.r.t. time_retrieved, but just in case: 
+		remove_consecutive_duplicates(vis_, key=lambda vi: vi.time_retrieved)
+		vis_.sort(key=lambda vi: vi.time_retrieved)
+		for vi in vis_:
+			vi.secs_since_report = SECSSINCEREPORT_BUG_WORKAROUND_CONSTANT
+			vi.calc_time()
+		vis_.reverse()
 
 def is_vis_stretch_desirable(vis_, log_):
 	stretch_len_good = (len(vis_) >= MIN_DESIRABLE_DIR_STRETCH_LEN)
@@ -420,14 +421,14 @@ def massage_whereclause_time_args(whereclause_):
 def massage_whereclause_lat_args(whereclause_):
 	def repl(mo_):
 		n = float(mo_.group(1))
-		return ' '+str(snapgraph.gridlat_to_lat(n))
+		return ' '+str(g_debug_gridsquaresys.gridlat_to_lat(n))
 	return re.sub(r'\s(-?\d+(?:\.\d+)?)lat\b', repl, whereclause_)
 
 def massage_whereclause_lng_args(whereclause_):
 	r = re.sub(r'\blng\b', 'lon', whereclause_)
 	def repl(mo_):
 		n = float(mo_.group(1))
-		return ' '+str(snapgraph.gridlng_to_lng(n))
+		return ' '+str(g_debug_gridsquaresys.gridlng_to_lng(n))
 	return re.sub(r'\s(-?\d+(?:\.\d+)?)lng\b', repl, r)
 
 def massage_whereclause_dir_args(whereclause_):
@@ -485,7 +486,6 @@ def make_whereclause_safe(whereclause_):
 def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, datazoom_, time_window_end_, log_=False):
 	assert direction_ in (0, 1) or (len(direction_) == 2 and all(isinstance(e, geom.LatLng) for e in direction_))
 	assert (fudgeroute_ in routes.NON_SUBWAY_FUDGEROUTES) and type(num_minutes_) == int and datazoom_ in c.VALID_DATAZOOMS 
-	assert abs(now_em() - time_window_end_) < 1000*60*60*24*365*20
 	if direction_ in (0, 1):
 		direction = direction_
 	else:
@@ -794,8 +794,16 @@ def get_grade_stretch_info_impl(vis_, be_clever_, log_):
 				vi = stretches[stretchi+1][0]
 				latlngs.append(vi.latlng)
 				locses.append(vi.graph_locs)
+			if log_:
+				printerr('latlngs / locses for stretch %d:' % stretchi)
+				for latlng, locs in zip(latlngs, locses): 
+					printerr(latlng, locs)
 			dist, path = sg.find_multipath(latlngs, locses, c.GRAPH_SNAP_RADIUS, log_)
 			assert dist is not None and path is not None
+			if log_:
+				printerr('Path for stretch %d:' % stretchi)
+				for piecei, piecesteps in enumerate(path.piecestepses):
+					printerr('piece %d: %s' % (piecei, piecesteps))
 			for vi in stretch:
 				vi_to_path[vi] = path
 
@@ -805,6 +813,7 @@ def get_grade_stretch_info_impl(vis_, be_clever_, log_):
 			printerr('\t%s / %s: %s' % (vi.timestr, vi.latlng, vi_to_grade[vi]))
 
 	return (vi_to_grade, vi_to_path)
+
 # Either arg could be None (i.e. blank dir_tag).  For this we consider None to 'agree' with 0 or 1.
 def dirs_disagree(dir1_, dir2_):
 	return (dir1_ == 0 and dir2_ == 1) or (dir1_ == 1 and dir2_ == 0)
@@ -1253,6 +1262,28 @@ def demo_froute_to_croute(froute_):
 	return routes.FUDGEROUTE_TO_CONFIGROUTES[froute_][0]
 
 @trans
+def delete_debug_reports_locations(report_time_em_):
+	if report_time_em_ < now_em() + 1000*60*60*24*365*10:
+		raise Exception()
+	delete_min_time = report_time_em_ - 1000*60*60*24
+	delete_max_time = report_time_em_ + 1000*60*60*24
+	curs = conn().cursor()
+	curs.execute('delete from ttc_vehicle_locations where time_retrieved between %s and %s', \
+			[delete_min_time, delete_max_time])
+	curs.close()
+
+@trans
+def delete_debug_reports_reports(report_time_em_):
+	if report_time_em_ < now_em() + 1000*60*60*24*365*10:
+		raise Exception()
+	delete_min_time = report_time_em_ - 1000*60*60*24
+	delete_max_time = report_time_em_ + 1000*60*60*24
+	curs = conn().cursor()
+	curs.execute('delete from reports where time between %s and %s and app_version = %s', \
+			[delete_min_time, delete_max_time, c.VERSION])
+	curs.close()
+
+@trans
 def delete_demo_locations(froute_, demo_report_timestr_):
 	if not demo_report_timestr_.startswith('2020-'): raise Exception()
 	demo_time = str_to_em(demo_report_timestr_)
@@ -1273,9 +1304,130 @@ def close_connection():
 			pass
 		g_conn = None
 
+# This is for removing buggy GPS readings (example: vehicle 4116 2012-06-15 13:30 to 14:00.)
+def remove_bad_gps_readings(vis_):
+	if not vis_:
+		return
+	assert isinstance(vis_[0], vinfo.VehicleInfo)
+	r = []
+	for vid in set(vi.vehicle_id for vi in vis_):
+		vis_single_vid = [vi for vi in vis_ if vi.vehicle_id == vid]
+		vis_single_vid.sort(key=lambda vi: vi.time, reverse=True)
+		remove_bad_gps_readings_single_vid(vis_single_vid)
+		r += vis_single_vid
+	r.sort(key=lambda vi: vi.time, reverse=True)
+	vis_[:] = r
+
+# Note [1]: This is to account for the small gps inaccuracies that nearly all readings seem to have.
+# One can see this by drawing many vehicle locations on a google map with satellite view on.  Otherwise
+# reasonable vehicles routinely appear in impossible places like on top of buildings.
+# I don't know if there is any pattern to these inaccuracies.  I will assume that they are random and can
+# change completely from one reading to the next.
+# The large GPS errors (which are the entire reason for the 'remove bad gps' functions) have no limit to their
+# magnitude that I can see.  The small GPS errors do, and it seems to be about 50 metres.  (That's 50 metres from one
+# extreme to the other - i.e. 25 metres on either side of the road.  Note that we don't use mofrs here, only
+# distance between latlngs.)
+# (newer comment - 50 metres may not be enough.  eg. 2013-01-16 00:02:00.000 route: 505, vehicle: 4040, dir: '505_0_505' , ( 43.65366, -79.44915 ) , mofr: -1, heading: 140 
+# These small GPS errors, combined with scenarios where a given reading in our database has a logged time very soon
+# after the previous one (eg. 1 second or even less - as can happen in certain NextBus fluke scenarios I think, as well as
+# the couple of times when I've mistakenly been polling for vehicle locations with two processes at the same time)
+# can result in what looks like a very high speed.  This code treats a very high speed as a new 'vigroup'.  That is
+# undesirable and in a bad case previously caused this code to create some erroneous vigroups, and then at the end when it
+# picks the one containing the most vis, to throw out a lot of good vis.
+# eg. vid 1660 between 2013-01-07 12:39:59 and 12:41:09, without the 'small GPS error if clause' below, would cause this code
+# to create 2 new vigroups where it should have created no new ones.
+def is_plausible(dist_m_, speed_kmph_):
+	if dist_m_ < 50: # see note [1]
+		return True
+	elif dist_m_ < 1500:
+		# The highest plausible speed that I've seen reported is 61.08 km/h.  This was on Queensway south of High Park, 
+		# covering 1018 meters of track, over 60 seconds.   (vid 4119 around 2014-03-15 02:53.)
+		return speed_kmph_ < 65 
+	elif dist_m_ < 5000:
+		return speed_kmph_ < 40
+	else:
+		return speed_kmph_ < 30
+
+def remove_bad_gps_readings_single_vid(vis_, log_=False):
+	assert is_sorted(vis_, reverse=True, key=lambda vi: vi.time)
+	assert len(set(vi.vehicle_id for vi in vis_)) <= 1
+	if not vis_:
+		return []
+	vis = vis_[::-1]
+	remove_consecutive_duplicates(vis, key=lambda vi: vi.time)
+	vigroups = [[vis[0]]]
+	for cur_vi in vis[1:]:
+		def get_dist_from_vigroup(vigroup_):
+			groups_last_vi = vigroup_[-1]
+			groups_last_vi_to_cur_vi_metres = cur_vi.latlng.dist_m(groups_last_vi.latlng)
+			return groups_last_vi_to_cur_vi_metres
+
+		def get_mps_from_vigroup(vigroup_):
+			groups_last_vi = vigroup_[-1]
+			groups_last_vi_to_cur_vi_metres = cur_vi.latlng.dist_m(groups_last_vi.latlng)
+			groups_last_vi_to_cur_vi_secs = abs((cur_vi.time - groups_last_vi.time)/1000.0)
+			return groups_last_vi_to_cur_vi_metres/groups_last_vi_to_cur_vi_secs
+
+		def is_plausible_vigroup(vigroup_):
+			return is_plausible(get_dist_from_vigroup(vigroup_), mps_to_kmph(get_mps_from_vigroup(vigroup_)))
+
+		closest_vigroup = min(vigroups, key=get_dist_from_vigroup)
+		if is_plausible_vigroup(closest_vigroup):
+			closest_vigroup.append(cur_vi)
+		else:
+			vigroups.append([cur_vi])
+	r_vis = max(vigroups, key=len)
+	if log_:
+		vid = vis_[0].vehicle_id
+		if len(vigroups) == 1:
+			printerr('Bad GPS filtering - vid %s - there was only one group.' % vid)
+		else:
+			printerr('Bad GPS filtering - vid %s - chose group %d.' % (vid, vigroups.index(r_vis)))
+			printerr('---')
+			for vi in vis:
+				groupidx = firstidx(vigroups, lambda vigroup: vi in vigroup)
+				printerr('%d - %s' % (groupidx, vi))
+			printerr('---')
+			for groupidx, vigroup in enumerate(vigroups):
+				for vi in vigroup:
+					printerr('%d - %s' % (groupidx, vi))
+			printerr('---')
+		printerr('Bad GPS filtering - vid %s - groups as JSON:' % vid)
+		printerr([[vi.latlng.ls() for vi in vigroup] for vigroup in vigroups])
+	vis_[:] = r_vis[::-1]
+
+def fix_doubleback_gps_noise(vis_):
+	assert is_sorted(vis_, key=lambda vi: vi.time, reverse=True)
+	vis_[:] = vis_[::-1] # As is often the case, we get these in reverse time order but I don't want to write 
+			# this code that way.  So we'll reverse them here then back again at the end of the function.
+	if len(vis_) == 0:
+		return
+	assert len(set(vi.vehicle_id for vi in vis_)) == 1
+	D = 20
+	i = 2
+	while i < len(vis_):
+		preref_pos = vis_[i-2].latlng; ref_pos = vis_[i-1].latlng; i_pos = vis_[i].latlng
+		if ref_pos.dist_m(i_pos) > D:
+			i += 1
+		else:
+			ref_heading = preref_pos.heading(ref_pos)
+			i_heading = ref_pos.heading(i_pos)
+			if geom.diff_headings(ref_heading, i_heading) < 90:
+				i += 1
+			else:
+				vis_[i].set_latlng(ref_pos)
+				for j in range(i+1, len(vis_)):
+					i = j
+					j_pos = vis_[j].latlng
+					if ref_pos.dist_m(j_pos) > D:
+						break
+					else:
+						vis_[j].set_latlng(ref_pos)
+				else:
+					i = len(vis_)
+	vis_[:] = vis_[::-1]
+
 if __name__ == '__main__':
 
-	conn()
-	print psycopg2.extensions.ISOLATION_LEVEL_AUTOCOMMIT
-
+	pass
 

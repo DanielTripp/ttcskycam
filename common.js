@@ -395,8 +395,8 @@ function vi_to_str(vi_) {
 	} else {
 		dir_tag = "'"+vi_.dir_tag+"'";
 	}
-	return sprintf('%s  route: %4s, vehicle: %s, dir: %-14s, (  %2.5f, %2.5f  ) , mofr: %5d, heading: %3d %s', 
-			vi_.timestr, vi_.route_tag, vi_.vehicle_id, dir_tag, vi_.lat, vi_.lon, vi_.mofr, vi_.heading, 
+	return sprintf('%s  route: %3.3s%-4s, vehicle: %s, dir: %-14s, (  %2.5f, %2.5f  ) , mofr: %5d, heading: %3d %s', 
+			vi_.timestr, vi_.fudgeroute, vi_.route_tag, vi_.vehicle_id, dir_tag, vi_.lat, vi_.lon, vi_.mofr, vi_.heading, 
 				(vi_.predictable ? '' : 'U'));
 }
 
@@ -596,6 +596,9 @@ function object_id(obj_) {
     return obj_.__obj_id;
 }
 
+// Remove array element(s) by index. 
+// Supports negative indices. 
+// to_ arg is optional. 
 // adapted from http://ejohn.org/blog/javascript-array-remove/ 
 function array_remove(array_, from_, to_) {
 	var rest = array_.slice((to_ || from_) + 1 || array_.length);
@@ -603,13 +606,8 @@ function array_remove(array_, from_, to_) {
 	return array_.push.apply(array_, rest);
 };
 
-function array_indexof_identity(array_, object_) {
-	for(var i=0; i<array_.length; i++) {
-		if(array_[i] === object_) {
-			return i;
-		}
-	}
-	return -1;
+function array_insert(array_, idx_, item_) {
+	array_.splice(idx_, 0, item_);
 }
 
 function sorted_keys(dict_) {
@@ -739,6 +737,13 @@ function roundUp(x_, step_, ref_) {
 	return (r == x_ ? r : r+step_);
 }
 
+// Thanks to http://stackoverflow.com/a/16319855/321556 
+function roundByDigits(num, decimals) {
+	var sign = num >= 0 ? 1 : -1;
+	return parseFloat((Math.round((num*Math.pow(10,decimals))+(sign*0.001))/Math.pow(10,decimals)).toFixed(decimals), 10);
+}
+
+// latlngs_ can be a list of google latlngs or [lat, lng] arrays. 
 function make_polyline_arrow_icons(zoom_, lots_of_arrows_, latlngs_) {
 	var arrowSymbol = { path: google.maps.SymbolPath.FORWARD_OPEN_ARROW };
 	var metersPerArrow = 10*Math.pow(1.8, 21-zoom_);
@@ -861,6 +866,67 @@ function repeat(str_, n_){
 function sleep(sleepMillis_){
 	var funcStartTime = (new Date()).getTime();
 	while((new Date()).getTime() < funcStartTime + sleepMillis_) {} 
+}
+
+function bind_text_control_to_localstorage(textarea_id_) {
+	var storage_key = document.URL+' - '+textarea_id_;
+	var stored_val = localStorage.getItem(storage_key);
+	if(stored_val != null) {
+		set_value(textarea_id_, stored_val);
+	}
+	$('#'+textarea_id_).bind('input propertychange', function() {
+		localStorage.setItem(storage_key, get_value(textarea_id_));
+	});
+}
+
+// Thanks to http://stackoverflow.com/a/155404/321556 
+function scroll_to_line(textarea_id_, linenum_) {
+	var textarea = document.getElementById(textarea_id_);
+	var lineHeight = textarea.clientHeight / textarea.rows;
+	var jump = (linenum_ - 1) * lineHeight;
+	textarea.scrollTop = jump;
+}
+
+// Thanks to http://stackoverflow.com/a/13651036/321556 
+function select_line(textarea_id_, linenum_) {
+	var tarea = document.getElementById(textarea_id_);
+	var lines = tarea.value.split("\n");
+
+	// calculate start/end
+	var startPos = 0, endPos = tarea.value.length;
+	for(var x = 0; x < lines.length; x++) {
+		if(x == linenum_) {
+			break;
+		}
+		startPos += (lines[x].length+1);
+
+	}
+
+	var endPos = lines[linenum_].length+startPos;
+
+	// do selection
+	// Chrome / Firefox
+
+	if(typeof(tarea.selectionStart) != "undefined") {
+		tarea.focus();
+		tarea.selectionStart = startPos;
+		tarea.selectionEnd = endPos;
+		return true;
+	}
+
+	// IE
+	if (document.selection && document.selection.createRange) {
+		tarea.focus();
+		tarea.select();
+		var range = document.selection.createRange();
+		range.collapse(true);
+		range.moveEnd("character", endPos);
+		range.moveStart("character", startPos);
+		range.select();
+		return true;
+	}
+
+	return false;
 }
 
 eval(get_sync("js/json2.js"));

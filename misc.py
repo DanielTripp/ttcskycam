@@ -40,6 +40,9 @@ def now_em():
 def now_str():
 	return em_to_str(now_em())
 
+def now_str_millis():
+	return em_to_str_millis(now_em())
+
 def now_str_ymd():
 	return em_to_str_ymd(now_em())
 

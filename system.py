@@ -8,7 +8,7 @@ import sys, json, os.path, pprint, sqlite3, multiprocessing, time, subprocess, t
 from itertools import *
 from collections import *
 from lru_cache import lru_cache
-import vinfo, geom, routes, predictions, mc, c, snapgraph, traffic, picklestore, streets
+import vinfo, geom, grid, routes, predictions, mc, c, snapgraph, traffic, picklestore, streets
 from misc import *
 
 class SystemSnapGraph(snapgraph.SnapGraph):
@@ -239,6 +239,9 @@ class SystemSnapGraph(snapgraph.SnapGraph):
 			self.pcp_vert2vert_distsnpaths[vert1idx][vert2idx] = distsnpaths
 			self.pcp_vert2vert_distsnpaths[vert2idx][vert1idx] = self.get_reverse_dir_distsnpaths(distsnpaths)
 			print_est_time_remaining('build_pcp_vert2vert_distsnpaths', t0, i, len(vert_combos), 100)
+			if 0: # tdr 
+				if i > 200:
+					break
 
 	@staticmethod
 	def get_reverse_dir_distsnpaths(distsnpaths_):
@@ -254,10 +257,7 @@ class SystemSnapGraph(snapgraph.SnapGraph):
 		latstep = 0.0025; lngstep = 0.00333
 		self.pcp_max_snap_radius = 3000
 		bbox = self.get_pcp_snap_boundingbox()
-		# Grid squares are offset from a point that has no large importance, it just makes for more easily
-		# readable values during debugging:
-		LATREF = 43.62696696859263; LNGREF = -79.4579391022553
-		self.pcp_gridsquaresys = snapgraph.GridSquareSystem(LATREF, LNGREF, latstep, lngstep, bbox)
+		self.pcp_gridsquaresys = grid.GridSquareSystem(None, None, latstep, lngstep, bbox)
 		self.pcp_multisnap_posaddrndists_by_gridsquareidx = []
 		t0 = time.time()
 		gridsquareidxes = range(self.pcp_gridsquaresys.num_idxes())
@@ -373,7 +373,7 @@ class SystemSnapGraph(snapgraph.SnapGraph):
 
 	def pcp_multisnap(self, latlng_, snap_tolerance_):
 		assert snap_tolerance_ <= self.pcp_max_snap_radius
-		gridsquare = snapgraph.GridSquare.from_latlng(latlng_, self.pcp_gridsquaresys)
+		gridsquare = snapgraph.grid.GridSquare.from_latlng(latlng_, self.pcp_gridsquaresys)
 		gridsquareidx = gridsquare.idx()
 		all_posaddrsndists = self.pcp_multisnap_posaddrndists_by_gridsquareidx[gridsquareidx][:]
 		r = [posaddr for posaddr, dist in all_posaddrsndists if dist <= snap_tolerance_]

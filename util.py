@@ -102,7 +102,7 @@ class OurJSONEncoder(json.JSONEncoder):
 			return (o.start, o.end)
 		elif isinstance(o, vinfo.VehicleInfo):
 			return o.to_json_dict()
-		elif isinstance(o, snapgraph.GridSquare):
+		elif isinstance(o, snapgraph.grid.GridSquare):
 			return (o.gridlat, o.gridlng)
 		else:
 			return json.JSONEncoder.default(self, o)

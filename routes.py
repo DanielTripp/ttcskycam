@@ -35,6 +35,12 @@ NON_SUBWAY_FUDGEROUTES = FUDGEROUTE_TO_CONFIGROUTES.keys()
 FUDGEROUTES = NON_SUBWAY_FUDGEROUTES + SUBWAY_FUDGEROUTES
 CONFIGROUTES = set(reduce(lambda x, y: x + y, FUDGEROUTE_TO_CONFIGROUTES.values(), []))
 
+# In some places we use a 3-character prefix of fudgeroutes and assume that it will identify them uniqiuely. 
+# That code is for testing only but it's still important. 
+# So here let's assert that no two fudgeroutes have the same 3-character prefix.
+if len(FUDGEROUTES) != len(set(froute[:3] for froute in FUDGEROUTES)):
+	raise Exception()
+
 def is_subway(froute_):
 	assert froute_ in FUDGEROUTES
 	return froute_ in SUBWAY_FUDGEROUTES

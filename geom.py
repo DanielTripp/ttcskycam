@@ -3,7 +3,6 @@
 import datetime, calendar, math, time, random
 from math import *
 from lru_cache import lru_cache
-import vinfo, routes
 from misc import *
 
 RADIUS_OF_EARTH_KM = 6367.44465
@@ -68,6 +67,8 @@ class LatLng:
 
 	# Returns 'absolute angle' between two points (measured counter-clockwise from the positive X axis)
 	# Returns between -pi and +pi.
+	# If 'self' and 'fore_' are equal, then this will return something meaningless (180?) but it won't 
+	# raise an exception.
 	def abs_angle(self, fore_):
 		assert isinstance(fore_, LatLng)
 		opposite = LatLng(self.lat, fore_.lng).dist_m(fore_)
@@ -84,6 +85,8 @@ class LatLng:
 			r = -r
 		return r
 
+	# If 'self' and 'fore_' are equal, then this will return something meaningless (270?) but it won't 
+	# raise an exception.
 	def heading(self, fore_):
 		ang_degrees = math.degrees(self.abs_angle(fore_))
 		return degrees_to_heading(ang_degrees)
@@ -266,98 +269,6 @@ def normalize_heading(heading_):
 def diff_headings(h1_, h2_):
 	return min(normalize_heading(h1_ - h2_), normalize_heading(h2_ - h1_))
 
-# This is for removing buggy GPS readings (example: vehicle 4116 2012-06-15 13:30 to 14:00.)
-def remove_bad_gps_readings(vis_):
-	if not vis_:
-		return
-	assert isinstance(vis_[0], vinfo.VehicleInfo)
-	r = []
-	for vid in set(vi.vehicle_id for vi in vis_):
-		vis_single_vid = [vi for vi in vis_ if vi.vehicle_id == vid]
-		vis_single_vid.sort(key=lambda vi: vi.time, reverse=True)
-		remove_bad_gps_readings_single_vid(vis_single_vid)
-		r += vis_single_vid
-	r.sort(key=lambda vi: vi.time, reverse=True)
-	vis_[:] = r
-
-# Note [1]: This is to account for the small gps inaccuracies that nearly all readings seem to have.
-# One can see this by drawing many vehicle locations on a google map with satellite view on.  Otherwise
-# reasonable vehicles routinely appear in impossible places like on top of buildings.
-# I don't know if there is any pattern to these inaccuracies.  I will assume that they are random and can
-# change completely from one reading to the next.
-# The large GPS errors (which are the entire reason for the 'remove bad gps' functions) have no limit to their
-# magnitude that I can see.  The small GPS errors do, and it seems to be about 50 metres.  (That's 50 metres from one
-# extreme to the other - i.e. 25 metres on either side of the road.  Note that we don't use mofrs here, only
-# distance between latlngs.)
-# (newer comment - 50 metres may not be enough.  eg. 2013-01-16 00:02:00.000 route: 505, vehicle: 4040, dir: '505_0_505' , ( 43.65366, -79.44915 ) , mofr: -1, heading: 140 
-# These small GPS errors, combined with scenarios where a given reading in our database has a logged time very soon
-# after the previous one (eg. 1 second or even less - as can happen in certain NextBus fluke scenarios I think, as well as
-# the couple of times when I've mistakenly been polling for vehicle locations with two processes at the same time)
-# can result in what looks like a very high speed.  This code treats a very high speed as a new 'vigroup'.  That is
-# undesirable and in a bad case previously caused this code to create some erroneous vigroups, and then at the end when it
-# picks the one containing the most vis, to throw out a lot of good vis.
-# eg. vid 1660 between 2013-01-07 12:39:59 and 12:41:09, without the 'small GPS error if clause' below, would cause this code
-# to create 2 new vigroups where it should have created no new ones.
-def is_plausible(dist_m_, speed_kmph_):
-	if dist_m_ < 50: # see note [1]
-		return True
-	elif dist_m_ < 1500:
-		# The highest plausible speed that I've seen reported is 61.08 km/h.  This was on Queensway south of High Park, 
-		# covering 1018 meters of track, over 60 seconds.   (vid 4119 around 2014-03-15 02:53.)
-		return speed_kmph_ < 65 
-	elif dist_m_ < 5000:
-		return speed_kmph_ < 40
-	else:
-		return speed_kmph_ < 30
-
-def remove_bad_gps_readings_single_vid(vis_, log_=False):
-	assert is_sorted(vis_, reverse=True, key=lambda vi: vi.time)
-	assert len(set(vi.vehicle_id for vi in vis_)) <= 1
-	if not vis_:
-		return []
-	vis = vis_[::-1]
-	remove_consecutive_duplicates(vis, key=lambda vi: vi.time)
-	vigroups = [[vis[0]]]
-	for cur_vi in vis[1:]:
-		def get_dist_from_vigroup(vigroup_):
-			groups_last_vi = vigroup_[-1]
-			groups_last_vi_to_cur_vi_metres = cur_vi.latlng.dist_m(groups_last_vi.latlng)
-			return groups_last_vi_to_cur_vi_metres
-
-		def get_mps_from_vigroup(vigroup_):
-			groups_last_vi = vigroup_[-1]
-			groups_last_vi_to_cur_vi_metres = cur_vi.latlng.dist_m(groups_last_vi.latlng)
-			groups_last_vi_to_cur_vi_secs = abs((cur_vi.time - groups_last_vi.time)/1000.0)
-			return groups_last_vi_to_cur_vi_metres/groups_last_vi_to_cur_vi_secs
-
-		def is_plausible_vigroup(vigroup_):
-			return is_plausible(get_dist_from_vigroup(vigroup_), mps_to_kmph(get_mps_from_vigroup(vigroup_)))
-
-		closest_vigroup = min(vigroups, key=get_dist_from_vigroup)
-		if is_plausible_vigroup(closest_vigroup):
-			closest_vigroup.append(cur_vi)
-		else:
-			vigroups.append([cur_vi])
-	r_vis = max(vigroups, key=len)
-	if log_:
-		vid = vis_[0].vehicle_id
-		if len(vigroups) == 1:
-			printerr('Bad GPS filtering - vid %s - there was only one group.' % vid)
-		else:
-			printerr('Bad GPS filtering - vid %s - chose group %d.' % (vid, vigroups.index(r_vis)))
-			printerr('---')
-			for vi in vis:
-				groupidx = firstidx(vigroups, lambda vigroup: vi in vigroup)
-				printerr('%d - %s' % (groupidx, vi))
-			printerr('---')
-			for groupidx, vigroup in enumerate(vigroups):
-				for vi in vigroup:
-					printerr('%d - %s' % (groupidx, vi))
-			printerr('---')
-		printerr('Bad GPS filtering - vid %s - groups as JSON:' % vid)
-		printerr([[vi.latlng.ls() for vi in vigroup] for vigroup in vigroups])
-	vis_[:] = r_vis[::-1]
-
 # Finds intersection of the line segments pt1->pt2 and pt3->pt4. 
 # returns None if they don't intersect, a LatLng otherwise. 
 def get_line_segment_intersection(pt1, pt2, pt3, pt4):
@@ -500,6 +411,11 @@ class BoundingBox:
 		r_sw = LatLng(r_minlat, r_minlng)
 		r_ne = LatLng(r_maxlat, r_maxlng)
 		return BoundingBox([r_sw, r_ne])
+
+	def is_inside(self, latlng_):
+		assert isinstance(latlng_, LatLng)
+		return (self.southwest.lat < latlng_.lat < self.northeast.lat) and \
+				(self.southwest.lng < latlng_.lng < self.northeast.lng)
 
 class LineSeg(object):
 

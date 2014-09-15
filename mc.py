@@ -127,9 +127,10 @@ def get_server_pid(instance_):
 	else:
 		return get_server_pid_windows(instance_)
 
-def start_memcache(instance_):
+def start_memcache(instance_, log=True):
 	if is_server_running(instance_):
-		print 'Server was already started.  (Or another process is using that port.)'
+		if log:
+			print 'Server was already started.  (Or another process is using that port.)'
 	else:
 		subprocess.Popen(['memcached', '-u', 'dt', '-l', '127.0.0.1', '-m', str(NUM_MEGS), '-p', str(server_get_port(instance_))])
 
@@ -142,10 +143,11 @@ def get_server_pid_linux(instance_):
 			return pid
 	return None
 
-def stop_memcache_linux(instance_):
+def stop_memcache_linux(instance_, log=True):
 	pid = get_server_pid_linux(instance_)
 	if pid is None:
-		print 'Was not started.'
+		if log:
+			print 'Was not started.'
 	else:
 		os.kill(pid, signal.SIGKILL)
 		time.sleep(1) # This is here for the same reason as the sleep in stop_memcache_windows(), but 
@@ -160,10 +162,11 @@ def get_server_pid_windows(instance_):
 			return pid
 	return None
 
-def stop_memcache_windows(instance_):
+def stop_memcache_windows(instance_, log=True):
 	pid = get_server_pid_windows(instance_)
 	if pid is None:
-		print 'Was not started.'
+		if log:
+			print 'Was not started.'
 	else:
 		subprocess.check_call(['taskkill', '/f', '/pid', str(pid)])
 		time.sleep(2) # I've routinely witnessed the process still showing up in 'ps' and 'netstat' output
@@ -171,11 +174,11 @@ def stop_memcache_windows(instance_):
 			# This is not so important on a stop, but very important on a restart, because an 'is running'
 			# check (which uses netstat) will be done before the start.
 
-def stop_memcache(instance_):
+def stop_memcache(instance_, log=True):
 	if we_are_on_linux():
-		stop_memcache_linux(instance_)
+		stop_memcache_linux(instance_, log=log)
 	else:
-		stop_memcache_windows(instance_)
+		stop_memcache_windows(instance_, log=log)
 
 def print_running_instances():
 	def p(instance__):
@@ -199,6 +202,10 @@ def close_connection():
 def forget_connection():
 	global g_memcache_client
 	g_memcache_client = None
+
+def restart_dev_instance():
+	stop_memcache('dev', log=False)
+	start_memcache('dev', log=False)
 
 if __name__ == '__main__':
 
