@@ -166,6 +166,7 @@ class VehicleInfo:
 				'lat': self.latlng.lat,
 				'lon': self.latlng.lng,
 				'predictable': self.predictable, 
+				'fudgeroute': self.fudgeroute, 
 				'route_tag': self.route_tag, 
 				'time': self.time, 
 				'timestr': self.timestr, 
@@ -209,8 +210,7 @@ class VehicleInfo:
 		return self.latlng.lng
 
 	def is_a_streetcar(self):
-		# At least, I think that starting w/ 4 means streetcar.  This logic is also implemented in traffic.php. 
-		return self.vehicle_id.startswith('4') 
+		return is_a_streetcar(self.vehicle_id)
 
 	# Probably shouldn't be used anywhere performance is important in it's present state, because 
 	# we nullifies _graph_locs. 
@@ -222,6 +222,14 @@ class VehicleInfo:
 
 	def mofrchunk(self, mofrstep_):
 		return int(self.widemofr)/mofrstep_
+
+	def set_latlng(self, latlng_):
+		self.latlng = latlng_.copy()
+		self._graph_locs = self._mofr = self._widemofr = None
+
+def is_a_streetcar(vid_):
+	# At least, I think that starting w/ 4 means streetcar.  This logic is also implemented in traffic.php. 
+	return vid_.startswith('4') 
 
 def makevi1(**kwargs):
 	r = VehicleInfo('', -4, '9999', 43.0, -79.0, True, '', '', 0, 0L, 0L,

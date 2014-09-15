@@ -9,9 +9,7 @@ routes.get_configroute_to_fudgeroute_map
 routes.get_fudgeroutes_for_map_bounds
 routes.get_fudgeroute_to_intdir_to_englishdesc
 routes.get_stops_dir_to_stoptag_to_latlng
-paths.get_paths_by_latlngs
 routes.routepts
-paths.get_pathgridsquare
 routes.get_all_froute_latlngs
 streetlabels.get_labels
 reports.get_traffic_report
@@ -26,3 +24,8 @@ browse_snapgraph.get_pline_latlngs
 browse_snapgraph.get_vert_pos
 browse_snapgraph.get_posaddr_latlng
 system.get_packed_ways
+debug_reports.get_model_from_raw_string
+debug_reports.write_to_file
+debug_reports.read_from_file
+debug_reports.write_to_db
+debug_reports.restart_memcache_and_wsgi

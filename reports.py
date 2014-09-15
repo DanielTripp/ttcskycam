@@ -23,7 +23,7 @@ else:
 # but if the dir_ arg is a latlng pair then [2] wil be more informative. 
 def get_report(report_type_, froute_, dir_, datazoom_, time_, last_gotten_timestr_, log_=False):
 	assert report_type_ in ('traffic', 'locations')
-	assert isinstance(froute_, basestring) and (time_ == 0 or abs(str_to_em(time_) - now_em()) < 1000*60*60*24*365*10)
+	assert isinstance(froute_, basestring) and (time_ == 0 or abs(str_to_em(time_) - now_em()) < 1000*60*60*24*365*100)
 	assert (dir_ in (0, 1)) or (len(dir_) == 2 and all(isinstance(e, geom.LatLng) for e in dir_))
 	assert (last_gotten_timestr_ is None) or isinstance(last_gotten_timestr_, basestring)
 	assert datazoom_ in c.VALID_DATAZOOMS 

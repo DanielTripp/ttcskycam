@@ -36,13 +36,13 @@ var g_mouseovered_object_infowindow_close_timer = null;
 var g_grid_objects = new Array();
 
 var LATREF = <?php 
-  passthru('python -c "import snapgraph; print snapgraph.LATREF"'); ?>;
+  passthru('python -c "import grid; print grid.DEFAULT_LATREF"'); ?>;
 var LNGREF = <?php 
-  passthru('python -c "import snapgraph; print snapgraph.LNGREF"'); ?>;
+  passthru('python -c "import grid; print grid.DEFAULT_LNGREF"'); ?>;
 var LATSTEP = <?php 
-  passthru('python -c "import snapgraph; print snapgraph.LATSTEP"'); ?>;
+  passthru('python -c "import grid; print grid.DEFAULT_LATSTEP"'); ?>;
 var LNGSTEP = <?php 
-  passthru('python -c "import snapgraph; print snapgraph.LNGSTEP"'); ?>;
+  passthru('python -c "import grid; print grid.DEFAULT_LNGSTEP"'); ?>;
 
 function initialize() {
 
@@ -561,7 +561,7 @@ function add_marker_mouseover_listener_for_infowin(mapobject_, label_) {
 				g_mouseovered_object_infowindow = null;
 			}
 			g_mouseovered_object_infowindow_close_timer = null;
-		}, 500);
+		}, 1500);
 	});
 }
 
@@ -644,7 +644,7 @@ function scroll_to_visible() {
 		Filename: <input type="text" size="80" name="filename_field" id="filename_field" /> 
 		<input type="button" onclick="refresh_from_file()" value="Submit (file)" /> <br>
 		OR Contents:<br>
-		<textarea id="contents_textarea" cols="100" rows="5"></textarea>
+		<textarea id="contents_textarea" cols="100" rows="5" wrap="off"></textarea>
 		<input type="button" onclick="refresh_from_textarea()" value="Submit (text area)" />
 		<input type="button" onclick="scroll_to_visible()" value="Pan To" />
 		<br>

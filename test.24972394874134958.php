@@ -25,39 +25,7 @@ function initialize() {
 
 	init_map();
 	google.maps.event.addListenerOnce(g_map, 'tilesloaded', function() {
-		init_map_sync('map_sync_checkbox', true);
-
-		console.log([]);
-		console.log({});
-
-		var si = null;
-		if(false) {
-			si = new SpatialIndex([[ [43.653497, -79.465184], [43.656338, -79.452353] ], 
-					[ [43.652286, -79.458983], [43.657564, -79.461215] ]], 'plines');
-			google.maps.event.addListener(g_map, 'click', function(mouseevent_) {
-				var snap_result = si.snap(mouseevent_.latLng, 500);
-				if(g_marker != null) {
-					g_marker.setMap(null);
-					g_marker = null;
-				}
-				if(snap_result != null) {
-					g_marker = new google.maps.Marker({map: g_map, position: snap_result[0]});
-				}
-			});
-		} else {
-			si = new SpatialIndex([{pos: [43.653497, -79.465184]}, {pos: [43.656338, -79.452353]}], 'points');
-			google.maps.event.addListener(g_map, 'click', function(mouseevent_) {
-				var point = si.snap(mouseevent_.latLng, 500);
-				if(g_marker != null) {
-					g_marker.setMap(null);
-					g_marker = null;
-				}
-				if(point != null) {
-					g_marker = new google.maps.Marker({map: g_map, position: point.pos.google()});
-				}
-			});
-		}
-		
+		alert(typeof roundByDigits(0.123456789, 3));
 	});
 
 }

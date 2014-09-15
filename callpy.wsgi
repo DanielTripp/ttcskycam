@@ -81,6 +81,8 @@ def post_get_args(environ_):
 
 # WSGI entry point.
 def application(environ, start_response):
+	check_environ(environ)
+
 	if '.' not in sys.path:
 		printerr('----------- having to add to sys.path') # temporary 
 		printerr('sys.path was:', sys.path) # temporary 
@@ -104,5 +106,15 @@ def application(environ, start_response):
 		mc.close_connection()
 		db.close_connection()
 		raise
+
+def check_environ(environ_):
+	# We want to restart this current (WSGI) process from within sometimes, during testing (see debug_reports).  
+	# https://code.google.com/p/modwsgi/wiki/ReloadingSourceCode#Restarting_Daemon_Processes 
+	# says that unless we're running we're running as a WSGI daemon process, then if we kill the current 
+	# process, then we'll be killing a part of apache, which is not smart. 
+	# So here we make sure (and again this only matters for testing) that the WSGI setup 
+	# (in /etc/apache2/apache2.conf) makes us a WSGI "daemon process". 
+	assert environ_['mod_wsgi.process_group'] != ''
+
 
 
