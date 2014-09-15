@@ -5,10 +5,11 @@ from collections import Sequence, MutableSequence, defaultdict, MutableSet
 from itertools import *
 import db, mc
 
+def initializer():
+	db.forget_connection()
+	mc.forget_connection()
+
 def run(n_, func_, argses_):
-	def initializer():
-		db.forget_connection()
-		mc.forget_connection()
 	pool = multiprocessing.Pool(n_, initializer=initializer)
 	results = []
 	for args in argses_:
