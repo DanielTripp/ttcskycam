@@ -208,8 +208,10 @@ class PosAddr(object):
 			self.plinename = linesegaddr.plinename
 			self.ptidx = linesegaddr.ptidx
 			self.pals = pals_
-		self.pals = round(self.pals, POSADDR_PALS_NUM_DIGITS)
 		assert 0.0 <= self.pals < 1.0
+		self.pals = round(self.pals, POSADDR_PALS_NUM_DIGITS)
+		if self.pals == 1.0:
+			self.pals = 1.0 - 10**-POSADDR_PALS_NUM_DIGITS
 
 	def __str__(self):
 		assert 0.0 <= self.pals < 1.0
