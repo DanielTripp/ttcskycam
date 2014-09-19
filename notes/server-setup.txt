@@ -1,5 +1,3 @@
-Might have to change time zone with tzselect.
-
 List intentionally installed packages on old machine with this: 
 
 ( zcat $( ls -tr /var/log/apt/history.log*.gz ) ; cat /var/log/apt/history.log ) | egrep '^(Start-Date:|Commandline:)' | grep -v aptdaemon | egrep '^Commandline:'
@@ -75,7 +73,8 @@ tar zcf /tmp/u.tar.gz .dt-init* .vimrc  .inputrc  .bash_profile .bashrc  .profil
 For each user, in .dt-init-local: 
 - might want to unalias svn and svnsync 
 - Change PS1 to reflect new machine name
-
+- might have to set TZ (timezone) - use tzselect to find appropriate value. 
+LOG OUT THEN BACK IN AGAIN AFTER RESETTING TIME ZONE.
 
 
 # Creating an svn mirror repository: 
