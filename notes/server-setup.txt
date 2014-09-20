@@ -76,6 +76,8 @@ For each user, in .dt-init-local:
 - might have to set TZ (timezone) - use tzselect to find appropriate value. 
 LOG OUT THEN BACK IN AGAIN AFTER RESETTING TIME ZONE.
 
+Might have to set TZ in crontab too.  But this might only affect processes started by cron - 
+not cron itself i.e. kick-off times.
 
 # Creating an svn mirror repository: 
 # (as 'default' user): 
