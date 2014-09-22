@@ -163,11 +163,14 @@ def get_data_from_web_and_deal_with_it(route_, nextbus_lasttime_, insert_into_db
 	return r
 
 def get_graphs_into_ram():
-	# Doing this because this is currently called as a cron job every minute i.e. new process every minute. 
-	# If we poll nextbus THEN read these large snapgraphs into memory (which takes several seconds) on first use, 
-	# then the information for that first route polled will be a few seconds more out of date than it needs to be. 
-	# If we ever change our polling of NextBus here to be done in a long-lived process rather than cron, 
-	# then this can be removed.
+	# Reading these large snapgraphs into memory before the first time we poll 
+	# NextBus because it's slightly smarter.  If we don't - i.e. poll NextBus 
+	# THEN read these large snapgraphs into memory (which takes 20 seconds or 
+	# more) on first use, then the data for those first routes polled will 
+	# be eg. 20 seconds more out of date than it needs to be.  Also, I think that 
+	# with our multiprocessing way of doing things, that if we don't do this in 
+	# the parent process before starting the children, then each child will have 
+	# to do it themselves, which is even worse. 
 	tracks.get_snapgraph()
 	streets.get_snapgraph()
 
