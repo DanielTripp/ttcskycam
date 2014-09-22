@@ -73,22 +73,47 @@ def deal_with_xml(xmldoc_, insert_into_db_, vis_filename_):
 
 	return {'nextbus_lasttime': nextbus_lasttime, 'our_system_time_on_poll_finish': now_em()}
 
-# We maintain, in the pollstate.json file, two times for each route - nextbus_lasttime and our_system_time_on_poll_finish.
-# nextbus_lasttime is the time that we get from the <lastTime> element of the last NextBus poll, and pass as part of the URL
-#	of the next one.
-# our_system_time_on_poll_finish is our local machine's time after that NextBus poll finishes.  It's probably pretty close
-# 	to nextbus_lasttime most of the time.  The important point of this one is not that it's our local system time, but that
-#	it's going to tend to increase after each NextBus poll /across routes/ - unlike nextbus_lasttime which is only (I think)
-#	guaranteed to increase after each poll in the same route.  One example where I noticed a big difference between these two
-# 	two times is during the day when certain late-night routes aren't in service and return no vehicles.  NextBus seems not to 
-#	care much about the lastTime on these so I saw it returning a time some 5 minutes in the past.  If we are in a state where we
-#	are running out of polling period before polling all routes and hence the polling of the entire route set is spread across
-# 	several runs of this program i.e. cron minutes, then we need to take care to loop through the routes sensibly so we
-# 	don't poll routes X, Y, and Z repeatedly while polling the others not at all.  So we need to sort by something to ensure
-#	that we cycle through the routes.  nextbus_lasttime is inappropriate because in the scenario mentioned above, NextBus will
-# 	return a lastTime several minutes in the past for NextBus - so if, when deciding which routes to poll first, we sorted
-#	by nextbus_lasttime, this would bias towards those night routes being polled first and possibly, no other routes being polled
-#	at all.  So that's why we maintain our_system_time_on_poll_finish and use it to decide which routes to poll first.
+# We maintain, in the pollstate file, two times for each route - 
+# nextbus_lasttime and our_system_time_on_poll_finish.
+# nextbus_lasttime is the time that we get from the <lastTime> element of the 
+# last NextBus poll, and passed as part of the URL of the next one.
+# our_system_time_on_poll_finish is our local machine's time after that NextBus 
+# poll finishes.  It's probably pretty close to nextbus_lasttime most of the 
+# time.  The important point of this one is not that it's our local system 
+# time, but that it's going to tend to increase after each NextBus poll /across 
+# routes/ - unlike nextbus_lasttime which is only (I think) guaranteed to 
+# increase after each poll in the same route.  One example where 
+# 
+#	I noticed a big difference between these two
+# two times is during the day when certain late-night routes aren't in service 
+# and return no vehicles.  NextBus seems not to care much about the lastTime on 
+# these so I saw it returning a time some 5 minutes in the past.  If we are in 
+# a state where this program is being frequently restarted for some reason, and 
+# its exiting in the middle of a poll_once() call (i.e. some routes are polled 
+# but not others) then we make an effort for gracefully degrade and spread the 
+# polling of the entire route list across several runs of this program.  That 
+# is why we maintain our_system_time_on_poll_finish: because we need to take 
+# care to loop through the routes sensibly so we
+# don't poll routes X, Y, and Z repeatedly while polling the others not at all.  
+# So we need to sort by something to ensure
+#	that we cycle through the routes.  nextbus_lasttime is inappropriate because 
+#	in the scenario mentioned above, NextBus will
+# return a lastTime several minutes in the past for NextBus - so if, when 
+# deciding which routes to poll first, we sorted
+#	by nextbus_lasttime, this would bias towards those night routes being polled 
+#	first and possibly, would result in no other routes being polled
+#	at all.  
+# 
+# This might seem like excessive fussing for a presumably rare scenario of this 
+# program crashing frequently.  And it probably is excessive.  I didn't write 
+# this behaviour to deal with this scenario - I wrote it back when this was a 
+# cron job (rather than a long-running process) and sometimes something would 
+# run slowly and the cron minute would run out before we polled all routes.  So 
+# back then we would a) detect that the minute had run out and exit so that 
+# there wouldn't be two instances of the cron job running at the same time, and 
+# b) maintain these times so that the next cron run would start polling the 
+# routes starting with the ones that we didn't get to poll last time.  (a) 
+# doesn't exist any more.  (b) does. 
 def poll_once(routelist_, insert_into_db_, pollstate_filename_, xml_filename_, xml_headers_, vis_filename_, multiproc_, 
 		touch_flag_file_on_finish_):
 	if multiproc_:
