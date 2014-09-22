@@ -1,13 +1,10 @@
 #!/usr/bin/python
 
 import sys, os, subprocess, re, time, xml.dom, xml.dom.minidom, traceback, json, getopt
-T0 = time.time()
 from collections import *
 from xml.parsers.expat import ExpatError
 import db, vinfo, routes, tracks, streets, multiproc
 from misc import *
-
-POLL_PERIOD_SECS = 60
 
 def get_data_from_web_as_str(route_, time_es_):
 	wget_args = ['wget', '--tries=5', '--timeout=10', '-O', '-', 'http://webservices.nextbus.com/service/publicXMLFeed?command=vehicleLocations&a=ttc&r=%s&t=%d' \
@@ -92,7 +89,8 @@ def deal_with_xml(xmldoc_, insert_into_db_, vis_filename_):
 # 	return a lastTime several minutes in the past for NextBus - so if, when deciding which routes to poll first, we sorted
 #	by nextbus_lasttime, this would bias towards those night routes being polled first and possibly, no other routes being polled
 #	at all.  So that's why we maintain our_system_time_on_poll_finish and use it to decide which routes to poll first.
-def poll_once(routelist_, insert_into_db_, pollstate_filename_, xml_filename_, xml_headers_, vis_filename_, multiproc_):
+def poll_once(routelist_, insert_into_db_, pollstate_filename_, xml_filename_, xml_headers_, vis_filename_, multiproc_, 
+		touch_flag_file_on_finish_):
 	if multiproc_:
 		pool = multiprocessing.Pool(8, multiproc.initializer)
 	try:
@@ -113,40 +111,30 @@ def poll_once(routelist_, insert_into_db_, pollstate_filename_, xml_filename_, x
 					route_to_poolresult[route] = pool.apply_async(get_data_from_web_and_deal_with_it, \
 							(route, nextbus_lasttime, insert_into_db_, xml_filename_, xml_headers_, vis_filename_))
 				else:
-					times = get_data_from_web_and_deal_with_it(
+					route_to_times[route] = get_data_from_web_and_deal_with_it(
 							route, nextbus_lasttime, insert_into_db_, xml_filename_, xml_headers_, vis_filename_)
-					if times is not None:
-						route_to_times[route] = times
 			except Exception, e:
 				print 'At %s: error getting route %s' % (em_to_str(now_em()), route)
 				traceback.print_exc(e)
 		if multiproc_:
 			for route, poolresult in route_to_poolresult.iteritems():
 				try:
-					times = poolresult.get()
-					if times is not None:
-						route_to_times[route] = times
+					route_to_times[route] = poolresult.get()
 				except Exception, e:
 					print 'At %s: error getting route %s' % (em_to_str(now_em()), route)
 					traceback.print_exc(e)
 		with open(pollstate_filename_, 'w') as fout:
 			json.dump(route_to_times, fout, indent=0)
+		if touch_flag_file_on_finish_:
+			touch('/tmp/ttc-poll-locations-finished-flag')
 	finally:
 		if multiproc_:
 			pool.close()
 			pool.join()
 
 def get_data_from_web_and_deal_with_it(route_, nextbus_lasttime_, insert_into_db_, xml_filename_, xml_headers_, vis_filename_):
-	if (time.time() - T0) > POLL_PERIOD_SECS - 5:
-		printerr('poll_locations - poll period is nearly over.  Not going to poll route %s.' % route_) 
-		return None
 	data_xmldoc = get_data_from_web_as_xml(route_, nextbus_lasttime_, xml_filename_, xml_headers_)
-	if (time.time() - T0) > POLL_PERIOD_SECS - 5:
-		printerr('poll_locations - poll period is nearly over.  Not going to deal with data for route %s.' % route_) 
-		return None
 	r = deal_with_xml(data_xmldoc, insert_into_db_, vis_filename_)
-	if (time.time() - T0) > POLL_PERIOD_SECS:
-		printerr('poll_locations - poll period is over.  Warning: dealing with data for route %s went into overtime.' % route_) 
 	return r
 
 def get_graphs_into_ram():
@@ -158,10 +146,16 @@ def get_graphs_into_ram():
 	tracks.get_snapgraph()
 	streets.get_snapgraph()
 
+def wait_until_start_of_next_minute():
+	now = now_em()
+	target_time = round_up_by_minute(now)
+	secs_to_sleep = (target_time - now)/1000
+	time.sleep(secs_to_sleep)
+
 if __name__ == '__main__':
 
 	opts, args = getopt.getopt(sys.argv[1:], '', ['routes=', 'pollstatefile=', 'redirect-stdstreams-to-file', 
-			'dont-insert-into-db', 'touch-flag-file-on-finish', 'dump-xml=', 'dump-vis=', 'xml-headers'])
+			'dont-insert-into-db', 'touch-flag-file-on-finish', 'dump-xml=', 'dump-vis=', 'xml-headers', 'forever'])
 	if args:
 		sys.exit('No arguments allowed.  Only options.')
 
@@ -194,9 +188,20 @@ if __name__ == '__main__':
 
 	do_multiproc = insert_into_db or vis_filename
 	xml_headers = get_opt(opts, 'xml-headers')
-	poll_once(routelist, insert_into_db, pollstate_filename, xml_filename, xml_headers, vis_filename, do_multiproc)
-
-	if get_opt(opts, 'touch-flag-file-on-finish'):
-		touch('/tmp/ttc-poll-locations-finished-flag')
+	touch_flag_file_on_finish = get_opt(opts, 'touch-flag-file-on-finish')
+	forever = get_opt(opts, 'forever')
+	def call_poll_once():
+		poll_once(routelist, insert_into_db, pollstate_filename, xml_filename, xml_headers, vis_filename, do_multiproc, 
+				touch_flag_file_on_finish)
+	if forever:
+		wait_until_start_of_next_minute()
+		while True:
+			poll_start_time = time.time()
+			call_poll_once()
+			poll_end_time = time.time()
+			if poll_end_time - poll_start_time < 60:
+				wait_until_start_of_next_minute()
+	else:
+		call_poll_once()
 		
 
