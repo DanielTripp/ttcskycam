@@ -20,12 +20,11 @@ def get_data_from_web_as_str(route_, time_es_):
 def get_data_from_web_as_xml(route_, time_es_, xml_filename_, xml_headers_):
 	data_str = get_data_from_web_as_str(route_, time_es_)
 	if xml_filename_:
-		with open(xml_filename_, 'a') as fout:
-			if xml_headers_:
-				cur_time = now_em()
-				cur_timestr = em_to_str(now_em())
-				print >> fout, 'Route %s, t=%d.  (Current time: %d / %s.)' % (route_, time_es_, cur_time, cur_timestr)
-			print >> fout, data_str
+		if xml_filename_ == 'stdout':
+			dump_xml(sys.stdout, route_, time_es_, xml_headers_, data_str)
+		else:
+			with open(xml_filename_, 'a') as fout:
+				dump_xml(fout, route_, time_es_, xml_headers_, data_str)
 	def print_data_str(msg_):
 		print >> sys.stderr, '--- %s - %s:' % (now_str(), msg_)
 		print >> sys.stderr, '---'
@@ -40,6 +39,13 @@ def get_data_from_web_as_xml(route_, time_es_, xml_filename_, xml_headers_):
 		print_data_str('Detected error(s) in output from NextBus.  (Will try to get data from this document regardless.)')
 	return r
 
+def dump_xml(fout_, route_, time_es_, xml_headers_, data_str_):
+	if xml_headers_:
+		cur_time = now_em()
+		cur_timestr = em_to_str(now_em())
+		print >> fout_, 'Route %s, t=%d.  (Current time: %d / %s.)' % (route_, time_es_, cur_time, cur_timestr)
+	print >> fout_, data_str_
+
 def deal_with_xml(xmldoc_, insert_into_db_, vis_filename_):
 	vehicles = []
 	nextbus_lasttime = None
@@ -53,14 +59,20 @@ def deal_with_xml(xmldoc_, insert_into_db_, vis_filename_):
 	if not nextbus_lasttime:
 		raise Exception("Couldn't find lastTime in document:\n%s" % xmldoc_.toprettyxml(newl='\n'))
 
-	for vehicle_info in vehicles:
-		vehicle_info.time_retrieved = nextbus_lasttime
-		vehicle_info.calc_time()
+	for vi in vehicles:
+		vi.time_retrieved = nextbus_lasttime
+		vi.calc_time()
 		if insert_into_db_:
-			db.insert_vehicle_info(vehicle_info)
-		if vis_filename_:
+			db.insert_vehicle_info(vi)
+
+	if vis_filename_:
+		if vis_filename_ == 'stdout':
+			for vi in vehicles:
+				print >> sys.stdout, vi.str_long()
+		else:
 			with open(vis_filename_, 'a') as fout:
-				print >> fout, vehicle_info.str_long()
+				for vi in vehicles:
+					print >> fout, vi.str_long()
 
 	return {'nextbus_lasttime': nextbus_lasttime, 'our_system_time_on_poll_finish': now_em()}
 
@@ -80,9 +92,6 @@ def deal_with_xml(xmldoc_, insert_into_db_, vis_filename_):
 # 	return a lastTime several minutes in the past for NextBus - so if, when deciding which routes to poll first, we sorted
 #	by nextbus_lasttime, this would bias towards those night routes being polled first and possibly, no other routes being polled
 #	at all.  So that's why we maintain our_system_time_on_poll_finish and use it to decide which routes to poll first.
-
-# NOTE: the code below doesn't reflect the comment above right now.  If the whole list of routes takes 
-# more than a minute to poll, we will be in bad shape.  Hope to fix this soon.
 def poll_once(routelist_, insert_into_db_, pollstate_filename_, xml_filename_, xml_headers_, vis_filename_, multiproc_):
 	if multiproc_:
 		pool = multiprocessing.Pool(8, multiproc.initializer)
@@ -98,24 +107,25 @@ def poll_once(routelist_, insert_into_db_, pollstate_filename_, xml_filename_, x
 		routelist_in_priority_order = sorted(routelist_, key=sortkey)
 		route_to_poolresult = {}
 		for routei, route in enumerate(routelist_in_priority_order):
-			if (time.time() - T0) > POLL_PERIOD_SECS - 5:
-				sys.exit('poll_locations - poll period has passed, with %d of %d route(s) left unpolled.' \
-						% (len(routelist_in_priority_order) - routei, len(routelist_in_priority_order)))
 			try:
 				nextbus_lasttime = route_to_times[route]['nextbus_lasttime'] if route in route_to_times else 0
 				if multiproc_:
 					route_to_poolresult[route] = pool.apply_async(get_data_from_web_and_deal_with_it, \
 							(route, nextbus_lasttime, insert_into_db_, xml_filename_, xml_headers_, vis_filename_))
 				else:
-					route_to_times[route] = get_data_from_web_and_deal_with_it(
+					times = get_data_from_web_and_deal_with_it(
 							route, nextbus_lasttime, insert_into_db_, xml_filename_, xml_headers_, vis_filename_)
+					if times is not None:
+						route_to_times[route] = times
 			except Exception, e:
 				print 'At %s: error getting route %s' % (em_to_str(now_em()), route)
 				traceback.print_exc(e)
 		if multiproc_:
 			for route, poolresult in route_to_poolresult.iteritems():
 				try:
-					route_to_times[route] = poolresult.get()
+					times = poolresult.get()
+					if times is not None:
+						route_to_times[route] = times
 				except Exception, e:
 					print 'At %s: error getting route %s' % (em_to_str(now_em()), route)
 					traceback.print_exc(e)
@@ -127,8 +137,17 @@ def poll_once(routelist_, insert_into_db_, pollstate_filename_, xml_filename_, x
 			pool.join()
 
 def get_data_from_web_and_deal_with_it(route_, nextbus_lasttime_, insert_into_db_, xml_filename_, xml_headers_, vis_filename_):
+	if (time.time() - T0) > POLL_PERIOD_SECS - 5:
+		printerr('poll_locations - poll period is nearly over.  Not going to poll route %s.' % route_) 
+		return None
 	data_xmldoc = get_data_from_web_as_xml(route_, nextbus_lasttime_, xml_filename_, xml_headers_)
-	return deal_with_xml(data_xmldoc, insert_into_db_, vis_filename_)
+	if (time.time() - T0) > POLL_PERIOD_SECS - 5:
+		printerr('poll_locations - poll period is nearly over.  Not going to deal with data for route %s.' % route_) 
+		return None
+	r = deal_with_xml(data_xmldoc, insert_into_db_, vis_filename_)
+	if (time.time() - T0) > POLL_PERIOD_SECS:
+		printerr('poll_locations - poll period is over.  Warning: dealing with data for route %s went into overtime.' % route_) 
+	return r
 
 def get_graphs_into_ram():
 	# Doing this because this is currently called as a cron job every minute i.e. new process every minute. 
