@@ -8,16 +8,33 @@ import numpy as np
 
 if __name__ == '__main__':
 
-	reporttype, froute, directionstr, datazoomstr, timestr, logstr = sys.argv[1:]
+	opts, args = getopt.getopt(sys.argv[1:], '', ['print', 'datazoom=', 'log', 'restartmc'])
+	if len(args) != 4:
+		sys.exit('Need 4 args: reporttype, froute, direction, and date/time.')
+
+	doprint = get_opt(opts, 'print')
+	datazoom = get_opt(opts, 'datazoom') or 0
+	dolog = get_opt(opts, 'log')
+	restartmc = get_opt(opts, 'restartmc')
+
+	reporttype, froute, directionstr, timestr = args
 	direction = int(directionstr)
-	datazoom = int(datazoomstr)
+	if direction not in (0, 1):
+		raise Exception()
 	time_em = str_to_em(timestr)
-	log = {'log': True, 'nolog': False}[logstr]
+
+	if restartmc:
+		mc.restart()
+
 	if reporttype == 't':
-		traffic.get_traffics_impl(froute, direction, datazoom, time_em, log_=log)
+		report = traffic.get_traffics_impl(froute, direction, datazoom, time_em, log_=dolog)
 	elif reporttype == 'l':
-		traffic.get_recent_vehicle_locations_impl(froute, direction, datazoom, time_em, log_=log)
+		report = traffic.get_recent_vehicle_locations_impl(froute, direction, datazoom, time_em, log_=dolog)
 	else:
 		raise Exception()
+	
+	if doprint:
+		pprint.pprint(report)
+
 
 
