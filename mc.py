@@ -203,9 +203,13 @@ def forget_connection():
 	global g_memcache_client
 	g_memcache_client = None
 
-def restart_dev_instance():
-	stop_memcache('dev', log=False)
-	start_memcache('dev', log=False)
+def restart():
+	if c.VERSION == 'dev':
+		instance = 'dev'
+	else:
+		instance = 'prod'
+	stop_memcache(instance, log=False)
+	start_memcache(instance, log=False)
 
 if __name__ == '__main__':
 

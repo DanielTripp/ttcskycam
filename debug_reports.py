@@ -82,7 +82,7 @@ def write_to_db(model_json_str_):
 	reports.make_reports_and_insert_into_db_single_route(SANDBOX_REPORT_TIME_EM, froute)
 
 def restart_memcache_and_wsgi():
-	mc.restart_dev_instance()
+	mc.restart()
 	restart_wsgi_process()
 
 def restart_wsgi_process():
