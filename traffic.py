@@ -162,6 +162,7 @@ def get_traffic_rawspeeds(fudgeroute_name_, dir_, datazoom_, time_, window_minut
 		mofr_to_rawtraffics[mofr] = []
 	for vid, vis_all_stretches in \
 				get_vid_to_vis_from_db_for_traffic(fudgeroute_name_, dir_, time_, window_minutes_, usewidemofr_=usewidemofr_, log_=log_).items():
+		vis_all_stretches = vis_all_stretches[::-1]
 		for vis in get_stretches(vis_all_stretches, dir_):
 			if log_: printerr('For vid "%s":' % (vid))
 			if log_:
