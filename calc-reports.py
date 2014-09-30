@@ -14,14 +14,14 @@ import numpy as np
 
 if __name__ == '__main__':
 
-	opts, args = getopt.getopt(sys.argv[1:], '', ['print', 'datazoom=', 'log', 'restartmc'])
+	opts, args = getopt.getopt(sys.argv[1:], '', ['print', 'datazoom=', 'log', 'norestartmc'])
 	if len(args) != 4:
 		sys.exit('Need 4 args: reporttype(s), froute(s), direction(s), and date/time(s).')
 
 	doprint = get_opt(opts, 'print')
 	datazoom = get_opt(opts, 'datazoom') or 0
 	dolog = get_opt(opts, 'log')
-	restartmc = get_opt(opts, 'restartmc')
+	norestartmc = get_opt(opts, 'norestartmc')
 
 	reporttypes, froutes, directions, times = args
 
@@ -74,28 +74,29 @@ if __name__ == '__main__':
 		else:
 			return [str_]
 
-	if restartmc:
+	if not norestartmc:
 		mc.restart()
 
-	for year in expand(yeararg):
-		for month in expand(montharg):
-			for day in expand(dayarg):
-				for tyme in expand(timearg):
-					datetimestr = '%s-%s-%s %s' % (year, month, day, tyme)
-					time_em = str_to_em(datetimestr)
-					for froute in froutes:
-						for direction in directions:
-							for reporttype in reporttypes:
-								print '-', datetimestr, froute, direction, reporttype, '-'
-								if reporttype == 't':
-									report = traffic.get_traffics_impl(froute, direction, datazoom, time_em, log_=dolog)
-								elif reporttype == 'l':
-									report = traffic.get_recent_vehicle_locations_impl(froute, direction, datazoom, time_em, log_=dolog)
-								else:
-									raise Exception()
-
-	if doprint:
-		pprint.pprint(report)
-
+	stdout_is_a_tty = os.isatty(sys.stdout.fileno())
+	t0 = time.time()
+	date_time_combos = list(product(expand(yeararg), expand(montharg), expand(dayarg), expand(timearg)))
+	for i, (year, month, day, tyme) in enumerate(date_time_combos):
+		datetimestr = '%s-%s-%s %s' % (year, month, day, tyme)
+		time_em = str_to_em(datetimestr)
+		for froute in froutes:
+			for direction in directions:
+				for reporttype in reporttypes:
+					print '-', datetimestr, froute, direction, reporttype, '-'
+					if not stdout_is_a_tty:
+						printerr('-', datetimestr, froute, direction, reporttype, '-')
+					print_est_time_remaining('', t0, i, len(date_time_combos))
+					if reporttype == 't':
+						report = traffic.get_traffics_impl(froute, direction, datazoom, time_em, log_=dolog)
+					elif reporttype == 'l':
+						report = traffic.get_recent_vehicle_locations_impl(froute, direction, datazoom, time_em, log_=dolog)
+					else:
+						raise Exception()
+					if doprint:
+						pprint.pprint(report)
 
 
