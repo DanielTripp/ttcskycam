@@ -269,6 +269,10 @@ def makevi(pos_, timestr_, *args_):
 		
 	return r 
 
+def same_vid(vis_):
+	assert all(isinstance(vi, VehicleInfo) for vi in vis_)
+	return len(set(vi.vehicle_id for vi in vis_)) <= 1
+
 if __name__ == '__main__':
 
 	vi = make_vi(mofr=1000)
