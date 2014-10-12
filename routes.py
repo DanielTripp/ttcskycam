@@ -30,8 +30,8 @@ for fudgeroute, configroutes in FUDGEROUTE_TO_CONFIGROUTES.items():
 	for configroute in configroutes:
 		CONFIGROUTE_TO_FUDGEROUTES[configroute].append(fudgeroute)
 
-SUBWAY_FUDGEROUTES = ['bloor_danforth', 'yonge_university_spadina']
-NON_SUBWAY_FUDGEROUTES = FUDGEROUTE_TO_CONFIGROUTES.keys()
+SUBWAY_FUDGEROUTES = sorted(['bloor_danforth', 'yonge_university_spadina'])
+NON_SUBWAY_FUDGEROUTES = sorted(FUDGEROUTE_TO_CONFIGROUTES.keys())
 FUDGEROUTES = NON_SUBWAY_FUDGEROUTES + SUBWAY_FUDGEROUTES
 CONFIGROUTES = set(reduce(lambda x, y: x + y, FUDGEROUTE_TO_CONFIGROUTES.values(), []))
 
