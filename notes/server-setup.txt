@@ -60,6 +60,9 @@ apt-get -y install graphviz
 apt-get -y install postgresql-contrib
 apt-get -y install python-pip
 
+more packages:
+fail2ban
+
 
 sudo passwd postgres
 sudo passwd root
