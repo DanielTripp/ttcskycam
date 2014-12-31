@@ -18,22 +18,22 @@ if __name__ == '__main__':
 	printerr('... done.')
 
 	do_all = 0
-	do_print = 1
+	do_print = 0
 
-	for day in ['2014-09-04']:
+	for day in ['2014-09-12']:
 		for hour in (range(24) if do_all else (10,)):
-			for minute in ((0, 30) if do_all else (0,)):
+			for minute in ((0, 30) if do_all else range(10)):
 				minute_t0 = time.time()
 				tstr = '%s %02d:%02d' % (day, hour, minute)
 				t = str_to_em(tstr)
 				traffic_secs = 0; locations_secs = 0
-				for froute in (routes.NON_SUBWAY_FUDGEROUTES if do_all else routes.NON_SUBWAY_FUDGEROUTES):
+				for froute in (routes.NON_SUBWAY_FUDGEROUTES if do_all else ['queen', 'king', 'dufferin']):
 					for direction in ((0, 1) if do_all else (0, 1)):
 						printerr(tstr, froute, direction, '...')
 
 						db.get_vid_to_vis_bothdirs(froute, 30, t)
 
-						for reporttype in (['traffic', 'locations'] if do_all else ['locations']):
+						for reporttype in (['locations', 'traffic'] if do_all else ['traffic', 'locations']):
 							reporttype_t0 = time.time()
 							print tstr, froute, direction, ('%s:' % reporttype)
 							r = reports.calc_report_obj(reporttype, froute, direction, c.MIN_DATAZOOM, t, log_=log)

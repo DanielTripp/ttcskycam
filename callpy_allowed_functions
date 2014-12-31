@@ -29,3 +29,4 @@ debug_reports.write_to_file
 debug_reports.read_from_file
 debug_reports.write_to_db
 debug_reports.restart_memcache_and_wsgi
+debug_reports.get_froute_and_dir_and_datetimestr

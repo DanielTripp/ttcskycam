@@ -183,12 +183,18 @@ function radio_val(groupname_) {
 	return $('input[name='+groupname_+']:checked').val();
 }
 
+function set_radio_val(groupname_, newval_) {
+	$('input:radio[name='+groupname_+']').val([newval_]);
+	var s = 'input[name='+groupname_+']:checked';
+	$(s).click();
+}
+
 function get_value(textfieldname_) {
 	return $("#"+textfieldname_).val();
 }
 
 function set_value(textfieldname_, value_) {
-	return $("#"+textfieldname_).val(value_);
+	return $("#"+textfieldname_).val(value_).trigger('input');
 }
 
 function is_selected(checkboxname_) {
@@ -196,7 +202,9 @@ function is_selected(checkboxname_) {
 }
 
 function set_selected(checkboxname_, selected_) {
-	return $('#'+checkboxname_).prop('checked', selected_);
+	var r = $('#'+checkboxname_).prop('checked', selected_);
+	$('#'+checkboxname_).prop('checked', selected_);
+	return r;
 }
 
 function set_visible(objectid_, visible_) {
@@ -869,13 +877,26 @@ function sleep(sleepMillis_){
 }
 
 function bind_text_control_to_localstorage(textarea_id_) {
-	var storage_key = document.URL+' - '+textarea_id_;
+	var storage_key = document.URL+' - textcontrol:'+textarea_id_;
 	var stored_val = localStorage.getItem(storage_key);
 	if(stored_val != null) {
 		set_value(textarea_id_, stored_val);
 	}
-	$('#'+textarea_id_).bind('input propertychange', function() {
+	$('#'+textarea_id_).bind('propertychange keyup input paste', function() {
 		localStorage.setItem(storage_key, get_value(textarea_id_));
+	});
+}
+
+function bind_radio_buttons_to_localstorage(radiogroupname_) {
+	var storage_key = document.URL+' - radiogroup:'+radiogroupname_;
+	var stored_val = localStorage.getItem(storage_key);
+	if(stored_val != null) {
+		set_radio_val(radiogroupname_, stored_val);
+	}
+	$("input[type=radio][name='" + radiogroupname_ + "']").each(function() {
+		$(this).click(function() { 
+			localStorage.setItem(storage_key, radio_val(radiogroupname_));
+		});
 	});
 }
 

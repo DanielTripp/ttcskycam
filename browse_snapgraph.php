@@ -30,7 +30,7 @@ var g_path_objects = [];
 var g_path_markers = [];
 var g_path_latlngs = null, g_visited_vertex_latlngs = null;
 var g_multisnap_objects = [];
-var g_found_polyline = null, g_found_vertex = null, g_found_posaddr = null;
+var g_found_polyline = null, g_found_vertex_map_objects = null, g_found_posaddr = null;
 
 /** b/c if you doubleclick the map, both 'click' and 'dblclick' events will happen. 
 Thanks to http://stackoverflow.com/questions/13859918/google-map-api-v3-how-to-prevent-mouse-click-event-for-a-marker-when-user-actu */
@@ -481,34 +481,30 @@ function draw_visited_vertexes() {
 }
 
 function get_pathkfactor_from_gui() {
-	if(radio_val('sgname') == 'system') {
-		var rstr = get_value('pathskarg_textfield');
-		if(rstr == '') {
-			return null;
-		} else if(rstr.indexOf(',') != -1) {
-			var splits = rstr.split(',');
-			var intpart = parseInt(splits[0], 10), floatpart = parseFloat(splits[1], 10);
-			if(isInt(floatpart)) {
-				if(floatpart == 1.0) {
-					floatpart += 0.00001;
-				} else {
-					floatpart -= 0.00001;
-				}
+	var rstr = get_value('pathskarg_textfield');
+	if(rstr == '') {
+		return null;
+	} else if(rstr.indexOf(',') != -1) {
+		var splits = rstr.split(',');
+		var intpart = parseInt(splits[0], 10), floatpart = parseFloat(splits[1], 10);
+		if(isInt(floatpart)) {
+			if(floatpart == 1.0) {
+				floatpart += 0.00001;
+			} else {
+				floatpart -= 0.00001;
 			}
-			return [intpart, floatpart];
-		} else {
-			// Passing an int or a float for this 'k' arg mean very different things.  
-			// Javascript doesn't have different int and float types, but due to the encoding that 
-			// happens via callpy / window.JSON.stringify(), an int in the GUI will show up on the server 
-			// side as an int, and a float as a float. 
-			var r = parseFloat(rstr, 10);
-			if(r < 1.0) {
-				throw "path k factor should be >= 1.0";
-			}
-			return r;
 		}
+		return [intpart, floatpart];
 	} else {
-		return 1;
+		// Passing an int or a float for this 'k' arg mean very different things.  
+		// Javascript doesn't have different int and float types, but due to the encoding that 
+		// happens via callpy / window.JSON.stringify(), an int in the GUI will show up on the server 
+		// side as an int, and a float as a float. 
+		var r = parseFloat(rstr, 10);
+		if(r < 1.0) {
+			throw "path k factor should be >= 1.0";
+		}
+		return r;
 	}
 }
 
@@ -562,9 +558,11 @@ function forget_found_polyline() {
 }
 
 function forget_found_vertex() {
-	if(g_found_vertex != null) {
-		g_found_vertex.setMap(null);
-		g_found_vertex = null;
+	if(g_found_vertex_map_objects != null) {
+		g_found_vertex_map_objects.forEach(function(e) {
+			e.setMap(null);
+		});
+		g_found_vertex_map_objects = null;
 	}
 }
 
@@ -773,9 +771,13 @@ function get_vert_pos_from_server(vertname_or_idx_) {
 				alert('Vertex not found.');
 			} else {
 				var latlng = google_LatLng(latlng__);
-				g_found_vertex = new google.maps.Circle({map: g_map, center: latlng, zIndex: 1, 
-						radius: 200, fillColor: 'rgb(255,230,0)', fillOpacity: 0.6, strokeOpacity: 0});
-				google.maps.event.addListener(g_found_vertex, 'click', forget_found_vertex);
+				g_found_vertex_map_objects = [];
+				[50, 100, 200].forEach(function(radius) {
+					var circle = new google.maps.Circle({map: g_map, center: latlng, zIndex: 1, 
+							radius: radius, fillColor: 'rgb(255,230,0)', fillOpacity: 0.3, strokeOpacity: 0});
+					google.maps.event.addListener(circle, 'click', forget_found_vertex);
+					g_found_vertex_map_objects.push(circle);
+				});
 				g_map.panTo(latlng);
 			}
 		}
@@ -819,12 +821,12 @@ function get_posaddr_latlng_from_server(posaddr_str_) {
   <body onload="initialize()" >
 		<div id="map_canvas" style="width:100%; height:100%"></div>
 		<br>
-		Find polyline by name:<input type="text" size="10" name="plinename_field" id="plinename_field" value="790"/> <input type="button" id="plinename_button" onclick="find_pline(get_value('plinename_field'), true)" value="Ok" /> 
-		| Find vertex ... by name:<input type="text" size="10" name="vertname_field" id="vertname_field" value="0"/> <input type="button" id="vertname_button" onclick="on_vertname_button_clicked()" value="Ok" /> 
-		... by index:<input type="text" size="5" name="vertidx_field" id="vertidx_field" value="0"/> <input type="button" id="vertidx_button" onclick="on_vertidx_button_clicked()" value="Ok" /> 
-		| Find PosAddr: <input type="text" size="30" id="posaddr_field" value="PosAddr('bathurst', 35, 0.436)"/> <input type="button" id="posaddr_button" onclick="on_posaddr_button_clicked()" value="Ok" />
-		| Snap radius: <input id="snap_radius_textfield" size="5" /> 
+		Find pline by name:<input type="text" size="10" name="plinename_field" id="plinename_field" value="790"/> <input type="button" id="plinename_button" onclick="find_pline(get_value('plinename_field'), true)" value="Ok" /> 
+		| Find vert ... by name:<input type="text" size="10" name="vertname_field" id="vertname_field" value="0"/> <input type="button" id="vertname_button" onclick="on_vertname_button_clicked()" value="Ok" /> 
+		... by idx:<input type="text" size="5" name="vertidx_field" id="vertidx_field" value="0"/> <input type="button" id="vertidx_button" onclick="on_vertidx_button_clicked()" value="Ok" /> 
+		| Find PosAddr: <input type="text" size="40" id="posaddr_field" value="PosAddr('bathurst', 35, 0.436)"/> <input type="button" id="posaddr_button" onclick="on_posaddr_button_clicked()" value="Ok" />
 		<br>
+		Snap radius: <input id="snap_radius_textfield" size="5" /> | 
 		<input id="streets_button" type="radio" name="sgname" value="streets" onclick="on_sgname_changed()"  />
 		<label for="streets_button">streets</label>
 		<input id="tracks_button" type="radio" name="sgname" value="tracks" onclick="on_sgname_changed()" />

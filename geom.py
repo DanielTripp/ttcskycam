@@ -89,7 +89,8 @@ class LatLng:
 	# raise an exception.
 	def heading(self, fore_):
 		ang_degrees = math.degrees(self.abs_angle(fore_))
-		return degrees_to_heading(ang_degrees)
+		r = degrees_to_heading(ang_degrees)
+		return r
 
 	def avg(self, other_, ratio_=0.5):
 		assert isinstance(other_, LatLng)

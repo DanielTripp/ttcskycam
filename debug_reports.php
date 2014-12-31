@@ -265,16 +265,20 @@ function update_model_text_view_textarea() {
 }
 
 function update_model_text_view_desc() {
-	var time_span_secs = 0.0;
-	for(var i=1; i<g_model.vis.length; i++) {
-		var vi = g_model.vis[i];
-		time_span_secs += vi.time_secs;
+	if(g_model.vis.length == 0) {
+		set_contents('div_model_text_view_desc', '0 vis');
+	} else {
+		var time_span_secs = 0.0;
+		for(var i=1; i<g_model.vis.length; i++) {
+			var vi = g_model.vis[i];
+			time_span_secs += vi.time_secs;
+		}
+		var start_time_secs = g_model.vis[0].time_secs;
+		var end_time_secs = start_time_secs + time_span_secs;
+		set_contents('div_model_text_view_desc', sprintf('%d vis, %s, %s, %s to %s', 
+				g_model.vis.length, g_model.fudgeroute, g_model.vehicle_type, 
+				get_minutes_fraction_html(start_time_secs), get_minutes_fraction_html(end_time_secs)));
 	}
-	var start_time_secs = g_model.vis[0].time_secs;
-	var end_time_secs = start_time_secs + time_span_secs;
-	set_contents('div_model_text_view_desc', sprintf('%d vis, %s, %s, %s to %s', 
-			g_model.vis.length, g_model.fudgeroute, g_model.vehicle_type, 
-			get_minutes_fraction_html(start_time_secs), get_minutes_fraction_html(end_time_secs)));
 }
 
 function get_minutes_fraction_html(secs_) {

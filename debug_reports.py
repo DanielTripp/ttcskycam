@@ -90,6 +90,13 @@ def restart_wsgi_process():
 	# as per https://code.google.com/p/modwsgi/wiki/ConfigurationDirectives > shutdown-timeout.
 	os.kill(os.getpid(), signal.SIGINT)
 
+def get_froute_and_dir_and_datetimestr():
+	froute_and_dir = db.get_debug_reports_froute_and_dir(SANDBOX_REPORT_TIME_EM)
+	if froute_and_dir is None:
+		return None
+	else:
+		return list(froute_and_dir) + [em_to_str_ymdhm(SANDBOX_REPORT_TIME_EM)]
+
 if __name__ == '__main__':
 
 	pass
