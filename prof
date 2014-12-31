@@ -5,7 +5,7 @@ if [ "$#" -lt 1 ] ; then
 	exit 1
 fi
 
-python -O -m cProfile -o /tmp/out.profile $* && gprof2dot.py -f pstats /tmp/out.profile | dot -Tsvg -o profiler-output.svg && ./add-panzoom-to-svg.py profiler-output.svg
+python -O -m cProfile -o /tmp/out.profile "$@" && gprof2dot.py -f pstats /tmp/out.profile | dot -Tsvg -o profiler-output.svg && ./add-panzoom-to-svg.py profiler-output.svg
 
 
 

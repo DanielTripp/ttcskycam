@@ -239,9 +239,6 @@ class SystemSnapGraph(snapgraph.SnapGraph):
 			self.pcp_vert2vert_distsnpaths[vert1idx][vert2idx] = distsnpaths
 			self.pcp_vert2vert_distsnpaths[vert2idx][vert1idx] = self.get_reverse_dir_distsnpaths(distsnpaths)
 			print_est_time_remaining('build_pcp_vert2vert_distsnpaths', t0, i, len(vert_combos), 100)
-			if 0: # tdr 
-				if i > 200:
-					break
 
 	@staticmethod
 	def get_reverse_dir_distsnpaths(distsnpaths_):

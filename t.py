@@ -8,8 +8,15 @@ import numpy as np
 
 if __name__ == '__main__':
 
-	sg = system.get_snapgraph()
-	#sg.build_paths_db_get_snap_info()
-	sg.build_paths_db_get_stop2stop_distsnpaths()
+	import multiproc
 
+	g_x = 1
+
+	def f():
+		global g_x
+		g_x = 2
+
+	multiproc.run(3, f, [()])
+
+	print g_x
 

@@ -25,7 +25,7 @@ def get_connected_vert_latlngs(sgname_, vertid_):
 	return [vert.pos() for vert in get_sg(sgname_).get_connected_vertexes(vertid_)]
 
 def find_multipath(sgname_, latlngs_):
-	path = get_sg(sgname_).find_multipath(latlngs_)[1]
+	path = get_sg(sgname_).find_multipath(latlngs_)
 	return (path.latlngs() if path is not None else None)
 
 def find_paths(sgname_, startlatlng_, destlatlng_, multisnap_, snap_tolerance_, k_, get_visited_vertexes_):

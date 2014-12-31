@@ -14,14 +14,18 @@ import numpy as np
 
 if __name__ == '__main__':
 
-	opts, args = getopt.getopt(sys.argv[1:], '', ['print', 'datazoom=', 'log', 'norestartmc'])
+	opts, args = getopt.getopt(sys.argv[1:], '', ['print', 'datazoom=', 'log', 'norestartmc', 'locsbyvid'])
 	if len(args) != 4:
-		sys.exit('Need 4 args: reporttype(s), froute(s), direction(s), and date/time(s).')
+		printerr('Usage:')
+		printerr('Mandatory args: reporttype(s), froute(s), direction(s), and date/time(s).')
+		printerr('Option args: --print, --datazoom=, --log, --norestartmc')
+		sys.exit(1)
 
 	doprint = get_opt(opts, 'print')
 	datazoom = get_opt(opts, 'datazoom') or 0
 	dolog = get_opt(opts, 'log')
 	norestartmc = get_opt(opts, 'norestartmc')
+	locsbyvid = get_opt(opts, 'locsbyvid')
 
 	reporttypes, froutes, directions, times = args
 
@@ -74,14 +78,30 @@ if __name__ == '__main__':
 		else:
 			return [str_]
 
+	def get_locations_by_vid(report_):
+		r = defaultdict(list)
+		for timeslice in report_:
+			for vi in timeslice[1:]:
+				r[vi.vehicle_id].append(vi)
+		return dict(r)
+
 	if not norestartmc:
 		mc.restart()
 
+	t0 = time.time()
+	streets.get_snapgraph()
+	tracks.get_snapgraph()
+	print 'Time to get sgs: %d seconds.' % (time.time() - t0)
+
 	stdout_is_a_tty = os.isatty(sys.stdout.fileno())
 	t0 = time.time()
-	date_time_combos = list(product(expand(yeararg), expand(montharg), expand(dayarg), expand(timearg)))
-	for i, (year, month, day, tyme) in enumerate(date_time_combos):
-		datetimestr = '%s-%s-%s %s' % (year, month, day, tyme)
+	date_field_combos = list(product(expand(yeararg), expand(montharg), expand(dayarg), expand(timearg)))
+	datetimestrs = ['%s-%s-%s %s' % (year, month, day, tyme) for year, month, day, tyme in date_field_combos]
+	printerr('Will calculate %d date/times:' % len(datetimestrs))
+	for datetimestr in datetimestrs:
+		printerr(datetimestr)
+	printerr('--')
+	for i, datetimestr in enumerate(datetimestrs):
 		time_em = str_to_em(datetimestr)
 		for froute in froutes:
 			for direction in directions:
@@ -89,14 +109,17 @@ if __name__ == '__main__':
 					print '-', datetimestr, froute, direction, reporttype, '-'
 					if not stdout_is_a_tty:
 						printerr('-', datetimestr, froute, direction, reporttype, '-')
-					print_est_time_remaining('', t0, i, len(date_time_combos))
+					print_est_time_remaining('', t0, i, len(datetimestrs))
 					if reporttype == 't':
 						report = traffic.get_traffics_impl(froute, direction, datazoom, time_em, log_=dolog)
 					elif reporttype == 'l':
 						report = traffic.get_recent_vehicle_locations_impl(froute, direction, datazoom, time_em, log_=dolog)
+						if locsbyvid:
+							report = get_locations_by_vid(report)
 					else:
 						raise Exception()
 					if doprint:
 						pprint.pprint(report)
+	printerr('All reports took %.3f seconds.' % (time.time() - t0))
 
 

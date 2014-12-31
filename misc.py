@@ -19,6 +19,9 @@ def em_to_str(t_):
 def em_to_str_ymdhms(t_):
 	return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t_/1000))
 
+def em_to_str_ymdhm(t_):
+	return time.strftime('%Y-%m-%d %H:%M', time.localtime(t_/1000))
+
 def em_to_str_millis(t_):
 	format = '%Y-%m-%d %H:%M:%S'
 	secs_formatted = time.strftime(format, time.localtime(t_/1000))
@@ -250,12 +253,12 @@ def get_maximal_sublists3(list_, key_, returnidxes=False, keybyindex=False):
 
 def uniq(seq_):
 	first_elem = True
-	last_val = None
+	prev_val = None
 	r = []
 	for e in seq_:
-		if first_elem or (e != last_val):
+		if first_elem or (e != prev_val):
 			r.append(e)
-		last_val = e
+		prev_val = e
 		first_elem = False
 	return r
 
@@ -713,12 +716,14 @@ def writefile(filename_, contents_):
 	with open(filename_, 'w') as fout:
 		return fout.write(contents_)
 
+# Like the builtin min() but returns None if the arg iterable is empty (instead of throwing a value error).
 def min2(seq_, key=None):
 	try:
 		return min(seq_, key=(key if key is not None else lambda x: x))
 	except ValueError: # not sure if I should depend on this behaviour. 
 		return None
 
+# Like the builtin max() but returns None if the arg iterable is empty (instead of throwing a value error).
 def max2(seq_, key=None):
 	try:
 		return max(seq_, key=(key if key is not None else lambda x: x))
@@ -891,6 +896,9 @@ def is_seq_of(obj_, type_or_types_):
 def get_common_prefix(seq1_, seq2_):
 	return [i[0] for i in takewhile(lambda elems: len(set(elems)) == 1, izip(seq1_, seq2_))]
 
+def is_prefix(short_, long_):
+	return (get_common_prefix(short_, long_) == short_)
+
 def rein_in(x_, min_, max_):
 	if x_ < min_:
 		return min_
@@ -988,7 +996,96 @@ def is_sublist(sublist_, list_):
 			return True
 
 	return False
-	
+
+
+# This is limited.  For example, it won't handle item deletions in the source list unless they're in the 
+# viewed part of the list.
+# Thanks to http://stackoverflow.com/a/3485490/321556
+class ListView(MutableSequence):
+
+	def __init__(self, srclist, startidx, ourlen_):
+		self.srclist = srclist
+		self.startidx = startidx
+		self.ourlen = (ourlen_ if ourlen_ is not None else len(srclist) - startidx)
+		self.srclist_len = len(srclist)
+
+	def __len__(self):
+		self._deal_with_srclist_size_change()
+		return self.ourlen
+
+	def _adj(self, i, needstoexist=True):
+		if i < 0:
+			i += self.ourlen
+		r = i + self.startidx
+		if needstoexist and (r < self.startidx or r >= self.startidx + self.ourlen):
+			raise IndexError()
+		return r
+
+	def __getitem__(self, i):
+		self._deal_with_srclist_size_change()
+		if isinstance(i, slice):
+			start = 0 if i.start is None else (i.start if i.start >= 0 else self.ourlen + i.start)
+			stop = self.ourlen if i.stop is None else (i.stop if i.stop >= 0 else self.ourlen + i.stop)
+			step = 1 if i.step is None else i.step
+			return self.srclist[self._adj(start, False) : self._adj(stop, False) : step]
+		else:
+			return self.srclist[self._adj(i)]
+
+	def __setitem__(self, i, v):
+		self._deal_with_srclist_size_change()
+		if isinstance(i, slice):
+			start = 0 if i.start is None else (i.start if i.start >= 0 else self.ourlen + i.start)
+			stop = self.ourlen if i.stop is None else (i.stop if i.stop >= 0 else self.ourlen + i.stop)
+			if i.step not in (1, None):
+				raise Exception('step not supported.')
+			slicelen = stop - start
+			if slicelen > 0:
+				numvals = 0
+				for idx, val in enumerate(v):
+					numvals += 1
+					if idx >= slicelen:
+						self.insert(start+idx, val)
+					else:
+						self[start+idx] = val
+				for j in range(slicelen - numvals):
+					del self[start + numvals]
+		else:
+			self.srclist[self._adj(i)] = v
+
+	def __delitem__(self, i):
+		self._deal_with_srclist_size_change()
+		del self.srclist[self._adj(i)]
+		self.ourlen -= 1
+
+	def insert(self, i, v):
+		self._deal_with_srclist_size_change()
+		self.srclist.insert(self._adj(i, False), v)
+		self.ourlen += 1
+
+	def __str__(self):
+		self._deal_with_srclist_size_change()
+		return list(self).__str__()
+
+	def __repr__(self):
+		self._deal_with_srclist_size_change()
+		return list(self).__repr__()
+
+	def sort(self, key=None):
+		self._deal_with_srclist_size_change()
+		copy = list(self)
+		copy.sort(key=key)
+		for i, v in enumerate(copy):
+			self[i] = v
+
+	def _deal_with_srclist_size_change(self):
+		new_srclist_len = len(self.srclist)
+		if new_srclist_len != self.srclist_len:
+			self.ourlen += (new_srclist_len - self.srclist_len)
+			self.srclist_len = new_srclist_len
+
+def string_to_file(filename_, str_):
+	with open(filename_, 'w') as fout:
+		fout.write(str_)
 
 if __name__ == '__main__':
 

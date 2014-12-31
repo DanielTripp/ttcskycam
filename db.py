@@ -27,7 +27,7 @@ create index reports_idx_3 on reports ( time desc, time_inserted_str desc ) ;
 
 '''
 
-import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket, datetime, calendar, math
+import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket, datetime, calendar, math, copy, cPickle, threading
 from collections import defaultdict, Sequence
 from lru_cache import lru_cache
 import vinfo, geom, grid, traffic, routes, yards, tracks, streets, snapgraph, predictions, mc, c, util
@@ -46,6 +46,7 @@ DISABLE_GRAPH_PATHS = False
 
 g_conn = None
 g_forced_hostmoniker = None
+g_lock = threading.RLock()
 
 g_debug_gridsquaresys = grid.GridSquareSystem(None, None, None, None, None)
 
@@ -109,6 +110,14 @@ def forget_connection():
 	global g_conn
 	g_conn = None
 
+def lock(f):
+	'''
+	'''
+	def new_f(*args, **kwds):
+		with g_lock:
+			return f(*args, **kwds)
+	return new_f
+
 def trans(f):
 	"""Decorator that calls commit() after the method finishes normally, or rollback() if an
 	exception is raised.  
@@ -126,6 +135,7 @@ def trans(f):
 			raise
 	return new_f
 
+@lock
 @trans
 def insert_vehicle_info(vi_):
 	curs = conn().cursor()
@@ -134,6 +144,7 @@ def insert_vehicle_info(vi_):
 	curs.execute('INSERT INTO ttc_vehicle_locations VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,default,%s,%s,%s,%s)', cols)
 	curs.close()
 
+@lock
 def vi_select_generator(froute_, end_time_em_, start_time_em_, dir_=None, include_unpredictables_=False, vid_=None, \
 			forward_in_time_order_=False, include_blank_fudgeroute_=True):
 	assert vid_ is None or len(vid_) > 0
@@ -174,10 +185,9 @@ MIN_DESIRABLE_DIR_STRETCH_LEN = 6
 # I commented on this at https://groups.google.com/forum/#!topic/nextbus-api-discuss/mJHTmi4aLBw/discussion
 
 # Note [1]: Here we attempt to remove what we consider trivial and unimportant (or even misleading) stretches of vis.
-# Currently using a rule that less than 6 vis or 300 meters is undesirable.  Doing this because of inaccurate GPS readings
-# or other things, especially after our 'dirtag fixing' (where we ignore the direction of the dirtag reported by NextBus and
-# set it to one determined by mofr changes).  This can result in a vehicle appearing to reverse direction for a short time
-# before continuing in it's original direction, but the reality is not so.
+# Currently using a rule that less than 6 vis or 300 meters is undesirable.  We try to fix GPS noise small and large 
+# so a stretch is unlikely to be considered undesirable because of that.  But I think that showing a vehicle for a 
+# small stretch would not be useful to the user and might confuse them too. 
 #
 # When this function is used for vehicle locations (as opposed to color-coded traffic) and it involves vehicles taking detours,
 # a less than desirable situation can occur sometimes.  If a vehicle takes a detour and the angle of the streets in that area
@@ -209,54 +219,143 @@ def get_vid_to_vis_singledir(fudge_route_, dir_, num_minutes_, end_time_em_, log
 		r[vid] = [vi for vi in vis if vi.dir_tag_int == dir_]
 	return r
 
-def t():
-	old_time = str_to_em('2014-09-26 12:00')
-	froute = 'dundas'
-	old_vid_to_vis = get_vid_to_vis_bothdirs(froute, traffic.TIME_WINDOW_MINUTES, old_time)
-	new_time = old_time + 1000*60
-	new_vis = list(vi_select_generator(froute, new_time, old_time+1, None, True))
-	new_vid_to_vis = file_under_key(new_vis, lambda vi: vi.vehicle_id)
-	for vid, vis in new_vid_to_vis.items():
-		vis.sort(key=lambda x: x.time)
-		work_around_secssincereport_bug(vis)
-		adopt_or_discard_vis_with_blank_froutes(fudge_route_, vis, log_=log_) # We have to call this before the filtering on 
-				# widemofr below, because to get a widemofr we need a fudgeroute to refer to. 
-		vis[:] = [vi for vi in vis if vi.widemofr != -1]
-		yards.remove_vehicles_in_yards(vis)
-		remove_time_duplicates(vis)
-		remove_bad_gps_readings_single_vid(vis, log_=log_)
-		fix_doubleback_gps_noise(vis)
-		fix_dirtags(vis)
-		vis_grouped_by_dir = get_maximal_sublists3(vis, lambda vi: vi.dir_tag_int) # See note [1] above
-		vis_desirables_only = filter(lambda e: is_vis_stretch_desirable(e, log_), vis_grouped_by_dir)
-		vis[:] = sum(vis_desirables_only, [])
-		if len(vis) == 0: del vid_to_vis[vid]
+def get_vid_to_vis_bothdirs_patch(vid_to_pvis_, froute_, num_minutes_, old_end_time_, new_end_time_, log_=False):
+	#vid_to_pvis = copy.deepcopy(vid_to_pvis_) # tdr? not sure. just don't modify anything cached. 
+	new_vis = list(vi_select_generator(froute_, new_end_time_, old_end_time_+1, None, True))
+	vid_to_new_vis = file_under_key(new_vis, lambda vi: vi.vehicle_id)
+	redo_vids = set()
+	#print 'raw new vis:' # tdr 
+	#pprint.pprint(vid_to_new_vis) # tdr 
+	for vid, new_vis in vid_to_new_vis.items():
+		pvis = vid_to_pvis_[vid]
+		new_vis.sort(key=lambda x: x.time)
+		work_around_secssincereport_bug(new_vis)
+		adopt_or_discard_vis_with_blank_froutes_patch(froute_, pvis.stage0, new_vis, log_=log_) # We have to call 
+				# this before the filtering on widemofr below, because to get a widemofr we need a fudgeroute to refer to. 
+		new_vis[:] = [vi for vi in new_vis if vi.widemofr != -1]
+		yards.remove_vehicles_in_yards(new_vis)
+		remove_time_duplicates_patch(pvis.stage1, new_vis)
+
+		if new_vis:
+			plausibility_groups = pvis.plausibility_groups
+			if log_: printerr('vid %s - choosing plausibility group, pre-patch:' % vid)
+			old_best_group = get_best_plausibility_group(plausibility_groups, log_=log_)
+			new_overshoot_start_time = get_history_overshoot_start_time(new_end_time_, num_minutes_)
+			for group in plausibility_groups:
+				group[:] = [vi for vi in group if vi.time >= new_overshoot_start_time]
+			for new_vi in new_vis:
+				add_vi_to_appropriate_plausibility_group(plausibility_groups, new_vi)
+			if log_: printerr('vid %s - choosing plausibility group, post-patch:' % vid)
+			new_best_group = get_best_plausibility_group(plausibility_groups, log_=log_)
+			plaus_group_changed = (new_best_group is not old_best_group)
+			if log_: printerr('vid %s - plausibility group %s.' % (vid, 'changed' if plaus_group_changed else 'did not change'))
+			if plaus_group_changed:
+				raise Exception('not supported') # tdr but implement first 
+				redo_vids.add(vid)
+				old_vis = []
+				new_vis = new_best_group
+				fix_doubleback_gps_noise(new_vis)
+				fix_dirtags(new_vis)
+				vis_grouped_by_dir = get_maximal_sublists3(vis, lambda vi: vi.dir_tag_int) # See note [1] above
+				desirable_stretches = filter(lambda e: is_dirstretch_desirable(e, log_), vis_grouped_by_dir)
+				vis[:] = sum(desirable_stretches, [])
+			else:
+				all_vis = pvis.stage3 + new_vis
+				fix_doubleback_gps_noise(all_vis, startidx=len(pvis.stage3))
+				fix_dirtags(all_vis, startidx=len(pvis.stage3))
+				new_vis = remove_undesirable_dirstretches_patch(pvis, new_vis, log_=log_)
+		if not new_vis: del vid_to_new_vis[vid]
+	return redo_vids, vid_to_new_vis
+
+# Unlike the non-patch version of this function, this one never removes, it only (maybe) adds, 
+# because the addition of vis can only turn an undesirable stretch into a desirable one - 
+# not the other way around. 
+def remove_undesirable_dirstretches_patch(pvis_, new_vis_, log_=False):
+	if pvis_.dirstretches and new_vis_:
+		all_dirstretches = pvis_.dirstretches[:]
+		for new_vi in new_vis_:
+			if new_vi.dir_tag_int == all_dirstretches[-1][0].dir_tag_int:
+				all_dirstretches[-1].append(new_vi)
+			else:
+				all_dirstretches.append([new_vi])
+		all_desirability_by_dirstretchidx = pvis_.desirability_by_dirstretchidx[:]
+		last_old_dirstretchidx = len(pvis_.dirstretches)-1
+		all_desirability_by_dirstretchidx[last_old_dirstretchidx] = \
+				is_dirstretch_desirable(all_dirstretches[last_old_dirstretchidx], log_=log_)
+		for stretchidx in xrange(last_old_dirstretchidx+1, len(all_dirstretches)):
+			stretch = all_dirstretches[stretchidx]
+			all_desirability_by_dirstretchidx.append(is_dirstretch_desirable(stretch), log_=log_)
+		assert len(all_dirstretches) == len(all_desirability_by_dirstretchidx)
+		if all_desirability_by_dirstretchidx[last_old_dirstretchidx] != pvis_.desirability_by_dirstretchidx[-1]:
+			new_vis = all_dirstretches[last_old_dirstretchidx]
+		else:
+			new_vis = all_dirstretches[last_old_dirstretchidx][len(pvis_.dirstretches[last_old_dirstretchidx]):]
+		new_desirable_dirstretches = [stretch for i, stretch in enumerate(all_dirstretches) if \
+				i > last_old_dirstretchidx and all_desirability_by_dirstretchidx[i]]
+		new_vis += sum(new_desirable_dirstretches, [])
+		return new_vis
+	elif new_vis_:
+		remove_undesirable_dirstretches(new_vis_, None, log_=log_)
+		return new_vis_
+	else:
+		return []
+
+# 'stretch' here means a list of consecutive (time-wise) vis, for a single vehicle, 
+# that have the same direction. 
+def remove_undesirable_dirstretches(vis_, pvis_, log_=False):
+	assert vinfo.same_vid(vis_)
+	dirstretches = get_maximal_sublists3(vis_, lambda vi: vi.dir_tag_int) # See note [1] somewhere 
+	if pvis_ is not None:
+		pvis_.dirstretches = copy.deepcopy(dirstretches)
+	desirability_by_dirstretchidx = [is_dirstretch_desirable(stretch, log_) for stretch in dirstretches]
+	if pvis_ is not None:
+		pvis_.desirability_by_dirstretchidx = copy.deepcopy(desirability_by_dirstretchidx)
+	desirable_dirstretches = [stretch for i, stretch in enumerate(dirstretches) if desirability_by_dirstretchidx[i]]
+	vis_[:] = sum(desirable_dirstretches, [])
+
+class PatchableViList(object):
+
+	def __init__(self):
+		pass
+
+WRITE_PATCHABLES = False
+
+def get_history_overshoot_start_time(end_time_, num_minutes_):
+	start_time = end_time_ - num_minutes_*60*1000
+	return start_time - (end_time_ - start_time)/2
 
 @lru_cache(10)
-def get_vid_to_vis_bothdirs(fudge_route_, num_minutes_, end_time_em_, log_=False):
-	start_time = end_time_em_ - num_minutes_*60*1000
-	vi_list = []
-	vis = list(vi_select_generator(fudge_route_, end_time_em_, start_time-2*MIN_DESIRABLE_DIR_STRETCH_LEN*60*1000, None, True))
+def get_vid_to_vis_bothdirs(froute_, num_minutes_, end_time_, log_=False):
+	all_vids_vis = list(vi_select_generator(froute_, end_time_, get_history_overshoot_start_time(end_time_, num_minutes_), None, True))
 	# We want to get a lot of overshots, because we need a lot of samples in order to determine directions with any certainty.
-	vis += get_outside_overshots(fudge_route_, vis, start_time, False, MIN_DESIRABLE_DIR_STRETCH_LEN-1, log_=log_)
-	vi_list += vis
-	# TODO: maybe get outside overshots /forward/ here too, for the benefit of historical traffic reports.
-	vid_to_vis = file_under_key(vi_list, lambda vi: vi.vehicle_id)
+	vid_to_vis = file_under_key(all_vids_vis, lambda vi: vi.vehicle_id)
+	if WRITE_PATCHABLES: vid_to_pvis = {}
 	for vid, vis in vid_to_vis.items():
+		pvis = PatchableViList() if WRITE_PATCHABLES else None
 		vis.sort(key=lambda x: x.time)
 		work_around_secssincereport_bug(vis)
-		adopt_or_discard_vis_with_blank_froutes(fudge_route_, vis, log_=log_) # We have to call this before the filtering on 
+		if WRITE_PATCHABLES: pvis.stage0 = copy.deepcopy(vis)
+		adopt_or_discard_vis_with_blank_froutes(froute_, vis, log_=log_) # We have to call this before the filtering on 
 				# widemofr below, because to get a widemofr we need a fudgeroute to refer to. 
 		vis[:] = [vi for vi in vis if vi.widemofr != -1]
 		yards.remove_vehicles_in_yards(vis)
+		if WRITE_PATCHABLES: pvis.stage1 = copy.deepcopy(vis)
 		remove_time_duplicates(vis)
-		remove_bad_gps_readings_single_vid(vis, log_=log_)
+		plausibility_groups = get_plausibility_groups(vis)
+		if WRITE_PATCHABLES: pvis.plausibility_groups = copy.deepcopy(plausibility_groups)
+		vis[:] = get_best_plausibility_group(plausibility_groups, log_=log_)
+		if WRITE_PATCHABLES: pvis.stage2 = copy.deepcopy(vis)
 		fix_doubleback_gps_noise(vis)
 		fix_dirtags(vis)
-		vis_grouped_by_dir = get_maximal_sublists3(vis, lambda vi: vi.dir_tag_int) # See note [1] above
-		vis_desirables_only = filter(lambda e: is_vis_stretch_desirable(e, log_), vis_grouped_by_dir)
-		vis[:] = sum(vis_desirables_only, [])
+		if WRITE_PATCHABLES: pvis.stage3 = copy.deepcopy(vis)
+		remove_undesirable_dirstretches(vis, pvis, log_=log_)
+		if WRITE_PATCHABLES:
+			pvis.final = copy.deepcopy(vis)
+			vid_to_pvis[vid] = pvis
 		if len(vis) == 0: del vid_to_vis[vid]
+	if WRITE_PATCHABLES:
+		with open('d-patchable-vid_to_pvis', 'w') as fout:
+			cPickle.dump(vid_to_pvis, fout, cPickle.HIGHEST_PROTOCOL)
 	return vid_to_vis
 
 def adopt_or_discard_vis_with_blank_froutes(froute_, vis_, log_=False):
@@ -265,7 +364,7 @@ def adopt_or_discard_vis_with_blank_froutes(froute_, vis_, log_=False):
 	idxes_to_discard = []
 	for i, vi in enumerate(vis_):
 		if vi.fudgeroute == '':
-			for j in range(i-1, 0, -1):
+			for j in range(i-1, -1, -1):
 				prev_vi = vis_[j]
 				if prev_vi.fudgeroute != '':
 					if vi.time - prev_vi.time < 1000*60*2:
@@ -280,6 +379,32 @@ def adopt_or_discard_vis_with_blank_froutes(froute_, vis_, log_=False):
 	for idx in idxes_to_discard[::-1]:
 		vis_.pop(idx)
 
+def adopt_or_discard_vis_with_blank_froutes_patch(froute_, old_vis_, new_vis_, log_=False):
+	assert len(froute_) > 0 and vinfo.same_vid(old_vis_) and vinfo.same_vid(new_vis_)
+	assert all(is_sorted(x, key=lambda vi: vi.time) for x in (old_vis_, new_vis_))
+	if len(old_vis_) and len(new_vis_):
+		assert old_vis_[-1].time < new_vis_[0].time
+	idxes_to_discard = []
+	for i, vi in enumerate(new_vis_):
+		if vi.fudgeroute == '':
+			for which_vis, j in [('new', k) for k in range(i-1, -1, -1)] + [('old', k) for k in range(len(old_vis_)-1, -1, -1)]:
+				if which_vis == 'new':
+					prev_vi = new_vis_[j]
+				else:
+					prev_vi = old_vis_[j]
+				if prev_vi.fudgeroute != '':
+					if vi.time - prev_vi.time < 1000*60*2:
+						if log_:
+							printerr('Adopting vi w/ blank froute:\n%s' % vi)
+						vi.correct_fudgeroute(froute_)
+					else:
+						if log_:
+							printerr('Discarding vi w/ blank froute:\n%s' % vi)
+						idxes_to_discard.append(i)
+					break
+	for idx in idxes_to_discard[::-1]:
+		new_vis_.pop(idx)
+
 # Can handle multiple vids. 
 def work_around_secssincereport_bug(vis_):
 	assert all(isinstance(e, vinfo.VehicleInfo) for e in vis_)
@@ -289,7 +414,8 @@ def work_around_secssincereport_bug(vis_):
 			vi.calc_time()
 		vis_.sort(key=lambda vi: vi.time)
 
-def is_vis_stretch_desirable(vis_, log_):
+def is_dirstretch_desirable(vis_, log_):
+	assert vinfo.same_vid(vis_) and vinfo.same_dir(vis_)
 	stretch_len_good = (len(vis_) >= MIN_DESIRABLE_DIR_STRETCH_LEN)
 	widemofr_span_good = abs(vis_[0].widemofr - vis_[-1].widemofr) > 300
 	r = (stretch_len_good or widemofr_span_good)
@@ -304,17 +430,30 @@ def is_vis_stretch_desirable(vis_, log_):
 	return r
 
 def remove_time_duplicates(vis_):
-	for i in range(len(vis_)-2, -1, -1): # Removing duplicates by time.  Not sure if this ever happens.
+	for i in range(len(vis_)-1, 0, -1): # Removing duplicates by time.  Not sure if this ever happens.
 			# I think that it could happen if the code that gets overshots is sloppy. 
-		if vis_[i].time == vis_[i+1]:
+		prev_vi = vis_[i-1]
+		if vis_[i].time == prev_vi.time:
 			del vis_[i]
 
-def fix_dirtags(vis_):
+def remove_time_duplicates_patch(old_vis_, new_vis_):
+	for i in range(len(new_vis_)-1, -1, -1): # Removing duplicates by time.  Not sure if this ever happens.
+			# I think that it could happen if the code that gets overshots is sloppy. 
+		if i >= 1:
+			prev_vi = new_vis_[i-1]
+		elif len(old_vis_):
+			prev_vi = old_vis_[-1]
+		else:
+			break
+		if new_vis_[i].time == prev_vi.time:
+			del new_vis_[i]
+
+def fix_dirtags(vis_, startidx=0):
 	assert vinfo.same_vid(vis_)
 	D = 50
 	dirs = [None]*len(vis_)
 	assert all(vi1.time < vi2.time for vi1, vi2 in hopscotch(vis_))
-	for i in range(len(vis_)):
+	for i in range(startidx, len(vis_)):
 		if (i > 0) and (abs(vis_[i-1].widemofr - vis_[i].widemofr) >= D):
 			direction = mofrs_to_dir(vis_[i-1].widemofr, vis_[i].widemofr)
 			assert direction is not None
@@ -483,6 +622,7 @@ def massage_whereclause(whereclause_):
 	return r
 
 # returns a list of lists of VehicleInfo objects.  each sub-list represents a timeslice.  
+@lock
 def query1(whereclause_, maxrows_, interp_):
 	assert type(whereclause_) == str and type(maxrows_) == int and type(interp_) == bool
 	whereclause = massage_whereclause(whereclause_)
@@ -510,14 +650,11 @@ def query1(whereclause_, maxrows_, interp_):
 def make_whereclause_safe(whereclause_):
 	return re.sub('(?i)insert|delete|drop|create|truncate|alter|update|;', '', whereclause_)
 
-# direction_ can be an integer direction (0 or 1) or a pair of LatLngs from which we will infer that integer direction.
+# arg  direction_ can be an integer direction (0 or 1) or a pair of LatLngs from which we will infer that integer direction.
+# returns a list of 'timeslices'.  A timeslice is a list of vis with a timestamp string prepended.
 def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, datazoom_, time_window_end_, log_=False):
-	assert direction_ in (0, 1) or (len(direction_) == 2 and all(isinstance(e, geom.LatLng) for e in direction_))
 	assert (fudgeroute_ in routes.NON_SUBWAY_FUDGEROUTES) and type(num_minutes_) == int and datazoom_ in c.VALID_DATAZOOMS 
-	if direction_ in (0, 1):
-		direction = direction_
-	else:
-		direction = routes.routeinfo(fudgeroute_).dir_from_latlngs(direction_[0], direction_[1])
+	direction = massage_direction(direction_, fudgeroute_)
 	vid_to_vis = get_vid_to_vis_bothdirs(fudgeroute_, num_minutes_, time_window_end_, log_=log_)
 	starttime = time_window_end_ - num_minutes_*60*1000
 	vid_to_interptime_to_vi = {}
@@ -529,7 +666,31 @@ def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, datazoom
 				printerr('\t%s' % vi)
 		vid_to_interptime_to_vi[vid] = \
 				interp(vis, True, True, direction, datazoom_, starttime, time_window_end_, log_=log_)
+	if WRITE_PATCHABLES:
+		with open('d-patchable-vid_to_interptime_to_vi', 'w') as fout:
+			cPickle.dump(vid_to_interptime_to_vi, fout, cPickle.HIGHEST_PROTOCOL)
 	return get_locations_clientside_list(vid_to_interptime_to_vi, starttime, time_window_end_, log_=log_)
+
+def massage_direction(direction_, fudgeroute_):
+	assert direction_ in (0, 1) or (len(direction_) == 2 and all(isinstance(e, geom.LatLng) for e in direction_))
+	if direction_ in (0, 1):
+		return direction_
+	else:
+		return routes.routeinfo(fudgeroute_).dir_from_latlngs(direction_[0], direction_[1])
+
+def get_recent_vehicle_locations_patch(vid_to_pvis_, p_vid_to_interptime_to_vi_, fudgeroute_, num_minutes_, 
+		direction_, datazoom_, old_end_time, new_end_time_, log_=False):
+	direction = massage_direction(direction_, fudgeroute_)
+	redo_vids, vid_to_new_vis = get_vid_to_vis_bothdirs_patch(vid_to_pvis_, fudgeroute_, num_minutes_, 
+			old_end_time_, new_end_time_, log_=log_)
+	if redo_vids: raise Exception('not supported') # tdr but implement first 
+	for vid, new_vis in vid_to_new_vis.iteritems():
+		interp_patch(old_vis, new_vis, direction, datazoom_, starttime, time_window_end_, log_=log_)
+
+# In terms of the non-patch version of interp(), we act like be_clever_ and current_conditions_ are True. 
+# Also unlike the non-patch version, our dir_, datazoom_, start_time_, and end_time_ must not be None.
+def interp_patch(old_vis_, new_vis_, dir_, datazoom_, start_time_, end_time_, log_=False):
+	assert vinfo.same_vid(old_vis_ + new_vis_)
 
 # Return only elements for which predicate is true.  (It's a one-argument predicate.  It takes one element.)
 # Group them as they appeared in input list as runs of trues.
@@ -547,6 +708,7 @@ def get_maximal_sublists(list_, predicate_):
 	return r
 
 # Fetch some rows before startime (or after endtime), to give us something to interpolate with.
+@lock
 def get_outside_overshots(froute_, vilist_, time_window_boundary_, forward_in_time_, n_=1, log_=False):
 	forward_str = ('forward' if forward_in_time_ else 'backward')
 	if not vilist_:
@@ -592,6 +754,7 @@ def num_outside_overshots_already_present(single_vid_vis_, time_window_boundary_
 
 # This function is for when we want to look back far enough to see a change in mofr, so that we can determine the
 # direction of a long-stalled vehicle.
+@lock
 def get_outside_overshots_more(froute_, vis_so_far_, time_window_boundary_, forward_in_time_, log_=False):
 	assert len(set(vi.vehicle_id for vi in vis_so_far_)) <= 1
 	assert set(vi.fudgeroute for vi in vis_so_far_).issubset(set([froute_, '']))
@@ -632,17 +795,22 @@ def group_by_time(vilist_):
 		r[time_idx].append(vi)
 	return r
 
-# Takes a flat list of VehicleInfo objects (all w/ same vid).  Returns a list of lists of Vehicleinfo objects, interpolated.
-# Also, with a date/time string as element 0 in each list.
-#
-# note [1]: This is for the scenario of eg. this function is meant to get dir=1, and we're looking at a vehicle for which raw vis exist
-# at mofr=0 @ 12:00, mofr=1000 @ 12:15, and mofr=1100 @ 12:16.  The vehicle was probably going in dir=0 between
-# 12:00 and 12:15, but that doesn't matter.  What matters is that if we're not careful, we will interpolate inappropriately
-# between 12:00 and 12:15 - though probably just 3 minutes after 12:00 and 3 minutes before 12:15, as 3 minutes is our current
-# hi/lo time gap max for interpolation - you can also see this below.   But does it make sense for us to return something like mofr=67 for 12:01,
-# mofr=134 for 12:02, etc. (making these interpolated returned vis effectively dir=0)?  No it does not.  It's not what the user asked
-# for (they asked for dir=1 vehicles) and it looks awful too - looking at vehicles going both directions on a route is visual chaos and
-# makes it a lot harder to make sense of the dir=1 vehicles that they do want to see.
+# note [1]: This is for the scenario of eg. this function is meant to get 
+# dir=1, and we're looking at a vehicle for which raw vis exist
+# at mofr=0 @ 12:00, mofr=1000 @ 12:15, and mofr=1100 @ 12:16.  The vehicle was 
+# probably going in dir=0 between
+# 12:00 and 12:15, but that doesn't matter.  What matters is that if we're not 
+# careful, we will interpolate inappropriately
+# between 12:00 and 12:15 - though probably just 3 minutes after 12:00 and 3 
+# minutes before 12:15, as 3 minutes is our current
+# hi/lo time gap max for interpolation - you can also see this below.   But 
+# does it make sense for us to return something like mofr=67 for 12:01,
+# mofr=134 for 12:02, etc. (making these interpolated returned vis effectively 
+# dir=0)?  No it does not.  It's not what the user asked
+# for (they asked for dir=1 vehicles) and it looks awful too - looking at 
+# vehicles going both directions on a route is visual chaos and
+# makes it a lot harder to make sense of the dir=1 vehicles that they do want 
+# to see.
 def interp(vis_, be_clever_, current_conditions_, dir_=None, datazoom_=None, start_time_=None, end_time_=None, log_=False):
 	assert isinstance(vis_, Sequence) and vinfo.same_vid(vis_)
 	if len(vis_) == 0:
@@ -824,8 +992,8 @@ def get_grade_stretch_info_impl(vis_, be_clever_, log_):
 				printerr('latlngs / locses for stretch %d:' % stretchi)
 				for latlng, locs in zip(latlngs, locses): 
 					printerr(latlng, locs)
-			dist, path = sg.find_multipath(latlngs, locses, c.GRAPH_SNAP_RADIUS, log_)
-			assert dist is not None and path is not None
+			path = sg.find_multipath(latlngs, vis_[0].vehicle_id, locses, c.GRAPH_SNAP_RADIUS, log_)
+			assert path is not None
 			if log_:
 				printerr('Path for stretch %d:' % stretchi)
 				for piecei, piecesteps in enumerate(path.piecestepses):
@@ -1013,6 +1181,7 @@ def purge(num_days_):
 	purge_delete(num_days_)
 	purge_vacuum()
 
+@lock
 @trans
 def purge_delete(num_days_):
 	curs = conn().cursor()
@@ -1023,6 +1192,7 @@ def purge_delete(num_days_):
 	curs.execute('delete from reports where time < round(extract(epoch from clock_timestamp())*1000) - %d;' % num_millis)
 	curs.close()
 
+@lock
 def purge_vacuum():
 	old_isolation_level = conn().isolation_level
 	conn().set_isolation_level(0)
@@ -1031,6 +1201,7 @@ def purge_vacuum():
 	curs.close()
 	conn().set_isolation_level(old_isolation_level)
 
+@lock
 @trans
 def insert_predictions(predictions_):
 	assert isinstance(predictions_, Sequence)
@@ -1045,6 +1216,7 @@ def insert_predictions(predictions_):
 	curs.close()
 
 # returns list of Prediction 
+@lock
 def get_predictions(froute_, start_stoptag_, dest_stoptag_, time_):
 	assert routes.routeinfo(froute_).are_predictions_recorded(start_stoptag_)
 	time_ = massage_time_arg(time_, 60*1000)
@@ -1073,6 +1245,7 @@ def get_predictions(froute_, start_stoptag_, dest_stoptag_, time_):
 	return r
 
 # a generator.  yields a Prediction.
+@lock
 def get_predictions_gen(froute_, start_stoptag_, dest_stoptag_, time_retrieved_min_, time_retrieved_max_):
 	time_retrieved_min_ = massage_time_arg(time_retrieved_min_)
 	time_retrieved_max_ = massage_time_arg(time_retrieved_max_)
@@ -1123,6 +1296,7 @@ def get_observed_arrival_time_impl(froute_, startstoptag_, deststoptag_, time_):
 	time_arrived = _get_observed_arrival_time_arrival_time(startvi1, startstoptag_, deststoptag_)
 	return {'time_caught': time_caught, 'time_arrived': time_arrived, 'vid': startvi1.vehicle_id}
 
+@lock
 def _get_observed_arrival_time_arrival_time(startvi1_, startstoptag_, deststoptag_):
 	assert isinstance(startvi1_, vinfo.VehicleInfo) and isinstance(startstoptag_, basestring) and isinstance(deststoptag_, basestring)
 	ri = routes.routeinfo(routes.CONFIGROUTE_TO_FUDGEROUTE[startvi1_.route_tag])
@@ -1153,6 +1327,7 @@ def _get_observed_arrival_time_arrival_time(startvi1_, startstoptag_, deststopta
 # 1) rescue from behind (must be a bus),
 # 2) rescue by vehicle in front (i.e. caught vehicle short turns, passengers transfer onto vehicle in front)
 # 3) rescue from the side (i.e rescue bus shows up not from behind.  I have never seen this, in person or in the data.)
+@lock
 def _get_observed_arrival_time_caught_vehicle_passing_vis(froute_, startstoptag_, deststoptag_, time_):
 	ri = routes.routeinfo(froute_)
 	startmofr = ri.get_stop(startstoptag_).mofr; destmofr = ri.get_stop(deststoptag_).mofr
@@ -1181,6 +1356,7 @@ def _get_observed_arrival_time_caught_vehicle_passing_vis(froute_, startstoptag_
 # returns report json, always non-None.  raises ReportNotFoundException if report does not exist in db. 
 @lru_cache(10)
 @mc.decorate
+@lock
 def get_report(report_type_, froute_, dir_, datazoom_, time_):
 	assert isinstance(time_, long)
 	curs = conn().cursor()
@@ -1207,6 +1383,7 @@ def get_latest_report_time(froute_, dir_):
 		set_latest_report_time_in_memcache(froute_, dir_, r)
 		return r
 
+@lock
 def get_latest_report_time_impl(froute_, dir_):
 	curs = conn().cursor('cursor_%d' % (int(time.time()*1000)))
 	try:
@@ -1251,6 +1428,7 @@ def insert_reports(froute_, dir_, time_, reporttype_to_datazoom_to_reportdataobj
 # confusing if when the user changes zoom they might be forced back in time.  
 # That is the main issue - inserting all datazooms at the same time.  We insert 
 # both report types at the same time too, but that is less important.
+@lock
 @trans
 def insert_reports_into_db(froute_, dir_, time_, reporttype_to_datazoom_to_reportjson_):
 	time_inserted_str = now_str()
@@ -1287,6 +1465,7 @@ def insert_demo_locations(froute_, demo_report_timestr_, vid_, locations_):
 def demo_froute_to_croute(froute_):
 	return routes.FUDGEROUTE_TO_CONFIGROUTES[froute_][0]
 
+@lock
 @trans
 def delete_debug_reports_locations(report_time_em_):
 	if report_time_em_ < now_em() + 1000*60*60*24*365*10:
@@ -1298,6 +1477,7 @@ def delete_debug_reports_locations(report_time_em_):
 			[delete_min_time, delete_max_time])
 	curs.close()
 
+@lock
 @trans
 def delete_debug_reports_reports(report_time_em_):
 	if report_time_em_ < now_em() + 1000*60*60*24*365*10:
@@ -1309,6 +1489,34 @@ def delete_debug_reports_reports(report_time_em_):
 			[delete_min_time, delete_max_time, c.VERSION])
 	curs.close()
 
+# This is not precise, but hopefully will be helpful for the /developer/ using traffic.php. 
+@lock
+@trans
+def get_debug_reports_froute_and_dir(report_time_):
+	curs = conn().cursor()
+	curs.execute('''select froute, char_length(report_json) from reports where time = %s 
+			and report_type = 'locations' and datazoom = 0 and app_version = 'dev' order by direction''', [report_time_])
+	rows = []
+	while True:
+		row = curs.fetchone()
+		if row:
+			rows.append(row)
+		else:
+			break
+	curs.close()
+	if len(rows) not in (0, 2):
+		raise Exception('Was expecting either 0 or 2 rows.')
+	if len(rows) == 0:
+		return None
+	else:
+		if rows[0][0] != rows[1][0]:
+			raise Exception('Was expecting same froute in both rows.')
+		froute = rows[0][0]
+		# Figuring that the locations report with the longer JSON string is probably where most of the data is: 
+		direction = (0 if rows[0][1] > rows[1][1] else 1)
+		return (froute, direction)
+
+@lock
 @trans
 def delete_demo_locations(froute_, demo_report_timestr_):
 	if not demo_report_timestr_.startswith('2020-'): raise Exception()
@@ -1361,81 +1569,97 @@ def is_plausible(dist_m_, speed_kmph_):
 		return speed_kmph_ < 30
 
 # This is for removing buggy GPS readings (example: vehicle 4116 2012-06-15 13:30 to 14:00.)
-# returns nothing. 
-def remove_bad_gps_readings_single_vid(vis_, log_=False):
+def get_plausibility_groups(vis_):
 	assert is_sorted(vis_, key=lambda vi: vi.time) and vinfo.same_vid(vis_)
-	if not vis_:
-		return
-	remove_consecutive_duplicates(vis_, key=lambda vi: vi.time)
-	vigroups = [[vis_[0]]]
-	for cur_vi in vis_[1:]:
+	groups = []
+	for vi in vis_:
+		add_vi_to_appropriate_plausibility_group(groups, vi)
+	return groups
+
+def add_vi_to_appropriate_plausibility_group(groups_, vi_):
+
+	if len(groups_) == 0:
+		groups_.append([vi_])
+	else:
 		def get_dist_from_vigroup(vigroup_):
 			groups_last_vi = vigroup_[-1]
-			groups_last_vi_to_cur_vi_metres = cur_vi.latlng.dist_m(groups_last_vi.latlng)
+			groups_last_vi_to_cur_vi_metres = vi_.latlng.dist_m(groups_last_vi.latlng)
 			return groups_last_vi_to_cur_vi_metres
 
 		def get_mps_from_vigroup(vigroup_):
 			groups_last_vi = vigroup_[-1]
-			groups_last_vi_to_cur_vi_metres = cur_vi.latlng.dist_m(groups_last_vi.latlng)
-			groups_last_vi_to_cur_vi_secs = abs((cur_vi.time - groups_last_vi.time)/1000.0)
+			groups_last_vi_to_cur_vi_metres = vi_.latlng.dist_m(groups_last_vi.latlng)
+			groups_last_vi_to_cur_vi_secs = abs((vi_.time - groups_last_vi.time)/1000.0)
 			return groups_last_vi_to_cur_vi_metres/groups_last_vi_to_cur_vi_secs
 
 		def is_plausible_vigroup(vigroup_):
 			return is_plausible(get_dist_from_vigroup(vigroup_), mps_to_kmph(get_mps_from_vigroup(vigroup_)))
 
-		closest_vigroup = min(vigroups, key=get_dist_from_vigroup)
+		closest_vigroup = min(groups_, key=get_dist_from_vigroup)
 		if is_plausible_vigroup(closest_vigroup):
-			closest_vigroup.append(cur_vi)
+			closest_vigroup.append(vi_)
 		else:
-			vigroups.append([cur_vi])
-	vis_[:] = max(vigroups, key=len)
-	if log_:
-		vid = vis_[0].vehicle_id
-		if len(vigroups) == 1:
-			printerr('Bad GPS filtering - vid %s - there was only one group.' % vid)
-		else:
-			printerr('Bad GPS filtering - vid %s - chose group %d.' % (vid, vigroups.index(vis_)))
-			printerr('---')
-			for vi in vis_:
-				groupidx = firstidx(vigroups, lambda vigroup: vi in vigroup)
-				printerr('%d - %s' % (groupidx, vi))
-			printerr('---')
-			for groupidx, vigroup in enumerate(vigroups):
-				for vi in vigroup:
-					printerr('%d - %s' % (groupidx, vi))
-			printerr('---')
-		printerr('Bad GPS filtering - vid %s - groups as JSON:' % vid)
-		printerr([[vi.latlng.ls() for vi in vigroup] for vigroup in vigroups])
+			groups_.append([vi_])
 
-def fix_doubleback_gps_noise(vis_):
+def get_best_plausibility_group(groups_, log_=False):
+	if len(groups_):
+		r = max(groups_, key=len)
+		if log_:
+			vid = r[0].vehicle_id
+			if len(groups_) == 1:
+				printerr('Plausibility groups - vid %s - there was only one group.' % vid)
+			else:
+				printerr('Plausibility groups - vid %s - chose group %d.' % (vid, groups_.index(r)))
+				printerr('---')
+				for vi in r:
+					groupidx = firstidx(groups_, lambda vigroup: vi in vigroup)
+					printerr('%d - %s' % (groupidx, vi))
+				printerr('---')
+				for groupidx, vigroup in enumerate(groups_):
+					for vi in vigroup:
+						printerr('%d - %s' % (groupidx, vi))
+				printerr('---')
+			printerr('Plausibility groups - vid %s - groups as JSON:' % vid)
+			printerr([[vi.latlng.ls() for vi in vigroup] for vigroup in groups_])
+		return r
+	else:
+		if log_:
+			printerr('Plausibility groups - no vis.')
+		return []
+
+def fix_doubleback_gps_noise(vis_, startidx=0):
 	assert is_sorted(vis_, key=lambda vi: vi.time)
 	if len(vis_) == 0:
 		return
 	assert len(set(vi.vehicle_id for vi in vis_)) == 1
 	D = 20
-	i = 2
+	i = startidx
 	while i < len(vis_):
-		preref_pos = vis_[i-2].latlng; ref_pos = vis_[i-1].latlng; i_pos = vis_[i].latlng
-		if ref_pos.dist_m(i_pos) > D:
+		if i < 2:
 			i += 1
 		else:
-			ref_heading = preref_pos.heading(ref_pos)
-			i_heading = ref_pos.heading(i_pos)
-			if geom.diff_headings(ref_heading, i_heading) < 90:
+			preref_pos = vis_[i-2].latlng; ref_pos = vis_[i-1].latlng; i_pos = vis_[i].latlng
+			if ref_pos.dist_m(i_pos) > D:
 				i += 1
 			else:
-				vis_[i].set_latlng(ref_pos)
-				for j in range(i+1, len(vis_)):
-					i = j
-					j_pos = vis_[j].latlng
-					if ref_pos.dist_m(j_pos) > D:
-						break
-					else:
-						vis_[j].set_latlng(ref_pos)
+				ref_heading = preref_pos.heading(ref_pos)
+				i_heading = ref_pos.heading(i_pos)
+				if geom.diff_headings(ref_heading, i_heading) < 90:
+					i += 1
 				else:
-					i = len(vis_)
+					vis_[i].set_latlng(ref_pos)
+					for j in range(i+1, len(vis_)):
+						i = j
+						j_pos = vis_[j].latlng
+						if ref_pos.dist_m(j_pos) > D:
+							break
+						else:
+							vis_[j].set_latlng(ref_pos)
+					else:
+						i = len(vis_)
 
 if __name__ == '__main__':
 
 	pass
+
 

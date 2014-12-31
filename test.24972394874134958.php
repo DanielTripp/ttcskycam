@@ -25,7 +25,13 @@ function initialize() {
 
 	init_map();
 	google.maps.event.addListenerOnce(g_map, 'tilesloaded', function() {
-		alert(typeof roundByDigits(0.123456789, 3));
+		var marker = new google.maps.Marker({
+				position: new google.maps.LatLng(43.6055,-79.6169),
+				map: g_map,
+				//iconName:"grn_blank",
+				draggable: true,
+				zIndex: 5
+			});
 	});
 
 }

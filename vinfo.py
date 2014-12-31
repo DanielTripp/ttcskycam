@@ -65,10 +65,11 @@ class VehicleInfo:
 		self.is_dir_tag_corrected = False
 		self.is_fudgeroute_corrected = False
 		assert (graph_locs_str_ is None) == (graph_version_ is None)
-		if graph_locs_str_ is None or graph_version_ != self.get_cur_graph_version():
-			self._graph_locs = None
+		if graph_version_ == self.get_cur_graph_version():
+			self._graph_locs_str = graph_locs_str_
 		else:
-			self._graph_locs = snapgraph.parse_graph_locs_json_str(graph_locs_str_, self.get_snapgraph())
+			self._graph_locs_str = None
+		self._graph_locs = None
 
 	def get_snapgraph(self):
 		if self.is_a_streetcar():
@@ -89,7 +90,10 @@ class VehicleInfo:
 	@property
 	def graph_locs(self):
 		if self._graph_locs is None:
-			self._graph_locs = self.get_snapgraph().multisnap(self.latlng, c.GRAPH_SNAP_RADIUS)
+			if self._graph_locs_str is None:
+				self._graph_locs = self.get_snapgraph().multisnap(self.latlng, c.GRAPH_SNAP_RADIUS)
+			else:
+				self._graph_locs = snapgraph.parse_graph_locs_json_str(self._graph_locs_str, self.get_snapgraph())
 		return self._graph_locs
 
 	def get_graph_locs_json_str(self):
@@ -272,6 +276,13 @@ def makevi(pos_, timestr_, *args_):
 def same_vid(vis_):
 	assert all(isinstance(vi, VehicleInfo) for vi in vis_)
 	return len(set(vi.vehicle_id for vi in vis_)) <= 1
+
+def same_dir(vis_):
+	assert all(isinstance(vi, VehicleInfo) for vi in vis_)
+	return len(set(vi.dir_tag_int for vi in vis_)) <= 1
+
+def is_sorted_by_time(vis_):
+	return is_sorted(vis_, key=lambda vi: vi.time)
 
 if __name__ == '__main__':
 

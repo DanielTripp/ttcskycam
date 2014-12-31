@@ -642,7 +642,8 @@ function scroll_to_visible() {
 		<div id="pline_controls" style="width:20%; height:100%; float:right; overflow:scroll"></div>
 		<br>
 		Filename: <input type="text" size="80" name="filename_field" id="filename_field" /> 
-		<input type="button" onclick="refresh_from_file()" value="Submit (file)" /> <br>
+		<input type="button" onclick="refresh_from_file()" value="Submit (file)" /> 
+		Note: <input type="text" size="40" /> <br>
 		OR Contents:<br>
 		<textarea id="contents_textarea" cols="100" rows="5" wrap="off"></textarea>
 		<input type="button" onclick="refresh_from_textarea()" value="Submit (text area)" />

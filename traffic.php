@@ -21,23 +21,20 @@
 		<script type="text/javascript" src="spatialindex.js"></script>
     <script type="text/javascript">
 
+var MAP_HEIGHT_PERCENT_OF_WINDOW_HEIGHT = 0.75;
 var DONT_SHOW_INSTRUCTIONS = false;
 var TEST_INVISIBLE = false;
 var DISABLE_OVERTIME = false;
 var SHOW_FRAMERATE = false;
+var STORE_FORCE_SETS_IN_LOCALSTORAGE = false;
 
 var SHOW_DEV_CONTROLS = false;
 var CLICKABLE_VEHICLES = false;
-var SHOW_HISTORICAL_ON_LOAD = false;
-var HISTORICAL_TIME_DEFAULT = '2013-02-17 12:35';
 var SHOW_ZOOM = false;
 
 var SHOW_PATHS_TEXT = false;
 var SHOW_LOADING_URLS = false;
 var DISABLE_GEOLOCATION = true;
-
-var HARDCODE_DISPLAY_SET = false;
-var HARDCODED_DISPLAY_SET = [['dundas', 0]];
 
 var MAP_SYNC_DEFAULT = false;
 
@@ -123,40 +120,34 @@ var g_main_path = [], g_extra_path_froutendirs = [];
 var g_use_rendered_aot_arrow_vehicle_icons = g_browser_is_desktop;
 var g_froute_to_spatialindex = null;
 
-var HEADING_ROUNDING_DEGREES = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
-	readfile('HEADING_ROUNDING'); ?>;
-var MIN_GUIZOOM = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
-	readfile('MIN_GUIZOOM'); ?>;
-var MAX_GUIZOOM = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
-	readfile('MAX_GUIZOOM'); ?>;
-var MIN_DATAZOOM = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
-	passthru('python -c "import c; print c.MIN_DATAZOOM"'); ?>;
-var MAX_DATAZOOM = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
-	passthru('python -c "import c; print c.MAX_DATAZOOM"'); ?>;
+<?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
+passthru('python -c "import c, routes
+print \'MIN_DATAZOOM = %s;\' % c.MIN_DATAZOOM
+print \'MAX_DATAZOOM = %s;\' % c.MAX_DATAZOOM
+print \'FROUTE_TO_INTDIR_TO_ENGLISHDESC = %s;\' % routes.get_fudgeroute_to_intdir_to_englishdesc()
+print \'FROUTE_TO_ENGLISH = %s;\' % routes.get_froute_to_english()
+print \'MAX_RSDT = %s;\' % max(c.DATAZOOM_TO_RSDT.values())
+print \'SUBWAY_FROUTE_TO_DATAZOOM_TO_ROUTEPTS = %s;\' % routes.get_subway_froute_to_datazoom_to_routepts()
+print \'GUIZOOM_TO_DATAZOOM = %s;\' % c.GUIZOOM_TO_DATAZOOM
+print \'FROUTE_TO_ROUTEPTS = %s;\' % routes.get_froute_to_routepts_min_datazoom_json_str()
+"'); 
+
+echo "var HEADING_ROUNDING_DEGREES = ", file_get_contents('HEADING_ROUNDING'), ";\n";
+echo "var MIN_GUIZOOM = ", file_get_contents('MIN_GUIZOOM'), ";\n";
+echo "var MAX_GUIZOOM = ", file_get_contents('MAX_GUIZOOM'), ";\n";
+echo "var GUIZOOM_TO_VEHICLE_RENDERED_IMG_SIZE = ", file_get_contents('zoom_to_vehicle_rendered_img_size.json'), ";\n";
+echo "var GUIZOOM_TO_VEHICLE_ARROW_IMG_SIZE = ", file_get_contents('zoom_to_vehicle_arrow_img_size.json'), ";\n";
+?>
+
 var REFRESH_INTERVAL_MS = 10*1000;
 var MOVING_VEHICLES_OVERTIME_FLASH_INTERVAL_MS = 500;
 var MOVING_VEHICLES_ANIM_INTERVAL_MS = 100;
-var FROUTE_TO_INTDIR_TO_ENGLISHDESC = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
-	passthru('python -c "import routes; print routes.get_fudgeroute_to_intdir_to_englishdesc()"'); ?>;
-var FROUTE_TO_ENGLISH = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
-	passthru('python -c "import routes; print routes.get_froute_to_english()"'); ?>;
 // Arrived at by visual trial and error.  Not very accurate.  Specific to Toronto. 
 var GUIZOOM_TO_METERSPERPIXEL = {10: 102.4, 11: 51.2, 12: 25.6, 13: 12.8, 14: 6.4, 15: 3.2, 16: 1.6, 17: 0.8, 18: 0.4, 19: 0.2};
-var MAX_RSDT = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
-	passthru('python -c "import c; print max(c.DATAZOOM_TO_RSDT.values())"'); ?>;
-var SUBWAY_FROUTE_TO_DATAZOOM_TO_ROUTEPTS = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
-	passthru('python -c "import routes; print routes.get_subway_froute_to_datazoom_to_routepts()"'); ?>;
-var GUIZOOM_TO_DATAZOOM = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
-	passthru('python -c "import c; print c.GUIZOOM_TO_DATAZOOM"'); ?>;
-
-var g_guizoom_to_vehicle_rendered_img_size = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
-	readfile('zoom_to_vehicle_rendered_img_size.json'); ?>;
-var g_guizoom_to_vehicle_arrow_img_size = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
-	readfile('zoom_to_vehicle_arrow_img_size.json'); ?>;
-var g_guizoom_to_traffic_line_width = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 7, 8, 8, 10, 13, 16, 22, 42, 42];
+var GUIZOOM_TO_TRAFFIC_LINE_WIDTH = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 7, 8, 8, 10, 13, 16, 22, 42, 42];
 
 function init_dev_option_values() {
-	<?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
+	<?php # UN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
 	if(file_exists('dev-options-for-traffic-php.txt')) {
 		foreach(explode("\n", file_get_contents('dev-options-for-traffic-php.txt')) as $line) {
 			if($line != "") {
@@ -177,7 +168,7 @@ function init_dev_option_values() {
 <?php echo "\n"; /* fudging number of lines so that line numbers are the same pre- and post-PHP. */ ?>  
 
 function get_vehicle_size_by_guizoom(guizoom_) {
-	var arr = (g_use_rendered_aot_arrow_vehicle_icons ? g_guizoom_to_vehicle_rendered_img_size : g_guizoom_to_vehicle_arrow_img_size);
+	var arr = (g_use_rendered_aot_arrow_vehicle_icons ? GUIZOOM_TO_VEHICLE_RENDERED_IMG_SIZE : GUIZOOM_TO_VEHICLE_ARROW_IMG_SIZE);
 	if(0 <= guizoom_ && guizoom_ < arr.length) {
 		return arr[guizoom_];
 	} else {
@@ -1048,6 +1039,8 @@ function initialize() {
 function init_everything_that_doesnt_depend_on_map() {
 
 	if(SHOW_DEV_CONTROLS) {
+		bind_text_control_to_localstorage('datetimepicker_textfield');
+		bind_radio_buttons_to_localstorage('traffictype');
 		init_datetimepicker();
 	} else {
 		$('#div_dev_controls').remove();
@@ -1086,7 +1079,7 @@ function init_everything_that_doesnt_depend_on_map() {
 
 function on_browser_window_resized() {
 	var window_height = $(window).height();
-	var map_height = Math.round(window_height*3/4);
+	var map_height = Math.round(window_height*MAP_HEIGHT_PERCENT_OF_WINDOW_HEIGHT);
 	$('#map_canvas').css('height', sprintf('%dpx', map_height));
 	$('#div_clock').css('top', sprintf('%dpx', map_height-70));
 	$('#div_loading_img').css('top', sprintf('%dpx', map_height-35));
@@ -1202,22 +1195,19 @@ function init_everything_that_depends_on_map() {
 	init_geolocation();
 
 	// The first 'get' of data from the server will happen due to the get_paths_from_server() call below.  
-	schedule_refresh_data_from_server(); // But this call here will cause a periodic refresh of all routes.  The first refresh 
-			// caused by this will happen not right away, but in a few seconds. 
+	if(is_traffictype_current()) {
+		schedule_refresh_data_from_server(); // ... but this call here will cause a periodic refresh of 
+				// all routes.  The first refresh caused by this will happen not right away, but in a few seconds. 
+	}
 
 	create_invisible_clickable_route_grid();
 
 	add_delayed_event_listener(g_map, 'bounds_changed', refresh_streetlabels_allroutes, 500);
 
-	if(SHOW_HISTORICAL_ON_LOAD) {
-		set_selected('historical_button', true);
-		on_traffictype_changed();
-	}
-
-	if(!HARDCODE_DISPLAY_SET) {
+	if(!STORE_FORCE_SETS_IN_LOCALSTORAGE) {
 		get_paths_from_server();
 	} else {
-		show_hardcoded_display_set();
+		get_force_sets_from_localstorage();
 	}
 
 	google.maps.event.addListener(g_map, 'click', on_map_click);
@@ -1316,16 +1306,31 @@ function on_guizoom_changed() {
 	}
 }
 
-function show_hardcoded_display_set() {
-	HARDCODED_DISPLAY_SET.forEach(function(froutendir) {
-		var froute = froutendir[0];
-		var dir = froutendir[1];
-		g_force_show_froutes.add(froute);
-		(dir == 0 ? g_force_dir0_froutes : g_force_dir1_froutes).add(froute);
-	});
+function get_force_sets_from_localstorage() {
+	var force_sets_str = localStorage.getItem('force-sets');
+	if(force_sets_str != null) {
+		try {
+			var force_sets = $.parseJSON(force_sets_str);
+			g_force_show_froutes = to_buckets_set(force_sets.force_show_froutes);
+			g_force_hide_froutes = to_buckets_set(force_sets.force_hide_froutes);
+			g_force_dir0_froutes = to_buckets_set(force_sets.force_dir0_froutes);
+			g_force_dir1_froutes = to_buckets_set(force_sets.force_dir1_froutes);
+		} catch(err) {}
+	}
 	calc_display_set_and_deal_with_it();
 	g_trip_orig_marker.setVisible(false);
 	g_trip_dest_marker.setVisible(false);
+}
+
+function write_force_sets_to_localstorage_maybe() {
+	if(STORE_FORCE_SETS_IN_LOCALSTORAGE) {
+		var force_sets = {};
+		force_sets.force_show_froutes = g_force_show_froutes.toArray();
+		force_sets.force_hide_froutes = g_force_hide_froutes.toArray();
+		force_sets.force_dir0_froutes = g_force_dir0_froutes.toArray();
+		force_sets.force_dir1_froutes = g_force_dir1_froutes.toArray();
+		localStorage.setItem('force-sets', toJsonString(force_sets));
+	}
 }
 
 function init_geolocation() {
@@ -1471,32 +1476,47 @@ function update_force_sets_from_dialog_gui() {
 		g_force_show_froutes.remove(g_route_options_dialog_froute);
 		g_force_hide_froutes.add(g_route_options_dialog_froute);
 	} else if(show == 'solo') {
-		g_force_show_froutes.clear();
-		g_force_show_froutes.add(g_route_options_dialog_froute);
-		g_force_hide_froutes.clear();
-		g_all_froutes.forEach(function(froute) {
-			if(froute != g_route_options_dialog_froute) {
-				g_force_hide_froutes.add(froute);
-			}
-		});
+		show_route_solo(g_route_options_dialog_froute);
 	} else {
-		g_force_show_froutes.remove(g_route_options_dialog_froute);
-		g_force_hide_froutes.remove(g_route_options_dialog_froute);
+		show_route_auto(g_route_options_dialog_froute);
 	}
 
-	var dir = radio_val('dir');
-	if(dir == 'dir0') {
-		g_force_dir0_froutes.add(g_route_options_dialog_froute);
-		g_force_dir1_froutes.remove(g_route_options_dialog_froute);
-	} else if(dir == 'dir1') {
-		g_force_dir0_froutes.remove(g_route_options_dialog_froute);
-		g_force_dir1_froutes.add(g_route_options_dialog_froute);
-	} else {
-		g_force_dir0_froutes.remove(g_route_options_dialog_froute);
-		g_force_dir1_froutes.remove(g_route_options_dialog_froute);
-	}
+	var direction = {'dir0': 0, 'dir1': 1, 'dirauto': null}[radio_val('dir')];
+	force_dir(g_route_options_dialog_froute, direction);
 
 	assert_force_sets_consistent();
+	write_force_sets_to_localstorage_maybe();
+}
+
+// direction_ == null means unforce. 
+function force_dir(froute_, direction_) {
+	assert([0, 1, null].indexOf(direction_) != -1);
+	if(direction_ == 0) {
+		g_force_dir0_froutes.add(froute_);
+		g_force_dir1_froutes.remove(froute_);
+	} else if(direction_ == 1) {
+		g_force_dir0_froutes.remove(froute_);
+		g_force_dir1_froutes.add(froute_);
+	} else {
+		g_force_dir0_froutes.remove(froute_);
+		g_force_dir1_froutes.remove(froute_);
+	}
+}
+
+function show_route_auto(froute_) {
+	g_force_show_froutes.remove(froute_);
+	g_force_hide_froutes.remove(froute_);
+}
+
+function show_route_solo(froute_) {
+	g_force_show_froutes.clear();
+	g_force_show_froutes.add(froute_);
+	g_force_hide_froutes.clear();
+	g_all_froutes.forEach(function(froute) {
+		if(froute != froute_) {
+			g_force_hide_froutes.add(froute);
+		}
+	});
 }
 
 function is_subway(froute_) {
@@ -1504,11 +1524,9 @@ function is_subway(froute_) {
 }
 
 function create_invisible_clickable_route_grid() {
-	var froute_to_routepts = <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
-				passthru('python -c "import routes; print routes.get_froute_to_routepts_min_datazoom_json_str()"'); ?>;
 	g_froute_to_spatialindex = new buckets.Dictionary();
-	for(var froute in froute_to_routepts) {
-		var routepts = froute_to_routepts[froute];
+	for(var froute in FROUTE_TO_ROUTEPTS) {
+		var routepts = FROUTE_TO_ROUTEPTS[froute];
 		g_all_froutes.push(froute); // using this opportunity to build a complete list of froute names on the client side here. 
 		g_froute_to_spatialindex.set(froute, new SpatialIndex(routepts, 'plines'));
 	}
@@ -1921,7 +1939,6 @@ function is_traffictype_historical() {
 }
 
 function init_datetimepicker() {
-	set_value('datetimepicker_textfield', HISTORICAL_TIME_DEFAULT);
 	$('#datetimepicker_textfield').datetimepicker({
 		dateFormat: 'yy-mm-dd', 
 		onSelect: function(dateText, inst) { 
@@ -2015,10 +2032,10 @@ function get_traffic_line_width() {
 }
 
 function get_traffic_line_width_by_guizoom(zoom_) {
-	if(0 <= zoom_ && zoom_ < g_guizoom_to_traffic_line_width.length) {
-		return g_guizoom_to_traffic_line_width[zoom_];
+	if(0 <= zoom_ && zoom_ < GUIZOOM_TO_TRAFFIC_LINE_WIDTH.length) {
+		return GUIZOOM_TO_TRAFFIC_LINE_WIDTH[zoom_];
 	} else {
-		return g_guizoom_to_traffic_line_width[g_guizoom_to_traffic_line_width.length];
+		return GUIZOOM_TO_TRAFFIC_LINE_WIDTH[GUIZOOM_TO_TRAFFIC_LINE_WIDTH.length];
 	}
 }
 
@@ -2141,6 +2158,27 @@ function init_rendered_aot_arrow_vehicle_icons_buttons() {
 	set_vehicle_checkbox_imgs_appropriately();
 }
 
+function on_show_debug_report_button_clicked() {
+	callpy('debug_reports.get_froute_and_dir_and_datetimestr', 
+		function(r_) {
+			if(r_ == null) {
+				alert("Couldn't figure out debug report.");
+			} else {
+				var froute = r_[0], direction = r_[1], datetimestr = r_[2];
+				show_route_solo(froute);
+				force_dir(froute, direction);
+				assert_force_sets_consistent();
+				write_force_sets_to_localstorage_maybe();
+				calc_display_set_and_deal_with_it();
+
+				set_value('datetimepicker_textfield', datetimestr);
+				set_selected('historical_button', true);
+				on_traffictype_changed();
+				$('#historical_button').click(); // b/c the set_selected() above doesn't trigger the listener 
+						// added by bind_radio_buttons_to_localstorage().  Don't know why. 
+			}
+		});
+}
 
 $(document).ready(initialize);
 
@@ -2264,7 +2302,8 @@ $(document).ready(initialize);
 					<input id="historical_button" type="radio" name="traffictype" value="historical" onclick="on_traffictype_changed()" />
 					<label for="historical_button">Past</label>
 					<input id="datetimepicker_textfield" type="text" name="datetimepicker_textfield" value="" />
-
+					///
+					<input type="button" id="debug_report_button" onclick="on_show_debug_report_button_clicked()" value="Show debug report" />
 					///
 					<label><input id="map_sync_checkbox" type="checkbox"/>Map Sync</label>
 

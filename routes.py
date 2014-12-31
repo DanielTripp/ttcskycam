@@ -792,11 +792,11 @@ def get_fudgeroutes_for_map_bounds(southwest_, northeast_, compassdir_or_heading
 # For all routes that I've looked at, our dir 0 (which corresponds to NextBus's _0_ in a dirtag) is east for a
 # route that goes east-west, and south for one that goes north-south.  (1 for the other direction, of course.)
 # But I know of no guarantee for this.
-@lru_cache(1)
 @mc.decorate
 def get_fudgeroute_to_intdir_to_englishdesc_json_str():
 	return util.to_json_str(get_fudgeroute_to_intdir_to_englishdesc())
 
+@mc.decorate
 def get_fudgeroute_to_intdir_to_englishdesc():
 	r = {}
 	for fudgeroute in NON_SUBWAY_FUDGEROUTES:

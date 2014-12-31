@@ -8,8 +8,16 @@ import numpy as np
 
 if __name__ == '__main__':
 
-	sg = system.get_snapgraph()
-	vertidxesstr = sys.argv[1]
+	sgname = sys.argv[1]
+	if sgname == 'system':
+		sg = system.get_snapgraph()
+	elif sgname == 'streets':
+		sg = streets.get_snapgraph()
+	elif sgname == 'tracks':
+		sg = tracks.get_snapgraph()
+	else:
+		raise Exception()
+	vertidxesstr = sys.argv[2]
 	vertidxes = json.loads(vertidxesstr)
 	for vertidx in vertidxes:
 		print sg.verts[vertidx].pos()
