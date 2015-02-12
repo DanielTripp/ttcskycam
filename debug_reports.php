@@ -297,6 +297,12 @@ function write_model_to_db() {
 		}});
 }
 
+function clear_model() {
+	g_model = {fudgeroute: 'dundas', vehicle_type: 'streetcar', vis: []};
+	write_model_to_localstorage();
+	redraw_pline();
+}
+
 
     </script>
   </head>
@@ -321,6 +327,7 @@ function write_model_to_db() {
 		Filename: <input type="text" size="50" id="filename_textfield" value="" />
 		<input type="button" onclick="write_model_to_file()" value="Write To File" />
 		<input type="button" onclick="read_model_from_file()" value="Read From File" />
+		<input type="button" onclick="clear_model()" value="Clear" />
 		///
 		<input type="button" onclick="write_model_to_db()" value="Write To Database" />
 		///
