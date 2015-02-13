@@ -102,6 +102,14 @@ class VehicleInfo:
 	def __hash__(self):
 		return hash(self.latlng.lat)
 
+	def _key(self):
+		return (self.dir_tag, self.heading, self.vehicle_id, self.latlng, self.predictable, self.fudgeroute, 
+				self.route_tag, self.secs_since_report, self.time_retrieved, self.time, self._mofr, self._widemofr, 
+				self.is_dir_tag_corrected, self.is_fudgeroute_corrected)
+
+	def __eq__(self, other_):
+		return isinstance(other_, VehicleInfo) and (self._key() == other_._key())
+
 	def calc_time(self):
 		self.time = self.time_retrieved - self.secs_since_report*1000
 
@@ -153,7 +161,7 @@ class VehicleInfo:
 		return '%s  r=%-6s, vid=%s, dir: %s%-12s, (%.7f,%.7f), h=%3d, mofr=%5d%s%5d%s' \
 			% (self.timestr, routestr, self.vehicle_id, 
 					('*' if self.is_dir_tag_corrected else ' '), self.dir_tag,
-			   self.latlng.lat, self.latlng.lng, self.heading, self.mofr, ('!' if self.mofr!=self.widemofr else ' '), self.widemofr,
+			   self.latlng.lat, self.latlng.lng, self.heading, self.mofr, ('!' if self.mofr!=self.widemofr else '='), self.widemofr,
 			   ('  ' if self.predictable else ' U'))
 
 	def str_long(self):
@@ -174,7 +182,8 @@ class VehicleInfo:
 				'route_tag': self.route_tag, 
 				'time': self.time, 
 				'timestr': self.timestr, 
-				'mofr': self.mofr
+				'mofr': self.mofr, 
+				'widemofr': self.widemofr
 			}
 
 	@property
