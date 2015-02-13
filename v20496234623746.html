@@ -23,7 +23,7 @@ var g_playtimer = null;
 eval(get_sync("sprintf.js"));
 
 function add_info_win(mark_, text_) {
-	(new google.maps.InfoWindow({content: text_, disableAutoPan: true})).open(g_map, mark_);
+	(new google.maps.InfoWindow({content: infowin_div(text_), disableAutoPan: true})).open(g_map, mark_);
 }
 
 function start_vehicle_markers_animation() {
@@ -309,10 +309,15 @@ function on_play_checkbox_clicked(play_) {
 	}
 }
 
+// Might be partially thanks to http://www.canbike.ca/information-technology/2013/11/01/firefox-infowindow-scrollbar-fix-google-maps-api-v3.html 
+function infowin_div(content_) {
+	return sprintf('<div style="white-space:nowrap; font-size:90%%">%s</div>', content_);
+}
+
     </script>
   </head>
   <body onload="initialize()">
-		<div id="map_canvas" style="width:100%; height:100%"></div>
+		<div id="map_canvas" style="width:100%; height:100%; overflow:visible !important;"></div>
 		<div>
 			<form name="form1">
 				<input type="text" size="130" id="sqlstr_field" />
