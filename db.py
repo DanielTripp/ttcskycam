@@ -224,8 +224,6 @@ def get_vid_to_vis_bothdirs_patch(vid_to_pvis_, froute_, num_minutes_, old_end_t
 	new_vis = list(vi_select_generator(froute_, new_end_time_, old_end_time_+1, None, True))
 	vid_to_new_vis = file_under_key(new_vis, lambda vi: vi.vehicle_id)
 	redo_vids = set()
-	#print 'raw new vis:' # tdr 
-	#pprint.pprint(vid_to_new_vis) # tdr 
 	for vid, new_vis in vid_to_new_vis.items():
 		pvis = vid_to_pvis_[vid]
 		new_vis.sort(key=lambda x: x.time)
@@ -272,7 +270,7 @@ def get_vid_to_vis_bothdirs_patch(vid_to_pvis_, froute_, num_minutes_, old_end_t
 # not the other way around. 
 def remove_undesirable_dirstretches_patch(pvis_, new_vis_, log_=False):
 	if pvis_.dirstretches and new_vis_:
-		all_dirstretches = pvis_.dirstretches[:]
+		all_dirstretches = copy.deepcopy(pvis_.dirstretches[:])
 		for new_vi in new_vis_:
 			if new_vi.dir_tag_int == all_dirstretches[-1][0].dir_tag_int:
 				all_dirstretches[-1].append(new_vi)
@@ -287,6 +285,7 @@ def remove_undesirable_dirstretches_patch(pvis_, new_vis_, log_=False):
 			all_desirability_by_dirstretchidx.append(is_dirstretch_desirable(stretch), log_=log_)
 		assert len(all_dirstretches) == len(all_desirability_by_dirstretchidx)
 		if all_desirability_by_dirstretchidx[last_old_dirstretchidx] != pvis_.desirability_by_dirstretchidx[-1]:
+			assert not pvis_.desirability_by_dirstretchidx[-1] 
 			new_vis = all_dirstretches[last_old_dirstretchidx]
 		else:
 			new_vis = all_dirstretches[last_old_dirstretchidx][len(pvis_.dirstretches[last_old_dirstretchidx]):]
@@ -639,7 +638,7 @@ def query1(whereclause_, maxrows_, interp_):
 		vid_to_raw_vis = file_under_key(all_vis, lambda vi: vi.vehicle_id)
 		vid_to_interptime_to_vi = {}
 		for vid, raw_vis in vid_to_raw_vis.iteritems():
-			vid_to_interptime_to_vi[vid] = interp(raw_vis[::-1], False, False)
+			vid_to_interptime_to_vi[vid] = interp(sorted(raw_vis, key=lambda vi: vi.time), False, False)
 		times = set(sum((interptime_to_vi.keys() for interptime_to_vi in vid_to_interptime_to_vi.itervalues()), []))
 		starttime = min(times); endtime = max(times)
 		all_vis = get_locations_clientside_list(vid_to_interptime_to_vi, starttime, endtime)
@@ -679,7 +678,7 @@ def massage_direction(direction_, fudgeroute_):
 		return routes.routeinfo(fudgeroute_).dir_from_latlngs(direction_[0], direction_[1])
 
 def get_recent_vehicle_locations_patch(vid_to_pvis_, p_vid_to_interptime_to_vi_, fudgeroute_, num_minutes_, 
-		direction_, datazoom_, old_end_time, new_end_time_, log_=False):
+		direction_, datazoom_, old_end_time_, new_end_time_, log_=False):
 	direction = massage_direction(direction_, fudgeroute_)
 	redo_vids, vid_to_new_vis = get_vid_to_vis_bothdirs_patch(vid_to_pvis_, fudgeroute_, num_minutes_, 
 			old_end_time_, new_end_time_, log_=log_)
@@ -822,7 +821,9 @@ def interp(vis_, be_clever_, current_conditions_, dir_=None, datazoom_=None, sta
 	vid = vis_[0].vehicle_id
 	if log_: printerr('Interpolating locations for vid %s...' % vid)
 	assert is_sorted(vis_, key=lambda vi: vi.time)
+	t0 = time.time() # tdr 
 	vi_to_grade, vi_to_path = get_grade_stretch_info(vis_, be_clever_, log_)
+	time1 = (time.time() - t0) # tdr 
 	for interptime in interptimes:
 		lolo_vi, lo_vi, hi_vi, lolo_idx, lo_idx, hi_idx = get_nearest_time_vis(vis_, interptime)
 		i_vi = None
@@ -898,19 +899,27 @@ def get_piece_idx(vis_, lo_idx_, vi_to_grade_):
 def get_grade_stretch_info(vis_, be_clever_, log_):
 	return get_grade_stretch_info_impl(tuple(vis_), be_clever_, log_)
 
-@lru_cache(100) # It's important that this cache at least the maximum number of vehicle that will ever appear in the locations 
-# report for one route / one direction.  If this cache size is even 1 less than that, then every time around the loop over 
-# the datazooms in reports.py / make_all_reports_and_insert_into_db_once(), these will be forgotten, and performance will 
-# suffer badly. 
+# returns (vi_to_grade, vi_to_path): 
+# 	- vi_to_grade: has a key set equal to vis_.  values are 'r', 'g', or 'o'.
+#		- vi_to_path: has a key set of only those vis which have a value of 'g' in vi_to_grade. 
+@lru_cache(100) 
+# Re: caching - It's important that this cache at least the maximum number of 
+# vehicle that will ever appear in the locations 
+# report for one route / one direction.  If this cache size is even 1 less than 
+# that, then every time around the loop over the datazooms in reports.py / 
+# make_all_reports_and_insert_into_db_once(), these will be forgotten, and 
+# performance will suffer badly. 
 def get_grade_stretch_info_impl(vis_, be_clever_, log_):
-	assert len(set(vi.vehicle_id for vi in vis_)) == 1
+	assert vinfo.same_vid(vis_)
 	assert is_sorted(vis_, key=lambda vi: vi.time)
 
 	if not be_clever_:
-		return (defaultdict(lambda: 'o'), {})
+		return (dict((vi, 'o') for vi in vis_), {})
 
 	vi_to_offroute = dict((vi, vi.mofr == -1) for vi in vis_)
 
+	# Set the vis near the ends of on-route stretches to be off-route.  
+	# Precisely: all vis within GRAPH_SNAP_RADIUS of the last (or first) on-route vi (including that vi itself). 
 	stretches = get_maximal_sublists3(vis_, lambda vi: vi_to_offroute[vi])
 	for stretchi in range(len(stretches)):
 		stretch = stretches[stretchi]
@@ -932,6 +941,7 @@ def get_grade_stretch_info_impl(vis_, be_clever_, log_):
 					else:
 						break
 			
+	# Set vis that are part of trivially short (distance-wise) on-route stretches to be off-route: 
 	stretches = get_maximal_sublists3(vis_, lambda vi: vi_to_offroute[vi])
 	for stretchi in range(len(stretches)):
 		stretch = stretches[stretchi]
@@ -958,7 +968,7 @@ def get_grade_stretch_info_impl(vis_, be_clever_, log_):
 	def get_grade(stretch__):
 		return vi_to_grade[stretch__[0]]
 
-	# We can't use 'g' stretches of length 1 which are surrounded by 'o' stretches or nothing.  
+	# We can't use 'g' stretches of length 1 which are surrounded by either 'o' stretches or nothing.  
 	# So here we remove them and make them 'o'. 
 	# Because what would we do with them?  There is no graph path between an 'o' point and a 'g' point - 
 	# that is, eg. the last 'o' point in the stretch before this length=1 'g' stretch.  
@@ -966,8 +976,8 @@ def get_grade_stretch_info_impl(vis_, be_clever_, log_):
 	# of our assumption that the (streetcar or street) graph is a superset of the route in question, 
 	# we can always get a graph path between an 'r' point and a 'g' point. 
 	# So here we filter out those useless stretches, both because they are useless, and because if we 
-	# don't, the find_multipath() code below will fail because it doesn't like being passed 1 latlngs 
-	# list of length=1. 
+	# don't, the find_multipath() code below will fail because it doesn't like being passed a latlngs 
+	# list of length 1. 
 	stretches = get_maximal_sublists3(vis_, lambda vi: vi_to_grade[vi])
 	for i, stretch, isfirst, islast in enumerate2(stretches):
 		if get_grade(stretch) == 'g' and len(stretch) == 1 and \
@@ -998,6 +1008,7 @@ def get_grade_stretch_info_impl(vis_, be_clever_, log_):
 				printerr('Path for stretch %d:' % stretchi)
 				for piecei, piecesteps in enumerate(path.piecestepses):
 					printerr('piece %d: %s' % (piecei, piecesteps))
+				printerr('path for stretch %d, all latlngs: %s' % (stretchi, path.latlngs()))
 			for vi in stretch:
 				vi_to_path[vi] = path
 
