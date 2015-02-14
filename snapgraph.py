@@ -1540,11 +1540,14 @@ class SnapGraph(object):
 	#
 	# returns: a PosAddr, or None if no lines were found within the search radius.
 	def snap(self, target_, searchradius_):
+		return self.snap_with_dist(target_, searchradius_)[0]
+
+	def snap_with_dist(self, target_, searchradius_):
 		assert isinstance(target_, geom.LatLng) and (searchradius_ > 0)
 		target_gridsquare = grid.GridSquare.from_latlng(target_, self.si_gridsquaresys)
 		a_nearby_linesegaddr = self.get_a_nearby_linesegaddr(target_gridsquare, searchradius_)
 		if a_nearby_linesegaddr is None:
-			return None
+			return (None, None)
 		a_nearby_lineseg = self.get_lineseg(a_nearby_linesegaddr)
 		endgame_search_radius = self._snap_get_endgame_search_radius(a_nearby_lineseg, target_gridsquare)
 		best_yet_lssr = None; best_yet_linesegaddr = None  # "lssr" stands for LineSegSnapResult. 
@@ -1555,9 +1558,9 @@ class SnapGraph(object):
 				best_yet_lssr = cur_lssr
 				best_yet_linesegaddr = linesegaddr
 		if (best_yet_lssr == None) or (searchradius_ is not None and best_yet_lssr.dist > searchradius_):
-			return None
+			return (None, None)
 		else:
-			return PosAddr(best_yet_linesegaddr.copy(), best_yet_lssr.pals)
+			return (PosAddr(best_yet_linesegaddr.copy(), best_yet_lssr.pals), best_yet_lssr.dist)
 
 	def _snap_get_endgame_linesegaddrs(self, target_gridsquare_, search_radius_):
 		assert isinstance(target_gridsquare_, grid.GridSquare)
