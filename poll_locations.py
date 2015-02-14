@@ -22,13 +22,16 @@ def get_data_from_web_as_xml(route_, time_es_, xml_filename_, xml_headers_):
 		else:
 			with open(xml_filename_, 'a') as fout:
 				dump_xml(fout, route_, time_es_, xml_headers_, data_str)
-	def print_data_str(msg_):
-		print >> sys.stderr, '--- %s - %s:' % (now_str(), msg_)
+	return parse_xml(data_str)
+
+def parse_xml(xml_str_):
+	def print_data_str(msg__):
+		print >> sys.stderr, '--- %s - %s:' % (now_str(), msg__)
 		print >> sys.stderr, '---'
 		print >> sys.stderr, data_str,
 		print >> sys.stderr, '---'
 	try:
-		r = xml.dom.minidom.parseString(data_str)
+		r = xml.dom.minidom.parseString(xml_str_)
 	except ExpatError:
 		print_data_str('Failed to parse output from NextBus.')
 		raise
@@ -42,6 +45,12 @@ def dump_xml(fout_, route_, time_es_, xml_headers_, data_str_):
 		cur_timestr = em_to_str(now_em())
 		print >> fout_, 'Route %s, t=%d.  (Current time: %d / %s.)' % (route_, time_es_, cur_time, cur_timestr)
 	print >> fout_, data_str_
+
+def test_parse_xml_file(xml_filename_):
+	with open(xml_filename_) as fin:
+		xml_str = fin.read()
+	xmldoc = parse_xml(xml_str)
+	deal_with_xml(xmldoc, False, 'stdout')
 
 def deal_with_xml(xmldoc_, insert_into_db_, vis_filename_):
 	vehicles = []
@@ -182,54 +191,57 @@ def wait_until_start_of_next_minute():
 
 if __name__ == '__main__':
 
-	opts, args = getopt.getopt(sys.argv[1:], '', ['routes=', 'pollstatefile=', 'redirect-stdstreams-to-file', 
-			'dont-insert-into-db', 'touch-flag-file-on-finish', 'dump-xml=', 'dump-vis=', 'xml-headers', 'forever'])
-	if args:
-		sys.exit('No arguments allowed.  Only options.')
-
-	pollstate_filename = (get_opt(opts, 'pollstatefile') or 'pollstate.json')
-
-	if get_opt(opts, 'redirect-stdstreams-to-file'):
-		redirect_stdstreams_to_file('poll_locations_')
-
-	if get_opt(opts, 'routes'):
-		routelist = get_opt(opts, 'routes').split(',')
+	if len(sys.argv) >= 2 and sys.argv[1] == '--testfile':
+		test_parse_xml_file(sys.argv[2])
 	else:
-		routelist = list(routes.CONFIGROUTES)
+		opts, args = getopt.getopt(sys.argv[1:], '', ['routes=', 'pollstatefile=', 'redirect-stdstreams-to-file', 
+				'dont-insert-into-db', 'touch-flag-file-on-finish', 'dump-xml=', 'dump-vis=', 'xml-headers', 'forever'])
+		if args:
+			sys.exit('No arguments allowed.  Only options.')
 
-	xml_filename = get_opt(opts, 'dump-xml')
-	if xml_filename:
-		xml_filename = os.path.expanduser(xml_filename)
-		if os.path.isdir(xml_filename):
-			xml_filename = os.path.join(xml_filename, time.strftime('vehicle_locations_xml_%Y-%m-%d--%H-%M.txt', time.localtime(time.time())))
+		pollstate_filename = (get_opt(opts, 'pollstatefile') or 'pollstate.json')
 
-	vis_filename = get_opt(opts, 'dump-vis')
-	if vis_filename:
-		vis_filename = os.path.expanduser(vis_filename)
-		if os.path.isdir(vis_filename):
-			vis_filename = os.path.join(vis_filename, time.strftime('vehicle_locations_vis_%Y-%m-%d--%H-%M.txt', time.localtime(time.time())))
+		if get_opt(opts, 'redirect-stdstreams-to-file'):
+			redirect_stdstreams_to_file('poll_locations_')
 
-	insert_into_db = not get_opt(opts, 'dont-insert-into-db')
+		if get_opt(opts, 'routes'):
+			routelist = get_opt(opts, 'routes').split(',')
+		else:
+			routelist = list(routes.CONFIGROUTES)
 
-	if insert_into_db or vis_filename:
-		get_graphs_into_ram()
+		xml_filename = get_opt(opts, 'dump-xml')
+		if xml_filename:
+			xml_filename = os.path.expanduser(xml_filename)
+			if os.path.isdir(xml_filename):
+				xml_filename = os.path.join(xml_filename, time.strftime('vehicle_locations_xml_%Y-%m-%d--%H-%M.txt', time.localtime(time.time())))
 
-	do_multiproc = insert_into_db or vis_filename
-	xml_headers = get_opt(opts, 'xml-headers')
-	touch_flag_file_on_finish = get_opt(opts, 'touch-flag-file-on-finish')
-	forever = get_opt(opts, 'forever')
-	def call_poll_once():
-		poll_once(routelist, insert_into_db, pollstate_filename, xml_filename, xml_headers, vis_filename, do_multiproc, 
-				touch_flag_file_on_finish)
-	if forever:
-		wait_until_start_of_next_minute()
-		while True:
-			poll_start_time = time.time()
+		vis_filename = get_opt(opts, 'dump-vis')
+		if vis_filename:
+			vis_filename = os.path.expanduser(vis_filename)
+			if os.path.isdir(vis_filename):
+				vis_filename = os.path.join(vis_filename, time.strftime('vehicle_locations_vis_%Y-%m-%d--%H-%M.txt', time.localtime(time.time())))
+
+		insert_into_db = not get_opt(opts, 'dont-insert-into-db')
+
+		if insert_into_db or vis_filename:
+			get_graphs_into_ram()
+
+		do_multiproc = insert_into_db or vis_filename
+		xml_headers = get_opt(opts, 'xml-headers')
+		touch_flag_file_on_finish = get_opt(opts, 'touch-flag-file-on-finish')
+		forever = get_opt(opts, 'forever')
+		def call_poll_once():
+			poll_once(routelist, insert_into_db, pollstate_filename, xml_filename, xml_headers, vis_filename, do_multiproc, 
+					touch_flag_file_on_finish)
+		if forever:
+			wait_until_start_of_next_minute()
+			while True:
+				poll_start_time = time.time()
+				call_poll_once()
+				poll_end_time = time.time()
+				if poll_end_time - poll_start_time < 60:
+					wait_until_start_of_next_minute()
+		else:
 			call_poll_once()
-			poll_end_time = time.time()
-			if poll_end_time - poll_start_time < 60:
-				wait_until_start_of_next_minute()
-	else:
-		call_poll_once()
 		
 
