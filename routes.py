@@ -433,19 +433,23 @@ class RouteInfo:
 	def is_subway(self):
 		return is_subway(self.name)
 
-	@lru_cache(5000)
 	def latlon_to_mofr(self, post_, tolerance_=0):
+		return self.latlon_to_mofrndist(post_, tolerance_=tolerance_)[0]
+
+	@lru_cache(5000)
+	def latlon_to_mofrndist(self, post_, tolerance_=0):
 		assert isinstance(post_, geom.LatLng) and (tolerance_ in (0, 1, 1.5, 2))
 		# Please make sure that this continues to support something greater than the greatest possible rsdt 
 		# (route-simplifying distance tolerance), 
 		# and that the code that builds the routeptidx -> mofr map for each rsdt, and presumably calls this function, 
 		# uses a tolerance argument to this function that is higher than the greatest rsdt. 
 		# Otherwise a lot of things will be broken. 
-		posaddr = self.snapgraph.snap(post_, {0:50, 1:300, 1.5:600, 2:2000}[tolerance_])
+		posaddr, dist = self.snapgraph.snap_with_dist(post_, {0:50, 1:300, 1.5:600, 2:2000}[tolerance_])
 		if posaddr is None:
-			return -1
+			return (-1, None)
 		else:
-			return int(self.snapgraph.get_mapl(posaddr))
+			mofr = int(self.snapgraph.get_mapl(posaddr))
+			return (mofr, dist)
 
 	def snaptest(self, pt_, tolerance_=0):
 		assert isinstance(pt_, geom.LatLng) and (tolerance_ in (0, 1, 2))
@@ -654,11 +658,14 @@ def get_all_routes_latlons():
 	return r
 
 def latlon_to_mofr(route_, latlon_, tolerance_=0):
+	return latlon_to_mofrndist(route_, latlon_, tolerance_=tolerance_)[0]
+
+def latlon_to_mofrndist(route_, latlon_, tolerance_=0):
 	assert isinstance(latlon_, geom.LatLng)
 	if route_ not in CONFIGROUTES and route_ not in FUDGEROUTES:
 		return -1
 	else:
-		return routeinfo(route_).latlon_to_mofr(latlon_, tolerance_)
+		return routeinfo(route_).latlon_to_mofrndist(latlon_, tolerance_)
 
 def mofr_to_latlon(route_, mofr_, dir_, datazoom_=None):
 	return routeinfo(route_).mofr_to_latlon(mofr_, dir_, datazoom_)

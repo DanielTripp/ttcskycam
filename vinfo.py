@@ -19,12 +19,7 @@ class VehicleInfo:
 		elif len(froutes) == 1:
 			froute = froutes[0]
 		else:
-			for froute_candidate in froutes:
-				if routes.latlon_to_mofr(froute_candidate, geom.LatLng(lat, lng)) != -1:
-					froute = froute_candidate
-					break
-			else:
-				froute = froutes[0]
+			froute = min(froutes, key=lambda x: routes.latlon_to_mofrndist(x, geom.LatLng(lat, lng), tolerance_=2)[1])
 		r = cls_(\
 			str(elem_.getAttribute('dirTag')),
 			int(elem_.getAttribute('heading')),
