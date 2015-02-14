@@ -193,7 +193,7 @@ class VehicleInfo:
 	@property
 	def mofr(self):
 		if self._mofr is None:
-			self._mofr = routes.latlon_to_mofr(self.route_tag, self.latlng)
+			self._mofr = routes.latlon_to_mofr(self.fudgeroute, self.latlng)
 		return self._mofr
 
 	# widemofr is a higher-tolerance mofr than the regular mofr.  That is, it will indicate a mofr not just when
@@ -207,7 +207,7 @@ class VehicleInfo:
 			return self.mofr
 		else:
 			if self._widemofr is None:
-				self._widemofr = routes.latlon_to_mofr(self.route_tag, self.latlng, tolerance_=2)
+				self._widemofr = routes.latlon_to_mofr(self.fudgeroute, self.latlng, tolerance_=2)
 			return self._widemofr
 
 	@property
