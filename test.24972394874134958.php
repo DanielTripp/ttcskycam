@@ -24,12 +24,16 @@ var g_marker = null;
 function initialize() {
 
 	init_map();
-	google.maps.event.addListenerOnce(g_map, 'tilesloaded', function() {
+	google.maps.event.addListenerOnce(g_map, 'bounds_changed', function() {
+		init_map_sync('map_sync_checkbox', true);
+
 		var marker = new google.maps.Marker({
-				position: new google.maps.LatLng(43.6055,-79.6169),
+				position: new google.maps.LatLng(43.64418112,-79.42852914), 
 				map: g_map,
-				//iconName:"grn_blank",
 				draggable: true,
+				//icon: new google.maps.MarkerImage(get_vehicle_url(vid_, size, heading_, static_aot_moving_), 
+				//		null, null, new google.maps.Point(size/2, size/2)),
+				visible: true, 
 				zIndex: 5
 			});
 	});
