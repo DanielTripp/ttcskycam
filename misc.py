@@ -1,6 +1,7 @@
 #!/usr/bin/python2.6
 
 import sys, os, os.path, time, math, datetime, calendar, bisect, tempfile, subprocess, StringIO, re, multiprocessing, heapq, random
+import profile, cProfile
 from collections import Sequence, MutableSequence, defaultdict, MutableSet
 from itertools import *
 
@@ -1086,6 +1087,24 @@ class ListView(MutableSequence):
 def string_to_file(filename_, str_):
 	with open(filename_, 'w') as fout:
 		fout.write(str_)
+
+def profile_data_to_svg_file(profile_data_filename_):
+	profile_moniker = re.sub('^(.*)\..*$', r'\1', os.path.basename(profile_data_filename_))
+	p1 = subprocess.Popen(['gprof2dot.py', '-f', 'pstats', profile_data_filename_], stdout=subprocess.PIPE)
+	svg_out_filename = 'profiler-output/%s.svg' % (profile_moniker)
+	p2 = subprocess.Popen(['dot', '-Tsvg', '-o', svg_out_filename], stdin=p1.stdout)
+	p1.stdout.close()
+	p2.communicate()
+	if p2.returncode != 0:
+		sys.exit('"dot" exited with return code %d' % (p2.returncode))
+	subprocess.check_call(['./add-panzoom-to-svg.py', svg_out_filename])
+
+def dump_profiler_to_svg_file(profiler_, profile_moniker_):
+	assert isinstance(profiler_, profile.Profile) or isinstance(profiler_, cProfile.Profile)
+	profiler_.create_stats()
+	profile_data_filename = '/tmp/%s.profile' % profile_moniker_
+	profiler_.dump_stats(profile_data_filename)
+	profile_data_to_svg_file(profile_data_filename)
 
 if __name__ == '__main__':
 

@@ -21,7 +21,7 @@ for root_child in roots_children:
 	viewport_elem.append(root_child)
 root.append(viewport_elem)
 
-script_elem = ET.Element('script', attrib={'xmlns:xlink': 'http://www.w3.org/1999/xlink', 'xlink:href': 'js/SVGPan.js'})
+script_elem = ET.Element('script', attrib={'xmlns:xlink': 'http://www.w3.org/1999/xlink', 'xlink:href': '../js/SVGPan.js'})
 root.insert(0, script_elem)
 
 tree.write(filename)

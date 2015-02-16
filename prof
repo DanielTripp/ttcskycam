@@ -1,11 +1,22 @@
-#!/usr/bin/env bash
+#!/usr/bin/env python
 
-if [ "$#" -lt 1 ] ; then
-	echo 'Need at least one argument - filename of python script (plus maybe arguments for it).'
-	exit 1
-fi
+import sys, subprocess
+from misc import *
 
-python -O -m cProfile -o /tmp/out.profile "$@" && gprof2dot.py -f pstats /tmp/out.profile | dot -Tsvg -o profiler-output.svg && ./add-panzoom-to-svg.py profiler-output.svg
+if len(sys.argv) < 3:
+	sys.exit('''Need at least two arguments:
+1) moniker for the profile data to output 
+2) filename of python script (plus maybe arguments for it).''')
 
+profile_moniker = sys.argv[1]
+profile_data_filename = '/tmp/%s.profile' % (profile_moniker)
+py_script_filename = sys.argv[2]
+if not py_script_filename.endswith('.py'):
+	sys.exit('python script filename "%s" doesn\'t end with ".py"' % py_script_filename)
+py_script_args = sys.argv[3:]
 
+subprocess.check_call([sys.executable, '-O', '-m', 'cProfile', '-o', profile_data_filename] 
+		+ [py_script_filename] + py_script_args)
+
+make_profiler_svg_file(profile_data_filename)
 
