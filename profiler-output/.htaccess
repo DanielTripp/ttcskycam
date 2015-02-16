@@ -1,0 +1,4 @@
+Options +Indexes
+IndexOptions IgnoreCase FancyIndexing NameWidth=* DescriptionWidth=* 
+IndexOrderDefault Descending Date
+
