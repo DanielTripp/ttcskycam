@@ -30,6 +30,7 @@ var STORE_FORCE_SETS_IN_LOCALSTORAGE = false;
 
 var SHOW_DEV_CONTROLS = false;
 var CLICKABLE_VEHICLES = false;
+var X_VEHICLE_MARKERS = false;
 var SHOW_ZOOM = false;
 
 var SHOW_PATHS_TEXT = false;
@@ -839,17 +840,31 @@ function set_clock_hour_minute(hour_, minute_) {
 }
 
 function make_vehicle_marker(vid_, heading_, lat_, lon_, static_aot_moving_) {
-	var size = get_vehicle_size();
-	var marker = new google.maps.Marker({
-			position: new google.maps.LatLng(lat_, lon_),
-			map: g_map,
-			draggable: false,
-			icon: new google.maps.MarkerImage(get_vehicle_url(vid_, size, heading_, static_aot_moving_), 
-					null, null, new google.maps.Point(size/2, size/2)),
-			visible: false, 
-			clickable: CLICKABLE_VEHICLES,
-			zIndex: 5
-		});
+	var marker = null;
+	if(X_VEHICLE_MARKERS) {
+		marker = new google.maps.Marker({
+				position: new google.maps.LatLng(lat_, lon_),
+				map: g_map,
+				draggable: false,
+				icon: {url: (static_aot_moving_ ? 'x-vehicle-marker-static.svg' : 'x-vehicle-marker-moving.svg'), 
+						anchor: new google.maps.Point(18, 18)}, 
+				visible: false, 
+				clickable: CLICKABLE_VEHICLES,
+				zIndex: 5
+			});
+	} else {
+		var size = get_vehicle_size();
+		marker = new google.maps.Marker({
+				position: new google.maps.LatLng(lat_, lon_),
+				map: g_map,
+				draggable: false,
+				icon: new google.maps.MarkerImage(get_vehicle_url(vid_, size, heading_, static_aot_moving_), 
+						null, null, new google.maps.Point(size/2, size/2)),
+				visible: false, 
+				clickable: CLICKABLE_VEHICLES,
+				zIndex: 5
+			});
+	}
 	if(CLICKABLE_VEHICLES) {
 		add_solo_vid_click_listener(marker, vid_);
 		add_vid_mouseover_infowin(marker, size, vid_);
