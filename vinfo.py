@@ -233,7 +233,7 @@ class VehicleInfo:
 
 	def set_latlng(self, latlng_):
 		self.latlng = latlng_.copy()
-		self._graph_locs = self._mofr = self._widemofr = None
+		self._graph_locs = self._graph_locs_str = self._mofr = self._widemofr = None
 
 def is_a_streetcar(vid_):
 	# At least, I think that starting w/ 4 means streetcar.  This logic is also implemented in traffic.php. 
