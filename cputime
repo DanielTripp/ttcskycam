@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+
+if [ "$#" -lt 1 ] ; then
+	echo 'Need at least one argument: the filename of a program.'
+	exit 1
+fi
+
+output_filename=$(mktemp --tmpdir tmp-cputime-XXXXXXXX)
+
+TIMEFORMAT='CPU times: %U+%S'
+
+export PROF_EXIT_EARLY=1
+echo '"Exit early" run:'
+{ time "$@" ; } >$output_filename 2>&1 
+cat $output_filename
+time_exit_early_run=$(python -c "print ""$(cat $output_filename | grep '^CPU times: ' | sed 's/CPU times: //g' )")
+
+export PROF_EXIT_EARLY=0
+echo
+echo 'Entire run:'
+{ time "$@" ; } >$output_filename 2>&1 
+cat $output_filename
+time_entire_run=$(python -c "print ""$(cat $output_filename | grep '^CPU times: ' | sed 's/CPU times: //g' )")
+
+echo 
+python -c "print 'CPU time difference:', $time_entire_run - $time_exit_early_run"
+rm $output_filename
+

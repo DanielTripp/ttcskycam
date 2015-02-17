@@ -1106,6 +1106,10 @@ def dump_profiler_to_svg_file(profiler_, profile_moniker_):
 	profiler_.dump_stats(profile_data_filename)
 	profile_data_to_svg_file(profile_data_filename)
 
+def cpu_prof_exit_early_maybe():
+	if int(os.getenv('PROF_EXIT_EARLY')):
+		sys.exit('cpu prof - exiting early.')
+
 if __name__ == '__main__':
 
 	pass
