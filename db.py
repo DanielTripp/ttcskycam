@@ -252,14 +252,14 @@ def get_vid_to_vis_bothdirs_patch(vid_to_pvis_, froute_, num_minutes_, old_end_t
 				redo_vids.add(vid)
 				old_vis = []
 				new_vis = new_best_group
-				fix_doubleback_gps_noise(new_vis)
+				fix_doubleback_gps_noise(new_vis, log_=log_)
 				fix_dirtags(new_vis)
 				vis_grouped_by_dir = get_maximal_sublists3(vis, lambda vi: vi.dir_tag_int) # See note [1] above
 				desirable_stretches = filter(lambda e: is_dirstretch_desirable(e, log_), vis_grouped_by_dir)
 				vis[:] = sum(desirable_stretches, [])
 			else:
 				all_vis = pvis.stage3 + new_vis
-				fix_doubleback_gps_noise(all_vis, startidx=len(pvis.stage3))
+				fix_doubleback_gps_noise(all_vis, startidx=len(pvis.stage3), log_=log_)
 				fix_dirtags(all_vis, startidx=len(pvis.stage3))
 				new_vis = remove_undesirable_dirstretches_patch(pvis, new_vis, log_=log_)
 		if not new_vis: del vid_to_new_vis[vid]
@@ -344,7 +344,7 @@ def get_vid_to_vis_bothdirs(froute_, num_minutes_, end_time_, log_=False):
 		if WRITE_PATCHABLES: pvis.plausibility_groups = copy.deepcopy(plausibility_groups)
 		vis[:] = get_best_plausibility_group(plausibility_groups, log_=log_)
 		if WRITE_PATCHABLES: pvis.stage2 = copy.deepcopy(vis)
-		fix_doubleback_gps_noise(vis)
+		fix_doubleback_gps_noise(vis, log_=log_)
 		fix_dirtags(vis)
 		if WRITE_PATCHABLES: pvis.stage3 = copy.deepcopy(vis)
 		remove_undesirable_dirstretches(vis, pvis, log_=log_)
@@ -823,7 +823,6 @@ def interp(vis_, be_clever_, current_conditions_, dir_=None, datazoom_=None, sta
 	assert is_sorted(vis_, key=lambda vi: vi.time)
 	t0 = time.time() # tdr 
 	vi_to_grade, vi_to_path = get_grade_stretch_info(vis_, be_clever_, log_)
-	time1 = (time.time() - t0) # tdr 
 	for interptime in interptimes:
 		lolo_vi, lo_vi, hi_vi, lolo_idx, lo_idx, hi_idx = get_nearest_time_vis(vis_, interptime)
 		i_vi = None
@@ -862,7 +861,7 @@ def interp(vis_, be_clever_, current_conditions_, dir_=None, datazoom_=None, sta
 				if hi_vi:
 					printerr('\thi: %s' % hi_vi)
 				printerr('\t==> %s' % i_vi)
-		if log_: printerr('Finished interpolating locations for vid %s.' % vid)
+	if log_: printerr('Finished interpolating locations for vid %s.' % vid)
 
 	return interptime_to_vi
 
@@ -1000,8 +999,8 @@ def get_grade_stretch_info_impl(vis_, be_clever_, log_):
 				locses.append(vi.graph_locs)
 			if log_:
 				printerr('latlngs / locses for stretch %d:' % stretchi)
-				for latlng, locs in zip(latlngs, locses): 
-					printerr(latlng, locs)
+				for i, (latlng, locs) in enumerate(zip(latlngs, locses)): 
+					printerr('[%3d] %s, %s' % (i, latlng, locs))
 			path = sg.find_multipath(latlngs, vis_[0].vehicle_id, locses, c.GRAPH_SNAP_RADIUS, log_)
 			assert path is not None
 			if log_:
@@ -1638,11 +1637,17 @@ def get_best_plausibility_group(groups_, log_=False):
 			printerr('Plausibility groups - no vis.')
 		return []
 
-def fix_doubleback_gps_noise(vis_, startidx=0):
+def fix_doubleback_gps_noise(vis_, startidx=0, log_=False):
 	assert is_sorted(vis_, key=lambda vi: vi.time)
 	if len(vis_) == 0:
 		return
-	assert len(set(vi.vehicle_id for vi in vis_)) == 1
+	assert vinfo.same_vid(vis_)
+	if log_:
+		vid = vis_[0].vehicle_id
+		printerr('vid %s - fix_doubleback_gps_noise - before:' % vid)
+		for vi in vis_:
+			printerr(vi)
+		fixes = []
 	D = 20
 	i = startidx
 	while i < len(vis_):
@@ -1658,16 +1663,33 @@ def fix_doubleback_gps_noise(vis_, startidx=0):
 				if geom.diff_headings(ref_heading, i_heading) < 90:
 					i += 1
 				else:
-					vis_[i].set_latlng(ref_pos)
+					if vis_[i].latlng != ref_pos:
+						if log_:
+							fix = [vis_[i].latlng, ref_pos]
+							printerr('vid %s - fix_doubleback_gps_noise - fixing vi #%d (%s) - from/to: %s' % 
+								(vid, i, vis_[i].timestr, fix))
+							fixes.append(fix)
+						vis_[i].set_latlng(ref_pos)
 					for j in range(i+1, len(vis_)):
 						i = j
 						j_pos = vis_[j].latlng
 						if ref_pos.dist_m(j_pos) > D:
 							break
 						else:
-							vis_[j].set_latlng(ref_pos)
+							if vis_[j].latlng != ref_pos:
+								if log_:
+									fix = [vis_[j].latlng, ref_pos]
+									printerr('vid %s - fix_doubleback_gps_noise - fixing vi #%d (%s) - from/to: %s' % 
+										(vid, j, vis_[j].timestr, fix))
+									fixes.append(fix)
+								vis_[j].set_latlng(ref_pos)
 					else:
 						i = len(vis_)
+	if log_:
+		printerr('vid %s - fix_doubleback_gps_noise - fixes: %s' % (vid, fixes))
+		printerr('vid %s - fix_doubleback_gps_noise - after:' % vid)
+		for vi in vis_:
+			printerr(vi)
 
 if __name__ == '__main__':
 
