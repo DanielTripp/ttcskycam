@@ -1,28 +1,57 @@
-#!/usr/bin/env bash
+#!/usr/bin/env python
 
-if [ "$#" -lt 1 ] ; then
-	echo 'Need at least one argument: the filename of a program.'
-	exit 1
-fi
+import sys, subprocess, pipes, os, tempfile, numpy
+from misc import *
 
-output_filename=$(mktemp --tmpdir tmp-cputime-XXXXXXXX)
+if len(sys.argv) >= 2 and sys.argv[1].startswith('-n='):
+	n = int(sys.argv[1].split('=')[1])
+	cmd_list = sys.argv[2:]
+else:
+	n = 1
+	cmd_list = sys.argv[1:]
 
-TIMEFORMAT='CPU times: %U+%S'
+if len(cmd_list) < 2:
+	sys.exit('Need at least one argument: the filename of a program.  Optionally argument, preceeding that: -n=X')
 
-export PROF_EXIT_EARLY=1
-echo '"Exit early" run:'
-{ time "$@" ; } >$output_filename 2>&1 
-cat $output_filename
-time_exit_early_run=$(python -c "print ""$(cat $output_filename | grep '^CPU times: ' | sed 's/CPU times: //g' )")
+TIMEFORMAT_PREFIX = '> CPU times: '
+os.putenv('TIMEFORMAT', TIMEFORMAT_PREFIX+'%U %S')
 
-export PROF_EXIT_EARLY=0
-echo
-echo 'Entire run:'
-{ time "$@" ; } >$output_filename 2>&1 
-cat $output_filename
-time_entire_run=$(python -c "print ""$(cat $output_filename | grep '^CPU times: ' | sed 's/CPU times: //g' )")
+def run_cmd(exit_early_, print_output_):
+	output_filename = tempfile.mkstemp()[1] # Using this temp file to capture the output of the program instead 
+		# of reading it inot memory b/c calc-reports.py (which I often use this program to profile) hangs sometimes if I don't. 
+	try:
+		cmd_str = '{ time %s ; } >%s 2>&1' % (' '.join(pipes.quote(x) for x in cmd_list), pipes.quote(output_filename))
+		os.putenv('PROF_EXIT_EARLY', str(int(exit_early_)))
+		retcode = subprocess.call(cmd_str, shell=True, executable='/bin/bash', stderr=subprocess.STDOUT)
+		with open(output_filename) as fin:
+			output = fin.read()
+		if print_output_ or retcode != 0:
+			print output, 
+		if retcode != 0:
+			raise Exception('Process returned %d' % retcode)
+		for line in output.splitlines()[::-1]:
+			if line.startswith(TIMEFORMAT_PREFIX):
+				cputimes_str = line[len(TIMEFORMAT_PREFIX):].strip()
+				break
+		cputimes_sum = sum(float(x) for x in cputimes_str.split(' '))
+		return cputimes_sum
+	finally:
+		os.remove(output_filename)
 
-echo 
-python -c "print 'CPU time difference:', $time_entire_run - $time_exit_early_run"
-rm $output_filename
+run_cmd(False, False)
+part2_cputimes = []
+for i in range(n):
+	full_cputime = run_cmd(False, True)
+	part1_cputime = run_cmd(True, True)
+	part2_cputime = full_cputime - part1_cputime
+	part2_cputimes.append(part2_cputime)
+	print '> run %d part2 time: %.3f' % (i, part2_cputime)
+
+if n == 1:
+ 	print '> CPU time: %.3f' % (part2_cputimes[0])
+else:
+	stddev_over_mean = numpy.std(numpy.array(part2_cputimes))/numpy.mean(numpy.array(part2_cputimes))
+ 	print '> CPU time (averaged over %d runs): %.3fs.  (std. dev / mean: %.5f)' % (n, average(part2_cputimes), stddev_over_mean)
+	print part2_cputimes
+
 
