@@ -272,9 +272,8 @@ mkdir t20396746274628946240298200 t32958476003967462729584067 main
 as root: 
 
 apache-restart
-
 Sample apache2.conf is at the end of this file. 
-
+a2enmod headers # To enable mod_headers, to disable caching (via .htaccess) of profiler-output directory.  Not a big deal. 
 
 # Check out a sandbox:
 
