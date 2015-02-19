@@ -274,6 +274,7 @@ as root:
 apache-restart
 Sample apache2.conf is at the end of this file. 
 # To enable mod_headers, to disable caching (via .htaccess) of profiler-output directory.  Not a big deal. 
+# I didn't even get it working. 
 a2enmod headers 
 a2enmod expires
 
