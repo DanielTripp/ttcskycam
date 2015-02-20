@@ -675,7 +675,7 @@ class SnapGraph(object):
 	# It's important for performance that this is large enough that it will cache everything for a route between 
 	# generating reports one minute and the next.  This 6000 is based on 500 per fudgeroutes times 12 fudgeroutes.  
 	# If the number of fudgeroutes that we're calculating increases, so should this. 
-	@lru_cache(6000)
+	@lru_cache(6000, posargkeymask=[1,1,0,1,0,1])
 	def find_multipath_single_step(self, combo_args_, relative_i_startnendloc_to_distnpiece_, 
 			snap_tolerance_, log_idx_a_, log_vid_, log_=False):
 		combined_dists_n_pieces = []
