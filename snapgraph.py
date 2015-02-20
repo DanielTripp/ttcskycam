@@ -626,8 +626,9 @@ class SnapGraph(object):
 		return self.find_multipath_impl(tuple(latlngs_), vid_, locses=tuple(locses), snap_tolerance=snap_tolerance, log_=log_)
 
 	# It's important for performance that this is large enough that it will cache everything for a route between 
-	# generating reports one minute and the next.  
-	@lru_cache(50*len(routes.NON_SUBWAY_FUDGEROUTES)) 
+	# generating reports one minute and the next.  This 600 is based on 50 per fudgeroutes times 12 fudgeroutes.  
+	# If the number of fudgeroutes that we're calculating increases, so should this. 
+	@lru_cache(600) 
 	def find_multipath_impl(self, latlngs_, vid_, locses=None, snap_tolerance=c.GRAPH_SNAP_RADIUS, log_=False):
 		if len(latlngs_) < 2:
 			raise Exception()
@@ -672,8 +673,9 @@ class SnapGraph(object):
 			return (Path(r_pieces, self) if r_pieces is not None else None)
 
 	# It's important for performance that this is large enough that it will cache everything for a route between 
-	# generating reports one minute and the next.  
-	@lru_cache(500*len(routes.NON_SUBWAY_FUDGEROUTES)) 
+	# generating reports one minute and the next.  This 6000 is based on 500 per fudgeroutes times 12 fudgeroutes.  
+	# If the number of fudgeroutes that we're calculating increases, so should this. 
+	@lru_cache(6000)
 	def find_multipath_single_step(self, combo_args_, relative_i_startnendloc_to_distnpiece_, 
 			snap_tolerance_, log_idx_a_, log_vid_, log_=False):
 		combined_dists_n_pieces = []
