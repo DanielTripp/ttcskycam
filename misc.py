@@ -1102,12 +1102,12 @@ def profile_data_to_svg_file(profile_data_filename_):
 def dump_profiler_to_svg_file(profiler_, profile_moniker_):
 	assert isinstance(profiler_, profile.Profile) or isinstance(profiler_, cProfile.Profile)
 	profiler_.create_stats()
-	profile_data_filename = '/tmp/%s.profile' % profile_moniker_
+	profile_data_filename = '/tmp/%s.profile' % (profile_moniker_ or os.getenv('PROFILE_MONIKER') or now_str())
 	profiler_.dump_stats(profile_data_filename)
 	profile_data_to_svg_file(profile_data_filename)
 
 def cpu_prof_exit_early_maybe():
-	if int(os.getenv('PROF_EXIT_EARLY')):
+	if int(os.getenv('PROF_EXIT_EARLY', '0')):
 		printerr('> cpu prof - exiting early.')
 		sys.exit(0)
 
