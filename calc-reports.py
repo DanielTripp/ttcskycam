@@ -6,7 +6,7 @@ Examples of date/time args:
 '2014-{09..11}-20 {12:00,12:07}'
 '''
 
-import sys, os, urlparse, json, pprint, time, pickle, xml.dom, xml.dom.minidom, datetime, time, getopt, threading, copy
+import sys, os, urlparse, json, pprint, time, pickle, xml.dom, xml.dom.minidom, datetime, time, getopt, threading, copy, cProfile 
 from misc import *
 from backport_OrderedDict import *
 import traffic, db, vinfo, routes, geom, mc, tracks, util, predictions, system, c, reports, streetlabels, snapgraph, streets
@@ -106,14 +106,18 @@ if __name__ == '__main__':
 	t0 = time.time()
 	streets.get_snapgraph()
 	tracks.get_snapgraph()
-	print 'Time to get sgs: %d seconds.' % (time.time() - t0)
+	print 'Got sgs.'
 
+	profile = False
+
+	total_t0 = time.time()
 	for i, datetimestr in enumerate(datetimestrs):
 		time_em = str_to_em(datetimestr)
 		for froute in froutes:
 			for direction in directions:
 				for reporttype in reporttypes:
 					for datazoom in datazooms:
+						t0 = time.time() # tdr 
 						print '- %s, %s, %s, %s, datazoom=%d -' % (datetimestr, froute, direction, reporttype, datazoom)
 						if not stdout_is_a_tty:
 							printerr('-', datetimestr, froute, direction, reporttype, '-')
@@ -128,6 +132,13 @@ if __name__ == '__main__':
 							raise Exception()
 						if doprint:
 							pprint.pprint(report)
-	printerr('All reports took %.3f seconds.' % (time.time() - t0))
+		if profile:
+			if i == 0:
+				profiler = cProfile.Profile() # tdr 
+				profiler.enable()
+		cpu_prof_exit_early_maybe()
+	if profile:
+		dump_profiler_to_svg_file(profiler, None)
+	printerr('All reports took %.3f seconds.' % (time.time() - total_t0))
 
 
