@@ -520,6 +520,12 @@ class SnapGraph(object):
 	def __str__(self):
 		return 'SnapGraph(%s)' % (self.name if self.name is not None else id(self))
 
+	# This is used in lru_cache keys so it's important that we implement it right.  
+	def __hash__(self):
+		if self.name is None:
+			raise Exception()
+		return hash(self.name)
+
 	# return list of (dist, pathsteps) pairs.  Dist is a float, in meters.   List is sorted in ascending order of dist. 
 	@lru_cache(maxsize=60000, cacheable=lambda args, kwds: kwds.get('out_visited_vertexes') is None)
 	def find_paths(self, startlatlng_, startlocs_, destlatlng_, destlocs_, snap_tolerance=c.GRAPH_SNAP_RADIUS, \
@@ -617,6 +623,12 @@ class SnapGraph(object):
 
 	# return a Path, or None if no path is possible.
 	def find_multipath(self, latlngs_, vid_, locses=None, snap_tolerance=c.GRAPH_SNAP_RADIUS, log_=False):
+		return self.find_multipath_impl(tuple(latlngs_), vid_, locses=tuple(locses), snap_tolerance=snap_tolerance, log_=log_)
+
+	# It's important for performance that this is large enough that it will cache everything for a route between 
+	# generating reports one minute and the next.  
+	@lru_cache(50*len(routes.NON_SUBWAY_FUDGEROUTES)) 
+	def find_multipath_impl(self, latlngs_, vid_, locses=None, snap_tolerance=c.GRAPH_SNAP_RADIUS, log_=False):
 		if len(latlngs_) < 2:
 			raise Exception()
 		our_locses = ([self.multisnap(latlng, snap_tolerance) for latlng in latlngs_] if locses is None else locses)
@@ -639,31 +651,16 @@ class SnapGraph(object):
 					i_startnendloc_to_distnpiece[-1][startnendloc] = (dist, path)
 			assert len(i_startnendloc_to_distnpiece) == n-1
 			for idx_a, idx_b, idx_c in hopscotch(range(n), 3):
-				combined_dists_n_pieces = []
 				if idx_a == 0:
-					loc_combos = product(*our_locses[idx_a:idx_c+1])
+					combo_args = our_locses[idx_a:idx_c+1]
 				else:
-					loc_combos = product([r_pieces[-1][-1]], *our_locses[idx_b:idx_c+1])
-				for loc_combo in loc_combos:
-					cur_dists_n_pieces = []
-					for i, (loc1, loc2) in enumerate(hopscotch(loc_combo, 2)):
-						locs = tuple(e.idx() if isinstance(e, Vertex) else e for e in (loc1, loc2))
-						dist_n_path = i_startnendloc_to_distnpiece[idx_a+i][locs]
-						cur_dists_n_pieces.append(dist_n_path)
-					combined_dists_n_pieces.append(cur_dists_n_pieces)
-				if len(combined_dists_n_pieces) == 0:
-					if log_:
-						printerr('Multipath in not possible.  (snapgraph: "%s").  a=[%d] %s / %s' \
-								% (self.name, idx_a, latlngs_[idx_a], our_locses_[idx_a]))
-					r_pieces = None # No path possible for this part.  No path is possible at all. 
+					combo_args = ((r_pieces[-1][-1],),) + our_locses[idx_b:idx_c+1]
+				relative_i_startnendloc_to_distnpiece = i_startnendloc_to_distnpiece[idx_a:idx_a+len(combo_args)]
+				chosen_dists_n_pieces = self.find_multipath_single_step(combo_args, relative_i_startnendloc_to_distnpiece, 
+						snap_tolerance, idx_a, vid_, log_=log_)
+				if chosen_dists_n_pieces is None:
+					r_pieces = None
 					break
-				combined_dists_n_pieces.sort(key=lambda e: self.get_combined_cost(e, snap_tolerance))
-				if log_:
-					printerr('find_multipath: combined dists/pieces for idxes a=%d, b=%d, c=%d, sorted:' % (idx_a, idx_b, idx_c))
-					for i, ((dist_ab, pieces_ab), (dist_bc, pieces_bc)) in enumerate(combined_dists_n_pieces):
-						printerr('[{}] a->b dist={:8.3f} {}'.format(i, dist_ab, pieces_ab))
-						printerr('[{}] b->c dist={:8.3f} {}'.format(i, dist_bc, pieces_bc))
-				chosen_dists_n_pieces = combined_dists_n_pieces[0]
 				chosen_dist_n_piece_ab = chosen_dists_n_pieces[0]
 				r_dist += chosen_dist_n_piece_ab[0]
 				r_pieces.append(chosen_dist_n_piece_ab[1])
@@ -673,6 +670,33 @@ class SnapGraph(object):
 					r_pieces.append(chosen_dist_n_piece_bc[1])
 			r_pieces = self.fix_gps_artifact_path_doublebacks(r_pieces, snap_tolerance, vid_, log_)
 			return (Path(r_pieces, self) if r_pieces is not None else None)
+
+	# It's important for performance that this is large enough that it will cache everything for a route between 
+	# generating reports one minute and the next.  
+	@lru_cache(500*len(routes.NON_SUBWAY_FUDGEROUTES)) 
+	def find_multipath_single_step(self, combo_args_, relative_i_startnendloc_to_distnpiece_, 
+			snap_tolerance_, log_idx_a_, log_vid_, log_=False):
+		combined_dists_n_pieces = []
+		for loc_combo in product(*combo_args_):
+			cur_dists_n_pieces = []
+			for i, (loc1, loc2) in enumerate(hopscotch(loc_combo, 2)):
+				locs = tuple(e.idx() if isinstance(e, Vertex) else e for e in (loc1, loc2))
+				dist_n_path = relative_i_startnendloc_to_distnpiece_[i][locs]
+				cur_dists_n_pieces.append(dist_n_path)
+			combined_dists_n_pieces.append(cur_dists_n_pieces)
+		if len(combined_dists_n_pieces) == 0:
+			if log_:
+				printerr('Multipath is not possible.  (snapgraph: "%s").  idx_a=[%d] %s' \
+						% (self.name, log_idx_a_, combo_args_))
+			return None # No path possible for this part.  No path is possible at all. 
+		combined_dists_n_pieces.sort(key=lambda e: self.get_combined_cost(e, snap_tolerance_))
+		if log_:
+			printerr('find_multipath: combined dists/pieces for idx_a=%d, sorted:' % (log_idx_a_))
+			for i, ((dist_ab, pieces_ab), (dist_bc, pieces_bc)) in enumerate(combined_dists_n_pieces):
+				printerr('[{}] a->b dist={:8.3f} {}'.format(i, dist_ab, pieces_ab))
+				printerr('[{}] b->c dist={:8.3f} {}'.format(i, dist_bc, pieces_bc))
+		chosen_dists_n_pieces = combined_dists_n_pieces[0]
+		return chosen_dists_n_pieces
 
 	def fix_gps_artifact_path_doublebacks(self, pieces_, snap_tolerance_, vid_, log_):
 		if not pieces_:
