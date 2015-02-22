@@ -1111,6 +1111,9 @@ def cpu_prof_exit_early_maybe():
 		printerr('> cpu prof - exiting early.')
 		sys.exit(0)
 
+def cpu_prof_disable_opt():
+	return int(os.getenv('PROF_DISABLE_OPT', '0'))
+
 if __name__ == '__main__':
 
 	pass
