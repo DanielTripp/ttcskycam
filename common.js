@@ -900,6 +900,17 @@ function bind_radio_buttons_to_localstorage(radiogroupname_) {
 	});
 }
 
+function bind_checkbox_to_localstorage(checkbox_id_) {
+	var storage_key = document.URL+' - checkbox:'+checkbox_id_;
+	var stored_val = localStorage.getItem(storage_key);
+	if(stored_val != null) {
+		set_selected(checkbox_id_, $.parseJSON(stored_val));
+	}
+	$('#'+checkbox_id_).click(function() {
+		localStorage.setItem(storage_key, is_selected(checkbox_id_).toString());
+	});
+}
+
 // Thanks to http://stackoverflow.com/a/155404/321556 
 function scroll_to_line(textarea_id_, linenum_) {
 	var textarea = document.getElementById(textarea_id_);
