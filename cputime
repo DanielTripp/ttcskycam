@@ -3,12 +3,17 @@
 import sys, subprocess, pipes, os, tempfile, numpy
 from misc import *
 
-if len(sys.argv) >= 2 and sys.argv[1].startswith('-n='):
-	n = int(sys.argv[1].split('=')[1])
-	cmd_list = sys.argv[2:]
-else:
-	n = 1
-	cmd_list = sys.argv[1:]
+n = 1
+test_opt = False
+args = sys.argv[1:]
+for i, arg in enumerate(args):
+	if arg.startswith('--n='):
+		n = int(arg.split('=')[1])
+	elif arg == '--opt':
+		test_opt = True
+	else:
+		cmd_list = args[i:]
+		break
 
 if len(cmd_list) < 2:
 	sys.exit('Need at least one argument: the filename of a program.  Optionally argument, preceeding that: -n=X')
@@ -16,12 +21,13 @@ if len(cmd_list) < 2:
 TIMEFORMAT_PREFIX = '> CPU times: '
 os.putenv('TIMEFORMAT', TIMEFORMAT_PREFIX+'%U %S')
 
-def run_cmd(exit_early_, print_output_):
+def run_cmd(exit_early_, print_output_, disable_opt_):
 	output_filename = tempfile.mkstemp()[1] # Using this temp file to capture the output of the program instead 
 		# of reading it inot memory b/c calc-reports.py (which I often use this program to profile) hangs sometimes if I don't. 
 	try:
 		cmd_str = '{ time %s ; } >%s 2>&1' % (' '.join(pipes.quote(x) for x in cmd_list), pipes.quote(output_filename))
 		os.putenv('PROF_EXIT_EARLY', str(int(exit_early_)))
+		os.putenv('PROF_DISABLE_OPT', str(int(disable_opt_)))
 		retcode = subprocess.call(cmd_str, shell=True, executable='/bin/bash', stderr=subprocess.STDOUT)
 		with open(output_filename) as fin:
 			output = fin.read()
@@ -38,20 +44,56 @@ def run_cmd(exit_early_, print_output_):
 	finally:
 		os.remove(output_filename)
 
-run_cmd(False, False)
-part2_cputimes = []
-for i in range(n):
-	full_cputime = run_cmd(False, True)
-	part1_cputime = run_cmd(True, True)
-	part2_cputime = full_cputime - part1_cputime
-	part2_cputimes.append(part2_cputime)
-	print '> run %d part2 time: %.3f' % (i, part2_cputime)
+if test_opt:
+	run_cmd(False, False, False)
+	opt_part2_cputimes = []
+	for i in range(n):
+		full_cputime = run_cmd(False, True, False)
+		part1_cputime = run_cmd(True, True, False)
+		part2_cputime = full_cputime - part1_cputime
+		opt_part2_cputimes.append(part2_cputime)
+		print '> opt run %d part2 time: %.3f' % (i, part2_cputime)
+	noopt_part2_cputimes = []
+	for i in range(n):
+		full_cputime = run_cmd(False, True, True)
+		part1_cputime = run_cmd(True, True, True)
+		part2_cputime = full_cputime - part1_cputime
+		noopt_part2_cputimes.append(part2_cputime)
+		print '> noopt run %d part2 time: %.3f' % (i, part2_cputime)
 
-if n == 1:
- 	print '> CPU time: %.3f' % (part2_cputimes[0])
+	if n == 1:
+		opt_time = opt_part2_cputimes[0]
+		noopt_time = noopt_part2_cputimes[0]
+		ratio = opt_part2_cputimes[0]/noopt_part2_cputimes[0]
+		print '> CPU times: opt: %.1f seconds, noopt: %.1f seconds' % (opt_time, noopt_time)
+		print '> Ratio: %.2f' % (ratio)
+	else:
+		def get_stddev_over_mean(times_):
+			return numpy.std(numpy.array(times_))/numpy.mean(numpy.array(times_))
+		opt_mean = average(opt_part2_cputimes)
+		opt_stddev_over_mean = get_stddev_over_mean(opt_part2_cputimes)
+		noopt_mean = average(noopt_part2_cputimes)
+		noopt_stddev_over_mean = get_stddev_over_mean(noopt_part2_cputimes)
+		print '> CPU time, avg over %d runs, opt:    %.1f seconds.  (std. dev / mean: %.2f)' % (n, opt_mean, opt_stddev_over_mean)
+		print '> indiv times                 opt:    %s' % (opt_part2_cputimes)
+		print '> CPU time, avg over %d runs, noopt:  %.1f seconds.  (std. dev / mean: %.2f)' % (n, noopt_mean, noopt_stddev_over_mean)
+		print '> indiv times                 noopt:  %s' % (noopt_part2_cputimes)
+		print '> Ratio: %.2f' % (opt_mean/noopt_mean)
 else:
-	stddev_over_mean = numpy.std(numpy.array(part2_cputimes))/numpy.mean(numpy.array(part2_cputimes))
- 	print '> CPU time (averaged over %d runs): %.3fs.  (std. dev / mean: %.5f)' % (n, average(part2_cputimes), stddev_over_mean)
-	print part2_cputimes
+	run_cmd(False, False, False)
+	part2_cputimes = []
+	for i in range(n):
+		full_cputime = run_cmd(False, True, False)
+		part1_cputime = run_cmd(True, True, False)
+		part2_cputime = full_cputime - part1_cputime
+		part2_cputimes.append(part2_cputime)
+		print '> run %d part2 time: %.3f' % (i, part2_cputime)
+
+	if n == 1:
+		print '> CPU time: %.3f' % (part2_cputimes[0])
+	else:
+		stddev_over_mean = numpy.std(numpy.array(part2_cputimes))/numpy.mean(numpy.array(part2_cputimes))
+		print '> CPU time (averaged over %d runs): %.3f seconds.  (std. dev / mean: %.5f)' % (n, average(part2_cputimes), stddev_over_mean)
+		print part2_cputimes
 
 
