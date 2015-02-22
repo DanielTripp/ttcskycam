@@ -559,7 +559,7 @@ function round_heading(heading_) {
 
 function refresh_data_from_server_timer_func() {
 	refresh_data_from_server_allroutes();
-	schedule_refresh_data_from_server();
+	schedule_refresh_data_from_server_maybe();
 }
 
 function refresh_data_from_server_allroutes() {
@@ -1210,10 +1210,9 @@ function init_everything_that_depends_on_map() {
 	init_geolocation();
 
 	// The first 'get' of data from the server will happen due to the get_paths_from_server() call below.  
-	if(is_traffictype_current()) {
-		schedule_refresh_data_from_server(); // ... but this call here will cause a periodic refresh of 
-				// all routes.  The first refresh caused by this will happen not right away, but in a few seconds. 
-	}
+	// But this call here will cause a periodic refresh of 
+	// all routes.  The first refresh caused by this will happen not right away, but in a few seconds. 
+	schedule_refresh_data_from_server_maybe();
 
 	create_invisible_clickable_route_grid();
 
@@ -1877,9 +1876,9 @@ function set_play_buttons_appropriately() {
 function on_playpause_clicked() {
 	g_playing = !g_playing;
 	set_play_buttons_appropriately();
-	if(g_playing) { // go from paused to playing: 
-		schedule_refresh_data_from_server();
-	} else { // go from playing to paused: 
+	if(g_playing) { // going from paused to playing: 
+		schedule_refresh_data_from_server_maybe();
+	} else { // going from playing to paused: 
 		if(g_times.size() > 0) {
 			if(g_cur_minute_idx > g_times.size()-1) {
 				g_cur_minute_idx = g_times.size()-1;
@@ -1969,14 +1968,14 @@ function on_traffictype_changed() {
 	forget_data_allroutes();
 	update_g_times();
 	calc_display_set_and_deal_with_it();
-	if(is_traffictype_current()) {
-		schedule_refresh_data_from_server();
-	}
+	schedule_refresh_data_from_server_maybe();
 }
 
-function schedule_refresh_data_from_server() {
+function schedule_refresh_data_from_server_maybe() {
 	stop_refresh_data_from_server_timer();
-	g_refresh_data_from_server_timer = setTimeout('refresh_data_from_server_timer_func()', REFRESH_INTERVAL_MS);
+	if(is_traffictype_current()) {
+		g_refresh_data_from_server_timer = setTimeout('refresh_data_from_server_timer_func()', REFRESH_INTERVAL_MS);
+	}
 }
 
 function update_datetimepicker_enabledness() {
