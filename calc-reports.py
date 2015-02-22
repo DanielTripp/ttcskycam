@@ -91,8 +91,8 @@ if __name__ == '__main__':
 				r[vi.vehicle_id].append(vi)
 		return dict(r)
 
-	stdout_is_a_tty = os.isatty(sys.stdout.fileno())
-	t0 = time.time()
+	stdout_and_stderr_both_ttys = os.isatty(sys.stdout.fileno()) and os.isatty(sys.stderr.fileno())
+	stderr_is_a_tty = os.isatty(sys.stderr.fileno())
 	date_field_combos = list(product(expand(yeararg), expand(montharg), expand(dayarg), expand(timearg)))
 	datetimestrs = ['%s-%s-%s %s' % (year, month, day, tyme) for year, month, day, tyme in date_field_combos]
 	printerr('Will calculate %d date/times:' % len(datetimestrs))
@@ -103,7 +103,6 @@ if __name__ == '__main__':
 	if not norestartmc:
 		mc.restart()
 
-	t0 = time.time()
 	streets.get_snapgraph()
 	tracks.get_snapgraph()
 	print 'Got sgs.'
@@ -117,11 +116,12 @@ if __name__ == '__main__':
 			for direction in directions:
 				for reporttype in reporttypes:
 					for datazoom in datazooms:
-						t0 = time.time() # tdr 
-						print '- %s, %s, %s, %s, datazoom=%d -' % (datetimestr, froute, direction, reporttype, datazoom)
-						if not stdout_is_a_tty:
-							printerr('-', datetimestr, froute, direction, reporttype, '-')
-						print_est_time_remaining('', t0, i, len(datetimestrs))
+						log_args_str = '- %s, %s, %s, %s, datazoom=%d -' % (datetimestr, froute, direction, reporttype, datazoom)
+						print log_args_str
+						if not stdout_and_stderr_both_ttys:
+							printerr(log_args_str)
+						if stderr_is_a_tty:
+							print_est_time_remaining('', total_t0, i, len(datetimestrs))
 						if reporttype == 't':
 							report = traffic.get_traffics_impl(froute, direction, datazoom, time_em, log_=dolog)
 						elif reporttype == 'l':
