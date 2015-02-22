@@ -154,7 +154,7 @@ def vi_select_generator(froute_, end_time_em_, start_time_em_, dir_=None, includ
 	sql = 'select '+VI_COLS+' from ttc_vehicle_locations where '\
 		+('fudgeroute in (\'\', %s) ' if include_blank_fudgeroute_ else 'fudgeroute = %s ')\
 		+('' if include_unpredictables_ else ' and predictable = true ') \
-		+' and time_retrieved <= %s and time_retrieved >= %s '\
+		+' and time_retrieved <= %s and time_retrieved > %s '\
 		+(' and vehicle_id = %s ' if vid_ else ' and vehicle_id != \'\' ') \
 		+ dir_clause \
 		+(' order by time' if forward_in_time_order_ else ' order by time desc')
@@ -313,15 +313,50 @@ def get_vid_to_vis_bothdirs(froute_, num_minutes_, end_time_, log_=False):
 		if len(vis) == 0: del vid_to_vis[vid]
 	return vid_to_vis
 
+g_patchcache_froute_to_time_window_n_vid_to_vis_bothdirs_raw = {}
+
 def get_vid_to_vis_bothdirs_raw(froute_, time_window_):
 	assert isinstance(time_window_, TimeWindow)
-	all_vids_vis = list(vi_select_generator(froute_, time_window_.end, time_window_.start, None, True))
-	# We want to get a lot of overshots, because we need a lot of samples in order to determine directions with any certainty.
-	vid_to_vis = file_under_key(all_vids_vis, lambda vi: vi.vehicle_id)
-	for vid, vis in vid_to_vis.iteritems():
-		vis.sort(key=lambda x: x.time)
-		work_around_secssincereport_bug(vis)
-	return vid_to_vis
+	r = None
+	if froute_ in g_patchcache_froute_to_time_window_n_vid_to_vis_bothdirs_raw:
+		old_time_window, old_vid_to_vis_bothdirs_raw = g_patchcache_froute_to_time_window_n_vid_to_vis_bothdirs_raw[froute_]
+		if old_time_window.span == time_window_.span and 0 <= time_window_.end - old_time_window.end < 1000*60*20:
+			r = copy_vid_to_vis_bothdirs_raw_for_patchcache(old_vid_to_vis_bothdirs_raw)
+			for vid, vis in r.items():
+				vis[:] = [vi for vi in vis if vi.time_retrieved > time_window_.start]
+				if not vis:
+					del r[vid]
+			new_all_vids_vis = list(vi_select_generator(froute_, time_window_.end, old_time_window.end, None, True))
+			for vid, new_vis in file_under_key(new_all_vids_vis, lambda vi: vi.vehicle_id).iteritems():
+				new_vis.sort(key=lambda x: x.time)
+				work_around_secssincereport_bug(new_vis)
+				if vid in r:
+					r[vid] += new_vis
+				else:
+					r[vid] = new_vis
+	if r is None:
+		all_vids_vis = list(vi_select_generator(froute_, time_window_.end, time_window_.start, None, True))
+		# We want to get a lot of overshots, because we need a lot of samples in order to determine directions with any certainty.
+		r = file_under_key(all_vids_vis, lambda vi: vi.vehicle_id)
+		for vid, vis in r.iteritems():
+			vis.sort(key=lambda x: x.time)
+			work_around_secssincereport_bug(vis)
+	prune_patchcache_get_vid_to_vis_bothdirs_raw(time_window_)
+	g_patchcache_froute_to_time_window_n_vid_to_vis_bothdirs_raw[froute_] = \
+			(time_window_, copy_vid_to_vis_bothdirs_raw_for_patchcache(r))
+	return r 
+
+def prune_patchcache_get_vid_to_vis_bothdirs_raw(time_window_):
+	global g_patchcache_froute_to_time_window_n_vid_to_vis_bothdirs_raw
+	for vid, (time_window, data) in g_patchcache_froute_to_time_window_n_vid_to_vis_bothdirs_raw.items():
+		if abs(time_window_.end - time_window.end) > 1000*60*30:
+			del g_patchcache_froute_to_time_window_n_vid_to_vis_bothdirs_raw[vid]
+
+def copy_vid_to_vis_bothdirs_raw_for_patchcache(orig_vid_to_vis_bothdirs_raw_):
+	r = {}
+	for vid, vis in orig_vid_to_vis_bothdirs_raw_.iteritems():
+		r[vid] = vis[:]
+	return r
 
 def adopt_or_discard_vis_with_blank_froutes(froute_, vis_, log_=False):
 	assert len(froute_) > 0 and vinfo.same_vid(vis_)
@@ -414,7 +449,7 @@ def remove_time_duplicates_patch(old_vis_, new_vis_):
 			del new_vis_[i]
 
 def fix_dirtags(vis_, startidx=0):
-	assert vinfo.same_vid(vis_)
+	assert vis_ and vinfo.same_vid(vis_)
 	D = 50
 	assert all(vi1.time < vi2.time for vi1, vi2 in hopscotch(vis_))
 	for i in range(startidx, len(vis_)):
@@ -1546,19 +1581,19 @@ def is_plausible(dist_m_, speed_kmph_):
 	else:
 		return speed_kmph_ < 30
 
-g_vid_to_time_window_n_plausgroups = {}
+g_patchcache_vid_to_time_window_n_plausgroups = {}
 
 # This is for removing large buggy GPS readings (example: vehicle 4116 2012-06-15 13:30 to 14:00.)
 def get_plausgroups(vis_, time_window_):
-	global g_vid_to_time_window_n_plausgroups
+	global g_patchcache_vid_to_time_window_n_plausgroups
 	assert vis_ and is_sorted(vis_, key=lambda vi: vi.time) and vinfo.same_vid(vis_) and isinstance(time_window_, TimeWindow)
 	vid = vis_[0].vehicle_id
 	r = None
-	if vid in g_vid_to_time_window_n_plausgroups:
-		old_time_window, old_plausgroups = g_vid_to_time_window_n_plausgroups[vid]
+	if not cpu_prof_disable_opt() and vid in g_patchcache_vid_to_time_window_n_plausgroups:
+		old_time_window, old_plausgroups = g_patchcache_vid_to_time_window_n_plausgroups[vid]
 		assert old_plausgroups
 		if old_time_window.span == time_window_.span and 0 <= time_window_.end - old_time_window.end < 1000*60*20:
-			r = copy_plausgroups_for_cache(old_plausgroups)
+			r = copy_plausgroups_for_patchcache(old_plausgroups)
 			trim_plausgroups_by_time_window(r, time_window_)
 			new_vis = [vi for vi in vis_ if vi.time_retrieved > old_time_window.end]
 			for new_vi in new_vis:
@@ -1567,12 +1602,12 @@ def get_plausgroups(vis_, time_window_):
 		r = []
 		for vi in vis_:
 			add_vi_to_appropriate_plausgroup(r, vi)
-	get_plausgroups_prune_cache(time_window_)
-	g_vid_to_time_window_n_plausgroups[vid] = (time_window_, copy_plausgroups_for_cache(r))
+	prune_patchcache_get_plausgroups(time_window_)
+	g_patchcache_vid_to_time_window_n_plausgroups[vid] = (time_window_, copy_plausgroups_for_patchcache(r))
 	return r
 
 # deepcopy is slow.  So for performance we're sharing vis a lot.  Be careful and don't modify them.
-def copy_plausgroups_for_cache(orig_groups_):
+def copy_plausgroups_for_patchcache(orig_groups_):
 	r = []
 	for orig_group in orig_groups_:
 		r_group = []
@@ -1581,11 +1616,11 @@ def copy_plausgroups_for_cache(orig_groups_):
 			r_group.append(vi)
 	return r
 
-def get_plausgroups_prune_cache(time_window_):
-	global g_vid_to_time_window_n_plausgroups
-	for vid, (time_window, plausgroups) in g_vid_to_time_window_n_plausgroups.items():
+def prune_patchcache_get_plausgroups(time_window_):
+	global g_patchcache_vid_to_time_window_n_plausgroups
+	for vid, (time_window, plausgroups) in g_patchcache_vid_to_time_window_n_plausgroups.items():
 		if abs(time_window_.end - time_window.end) > 1000*60*30:
-			del g_vid_to_time_window_n_plausgroups[vid]
+			del g_patchcache_vid_to_time_window_n_plausgroups[vid]
 
 def trim_plausgroups_by_time_window(groups_, time_window_):
 	for group in groups_:
