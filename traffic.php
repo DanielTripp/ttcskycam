@@ -1056,6 +1056,7 @@ function init_everything_that_doesnt_depend_on_map() {
 	if(SHOW_DEV_CONTROLS) {
 		bind_text_control_to_localstorage('datetimepicker_textfield');
 		bind_radio_buttons_to_localstorage('traffictype');
+		bind_checkbox_to_localstorage('freeze_datazoom_checkbox');
 		init_datetimepicker();
 	} else {
 		$('#div_dev_controls').remove();
@@ -1303,7 +1304,7 @@ function on_guizoom_changed() {
 	} else {
 		var guizoom = g_map.getZoom();
 		g_fudgeroute_data.forEach(function(froute, data) {
-			if(!is_subway(froute)) {
+			if(!is_subway(froute) && !is_freeze_datazoom_enabled()) {
 				update_traffic_datazoom(froute);
 				if(data.traffic_datazoom != guizoom) {
 					refresh_traffic_from_server(froute);
@@ -1318,6 +1319,10 @@ function on_guizoom_changed() {
 		remake_traffic_lines_allroutes();
 		remake_all_vehicle_markers();
 	}
+}
+
+function is_freeze_datazoom_enabled() {
+	return SHOW_DEV_CONTROLS && is_selected('freeze_datazoom_checkbox');
 }
 
 function get_force_sets_from_localstorage() {
@@ -2320,6 +2325,7 @@ $(document).ready(initialize);
 					<input type="button" id="debug_report_button" onclick="on_show_debug_report_button_clicked()" value="Show debug report" />
 					///
 					<label><input id="map_sync_checkbox" type="checkbox"/>Map Sync</label>
+					<label><input id="freeze_datazoom_checkbox" type="checkbox"/>Freeze Datazoom</label>
 
 					<font size="-1">
 					<p id="p_vid_checkboxes">&nbsp;</p>
