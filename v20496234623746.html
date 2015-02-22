@@ -123,7 +123,6 @@ function show_bounding_rect_maybe(vis_by_time_) {
 				maxlng = Math.max(maxlng, lng);
 			}
 		}
-		console.log( minlat  , minlng  , maxlat  , maxlng ); // tdr 
 		var rect_bounds = new google.maps.LatLngBounds(
 				new google.maps.LatLng(minlat, minlng), new google.maps.LatLng(maxlat, maxlng));
 		g_bounding_rect = new google.maps.Rectangle({bounds: rect_bounds, map: g_map, strokeColor: 'rgb(0,0,0)', 
