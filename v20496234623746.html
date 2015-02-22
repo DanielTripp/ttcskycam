@@ -19,6 +19,7 @@
 
 var g_vmarkers = new Array(), g_times = new Array(), g_curtimeidx = -1;
 var g_playtimer = null;
+var g_bounding_rect = null;
 
 eval(get_sync("sprintf.js"));
 
@@ -101,6 +102,33 @@ function display_vis(vis_json_str_) {
 	var vis_by_time = eval(vis_json_str_);
 	display_vis_html(vis_by_time);
 	make_vehicle_markers(vis_by_time);
+	show_bounding_rect_maybe(vis_by_time);
+}
+
+function show_bounding_rect_maybe(vis_by_time_) {
+	if(g_bounding_rect != null) {
+		g_bounding_rect.setMap(null);
+		g_bounding_rect = null;
+	}
+	if(is_selected('boundingbox_checkbox')) {
+		var minlat=90, minlng=180, maxlat=-90, maxlng=-180;
+		for(var i=0; i<vis_by_time_.length; i++) {
+			var vis = vis_by_time_[i];
+			for(var j=1; j<vis.length; j++) {
+				var vi = vis[j];
+				var lat = vi.lat, lng = vi.lon;
+				minlat = Math.min(minlat, lat);
+				minlng = Math.min(minlng, lng);
+				maxlat = Math.max(maxlat, lat);
+				maxlng = Math.max(maxlng, lng);
+			}
+		}
+		console.log( minlat  , minlng  , maxlat  , maxlng ); // tdr 
+		var rect_bounds = new google.maps.LatLngBounds(
+				new google.maps.LatLng(minlat, minlng), new google.maps.LatLng(maxlat, maxlng));
+		g_bounding_rect = new google.maps.Rectangle({bounds: rect_bounds, map: g_map, strokeColor: 'rgb(0,0,0)', 
+				strokeOpacity: 0.5, strokeWeight: 1, fillOpacity: 0, zIndex: -10, clickable: false});
+	}
 }
 
 function make_vehicle_markers(vis_by_time_) {
@@ -326,6 +354,7 @@ function infowin_div(content_) {
 				Max rows: <input type="text" size="5" id="maxrows_field" value="1000" /> 
 				<label><input type="checkbox" id="interpbytime_checkbox" />Interp</label>
 				<label><input type="checkbox" id="collapseanimation_checkbox" />Collapse</label>
+				<label><input type="checkbox" id="boundingbox_checkbox" />Bounding Box</label>
 				<label><input type="checkbox" id="infowindows_checkbox" />InfoWindows</label>
 				<label><input type="checkbox" id="vid_markers_checkbox" checked="checked" />Vehicle ID markers</label>
 				&nbsp;&nbsp;<input type="range" id="opacity_slider" min="0" max="100" onchange="run_query()"> << Opacity 
