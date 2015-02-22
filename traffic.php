@@ -385,7 +385,7 @@ function all_froutes() {
 }
 
 function refresh_vid_checkboxes_html() {
-	if(!CLICKABLE_VEHICLES) {
+	if(!(SHOW_DEV_CONTROLS && CLICKABLE_VEHICLES)) {
 		return;
 	}
 	var html = 'Showing vehicle IDs:<br>';
