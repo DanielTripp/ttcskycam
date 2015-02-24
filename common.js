@@ -403,9 +403,10 @@ function vi_to_str(vi_) {
 	} else {
 		dir_tag = "'"+vi_.dir_tag+"'";
 	}
+	var mofrs_are_ok = (vi_.mofr == vi_.widemofr) || (vi_.mofr == -1 && vi_.widemofr != -1);
 	return sprintf('%s  route: %3.3s%-4s, vid: %s, dir: %-14s, (  %2.5f, %2.5f  ) , h:%3d, mofr: %5d%s%5d %s', 
 			vi_.timestr, vi_.fudgeroute, vi_.route_tag, vi_.vehicle_id, dir_tag, vi_.lat, vi_.lon, vi_.heading, 
-				vi_.mofr, (vi_.mofr != vi_.widemofr ? '!' : '='), vi_.widemofr, (vi_.predictable ? ' ' : 'U'));
+				vi_.mofr, (mofrs_are_ok ? ' ' : '!'), vi_.widemofr, (vi_.predictable ? ' ' : 'U'));
 }
 
 function avg(lo_, hi_, ratio_) {
