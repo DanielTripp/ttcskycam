@@ -103,7 +103,10 @@ class VehicleInfo:
 				self.is_dir_tag_corrected, self.is_fudgeroute_corrected)
 
 	def __eq__(self, other_):
-		return isinstance(other_, VehicleInfo) and (self._key() == other_._key())
+		return (self is other_) or (isinstance(other_, VehicleInfo) and (self._key() == other_._key()))
+
+	def __ne__(self, other_):
+		return not self.__eq__(other_)
 
 	def calc_time(self):
 		self.time = self.time_retrieved - self.secs_since_report*1000
