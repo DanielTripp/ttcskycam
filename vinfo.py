@@ -156,10 +156,11 @@ class VehicleInfo:
 			assert len(routestr) == 7 # Not that it's a big deal if it's greater than 7.  It's just that I would like to know, 
 				# and probably rewrite this function, to make sure that the values it returns are always the same length, 
 				# so that when I print out a list of them, every field lines up in the same columns. 
+		mofrs_are_ok = (self.mofr == self.widemofr) or (self.mofr == -1 and self.widemofr != -1)
 		return '%s  r=%-6s, vid=%s, dir: %s%-12s, (%.7f,%.7f), h=%3d, mofr=%5d%s%5d%s' \
 			% (self.timestr, routestr, self.vehicle_id, 
 					('*' if self.is_dir_tag_corrected else ' '), self.dir_tag,
-			   self.latlng.lat, self.latlng.lng, self.heading, self.mofr, ('!' if self.mofr!=self.widemofr else '='), self.widemofr,
+			   self.latlng.lat, self.latlng.lng, self.heading, self.mofr, (' ' if mofrs_are_ok else ' '), self.widemofr,
 			   ('  ' if self.predictable else ' U'))
 
 	def str_long(self):
