@@ -44,6 +44,8 @@ PREDICTION_COLS = ' fudgeroute, configroute, stoptag, time_retrieved, time_of_pr
 
 DISABLE_GRAPH_PATHS = False
 
+USE_PATCHCACHES = True
+
 g_conn = None
 g_forced_hostmoniker = None
 g_lock = threading.RLock()
@@ -292,11 +294,24 @@ class TimeWindow(object):
 	def __str__(self):
 		return 'TimeWindow(%s, %s)' % (em_to_str_millis(self.start), em_to_str_millis(self.end))
 
+	def trim_vilist(self, vilist_):
+		assert all(isinstance(e, vinfo.VehicleInfo) for e in vilist_)
+		vilist_[:] = [vi for vi in vilist_ if self.start < vi.time_retrieved <= self.end]
+
+	def trimmed_vilist(self, vilist_):
+		vilist_copy = vilist_[:]
+		self.trim_vilist(vilist_copy)
+		return vilist_copy
+
+	def gt_trimmed_vilist(self, vilist_):
+		return [vi for vi in vilist_ if vi.time_retrieved > self.end]
+
 @lru_cache(10)
 def get_vid_to_vis_bothdirs(froute_, num_minutes_, end_time_, log_=False):
 	time_window = TimeWindow(get_history_overshoot_start_time(end_time_, num_minutes_), end_time_)
-	vid_to_vis = get_vid_to_vis_bothdirs_raw(froute_, time_window)
-	for vid, vis in vid_to_vis.items():
+	vid_to_vis = get_vid_to_vis_bothdirs_raw(froute_, time_window, log_=log_)
+	for vid in sorted(vid_to_vis.keys()): # sorting by vid just to ease debugging. 
+		vis = vid_to_vis[vid]
 		adopt_or_discard_vis_with_blank_froutes(froute_, vis, log_=log_) # We have to call this before the filtering on 
 				# widemofr below, because to get a widemofr we need a fudgeroute to refer to. 
 		vis[:] = [vi for vi in vis if vi.widemofr != -1]
@@ -305,25 +320,25 @@ def get_vid_to_vis_bothdirs(froute_, num_minutes_, end_time_, log_=False):
 		if len(vis) == 0:
 			del vid_to_vis[vid]
 			continue
-		plausgroups = get_plausgroups(vis, time_window)
+		plausgroups = get_plausgroups(vis, froute_, time_window)
 		vis[:] = get_best_plausgroup(plausgroups, log_=log_)
 		fix_doubleback_gps_noise(vis, log_=log_)
-		fix_dirtags(vis)
+		fix_dirtags(vis, froute_, time_window, log_=log_)
 		remove_undesirable_dirstretches(vis, None, log_=log_)
 		if len(vis) == 0: del vid_to_vis[vid]
 	return vid_to_vis
 
 g_patchcache_froute_to_time_window_n_vid_to_vis_bothdirs_raw = {}
 
-def get_vid_to_vis_bothdirs_raw(froute_, time_window_):
-	assert isinstance(time_window_, TimeWindow)
+def get_vid_to_vis_bothdirs_raw(froute_, time_window_, log_=False):
+	assert froute_ and isinstance(time_window_, TimeWindow)
 	r = None
-	if froute_ in g_patchcache_froute_to_time_window_n_vid_to_vis_bothdirs_raw:
+	if USE_PATCHCACHES and froute_ in g_patchcache_froute_to_time_window_n_vid_to_vis_bothdirs_raw:
 		old_time_window, old_vid_to_vis_bothdirs_raw = g_patchcache_froute_to_time_window_n_vid_to_vis_bothdirs_raw[froute_]
 		if old_time_window.span == time_window_.span and 0 <= time_window_.end - old_time_window.end < 1000*60*20:
 			r = copy_vid_to_vis_bothdirs_raw_for_patchcache(old_vid_to_vis_bothdirs_raw)
 			for vid, vis in r.items():
-				vis[:] = [vi for vi in vis if vi.time_retrieved > time_window_.start]
+				time_window_.trim_vilist(vis)
 				if not vis:
 					del r[vid]
 			new_all_vids_vis = list(vi_select_generator(froute_, time_window_.end, old_time_window.end, None, True))
@@ -332,6 +347,9 @@ def get_vid_to_vis_bothdirs_raw(froute_, time_window_):
 				work_around_secssincereport_bug(new_vis)
 				if vid in r:
 					r[vid] += new_vis
+					r[vid].sort(key=lambda vi: vi.time) # In case NextBus gives us some out-of-order vis.  I haven't seen this, 
+							# except for the 'secssincereport' bug, which we work around elsewhere, so this isn't here for that. 
+							# It's here in case I disable that work-around one day and then some out-of-order vis shows up anyway. 
 				else:
 					r[vid] = new_vis
 	if r is None:
@@ -344,7 +362,15 @@ def get_vid_to_vis_bothdirs_raw(froute_, time_window_):
 	prune_patchcache_get_vid_to_vis_bothdirs_raw(time_window_)
 	g_patchcache_froute_to_time_window_n_vid_to_vis_bothdirs_raw[froute_] = \
 			(time_window_, copy_vid_to_vis_bothdirs_raw_for_patchcache(r))
+	if log_: log_get_vid_to_vis_bothdirs_raw(froute_, time_window_, r)
 	return r 
+
+def log_get_vid_to_vis_bothdirs_raw(froute_, time_window_, r_):
+	printerr('Raw vis for froute=%s, %s' % (froute_, time_window_))
+	for vid, vis in iteritemssorted(r_):
+		printerr('vid=%s' % vid)
+		for vi in vis:
+			printerr(vi)
 
 def prune_patchcache_get_vid_to_vis_bothdirs_raw(time_window_):
 	global g_patchcache_froute_to_time_window_n_vid_to_vis_bothdirs_raw
@@ -370,7 +396,8 @@ def adopt_or_discard_vis_with_blank_froutes(froute_, vis_, log_=False):
 					if vi.time - prev_vi.time < 1000*60*2:
 						if log_:
 							printerr('Adopting vi w/ blank froute: %s' % vi)
-						vi.correct_fudgeroute(froute_)
+						vis_[i] = vis_[i].copy() # Making a copy b/c vi might be cached. 
+						vis_[i].correct_fudgeroute(froute_)
 					else:
 						if log_:
 							printerr('Discarding vi w/ blank froute: %s' % vi)
@@ -448,37 +475,23 @@ def remove_time_duplicates_patch(old_vis_, new_vis_):
 		if new_vis_[i].time == prev_vi.time:
 			del new_vis_[i]
 
-def fix_dirtags(vis_, startidx=0):
-	assert vis_ and vinfo.same_vid(vis_)
-	D = 50
-	assert all(vi1.time < vi2.time for vi1, vi2 in hopscotch(vis_))
-	for i in range(startidx, len(vis_)):
-		if (i > 0) and (abs(vis_[i-1].widemofr - vis_[i].widemofr) >= D):
-			direction = mofrs_to_dir(vis_[i-1].widemofr, vis_[i].widemofr)
-			assert direction is not None
-			fix_dirtag(vis_, i, direction)
+def fix_dirtags(vis_, froute_, time_window_, log_=False):
+	assert vis_ and vinfo.same_vid(vis_) and is_sorted(vis_, key=lambda vi: vi.time)
+	D = 10
+	if log_: printerr('dir=? %s' % vis_[0])
+	for curi in xrange(1, len(vis_)):
+		for olderi in xrange(curi-1, -1, -1):
+			widemofr_diff = vis_[curi].widemofr - vis_[olderi].widemofr
+			if widemofr_diff > D:
+				fix_dirtag(vis_, curi, 0)
+				if log_: printerr('dir=0 %s' % vis_[curi])
+				break
+			elif widemofr_diff < -D:
+				fix_dirtag(vis_, curi, 1)
+				if log_: printerr('dir=1 %s' % vis_[curi])
+				break
 		else:
-			for lookin in range(1, len(vis_)):
-				def look(j__):
-					if (0 <= j__ < len(vis_)) and (abs(vis_[j__].widemofr - vis_[i].widemofr) > 10):
-						if j__ < i:
-							direction = mofrs_to_dir(vis_[j__].widemofr, vis_[i].widemofr)
-						else:
-							direction = mofrs_to_dir(vis_[i].widemofr, vis_[j__].widemofr)
-						assert direction is not None
-						return direction
-					else:
-						return None
-				lo_look_dir = look(i-lookin)
-				hi_look_dir = look(i+lookin)
-				m = {(None,0): 0, (None,1): 1, (0,None):0, (0,0): 0, (1,None): 1, (1,1): 1}
-				if (lo_look_dir,hi_look_dir) in m:
-					direction = m[(lo_look_dir,hi_look_dir)]
-					break
-			else:
-				direction = 0 # i.e. if we can't figure it out because it hasn't moved in a long time, 
-					# then let's call it 0 by default.  Then at least all vis_ will have a direction. 
-			fix_dirtag(vis_, i, direction)
+			if log_: printerr('dir=? %s' % vis_[curi])
 
 def fix_dirtag(vis_, i_, dir_):
 	vi = vis_[i_]
@@ -661,10 +674,10 @@ def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, datazoom
 	vid_to_vis = get_vid_to_vis_bothdirs(fudgeroute_, num_minutes_, time_window_end_, log_=log_)
 	starttime = time_window_end_ - num_minutes_*60*1000
 	vid_to_interptime_to_vi = {}
-	for vid, vis in vid_to_vis.iteritems():
+	for vid, vis in iteritemssorted(vid_to_vis):
 		if log_:
 			printerr('For locations, pre-interp: vid %s: %d vis, from %s to %s (widemofrs %d to %d)' \
-				% (vid, len(vis), em_to_str_hms(vis[-1].time), em_to_str_hms(vis[0].time), vis[-1].widemofr, vis[0].widemofr))
+				% (vid, len(vis), em_to_str_hms(vis[0].time), em_to_str_hms(vis[-1].time), vis[0].widemofr, vis[-1].widemofr))
 			for vi in vis:
 				printerr('\t%s' % vi)
 		vid_to_interptime_to_vi[vid] = \
@@ -1581,21 +1594,22 @@ def is_plausible(dist_m_, speed_kmph_):
 	else:
 		return speed_kmph_ < 30
 
-g_patchcache_vid_to_time_window_n_plausgroups = {}
+g_patchcache_froute_n_vid_to_time_window_n_plausgroups = {}
 
 # This is for removing large buggy GPS readings (example: vehicle 4116 2012-06-15 13:30 to 14:00.)
-def get_plausgroups(vis_, time_window_):
-	global g_patchcache_vid_to_time_window_n_plausgroups
+def get_plausgroups(vis_, froute_, time_window_):
+	global g_patchcache_froute_n_vid_to_time_window_n_plausgroups
 	assert vis_ and is_sorted(vis_, key=lambda vi: vi.time) and vinfo.same_vid(vis_) and isinstance(time_window_, TimeWindow)
 	vid = vis_[0].vehicle_id
 	r = None
-	if not cpu_prof_disable_opt() and vid in g_patchcache_vid_to_time_window_n_plausgroups:
-		old_time_window, old_plausgroups = g_patchcache_vid_to_time_window_n_plausgroups[vid]
+	cachekey = (froute_, vid)
+	if USE_PATCHCACHES and cachekey in g_patchcache_froute_n_vid_to_time_window_n_plausgroups:
+		old_time_window, old_plausgroups = g_patchcache_froute_n_vid_to_time_window_n_plausgroups[cachekey]
 		assert old_plausgroups
 		if old_time_window.span == time_window_.span and 0 <= time_window_.end - old_time_window.end < 1000*60*20:
 			r = copy_plausgroups_for_patchcache(old_plausgroups)
 			trim_plausgroups_by_time_window(r, time_window_)
-			new_vis = [vi for vi in vis_ if vi.time_retrieved > old_time_window.end]
+			new_vis = old_time_window.gt_trimmed_vilist(vis_)
 			for new_vi in new_vis:
 				add_vi_to_appropriate_plausgroup(r, new_vi)
 	if not r:
@@ -1603,7 +1617,7 @@ def get_plausgroups(vis_, time_window_):
 		for vi in vis_:
 			add_vi_to_appropriate_plausgroup(r, vi)
 	prune_patchcache_get_plausgroups(time_window_)
-	g_patchcache_vid_to_time_window_n_plausgroups[vid] = (time_window_, copy_plausgroups_for_patchcache(r))
+	g_patchcache_froute_n_vid_to_time_window_n_plausgroups[cachekey] = (time_window_, copy_plausgroups_for_patchcache(r))
 	return r
 
 # deepcopy is slow.  So for performance we're sharing vis a lot.  Be careful and don't modify them.
@@ -1617,37 +1631,38 @@ def copy_plausgroups_for_patchcache(orig_groups_):
 	return r
 
 def prune_patchcache_get_plausgroups(time_window_):
-	global g_patchcache_vid_to_time_window_n_plausgroups
-	for vid, (time_window, plausgroups) in g_patchcache_vid_to_time_window_n_plausgroups.items():
+	global g_patchcache_froute_n_vid_to_time_window_n_plausgroups
+	for key, (time_window, plausgroups) in g_patchcache_froute_n_vid_to_time_window_n_plausgroups.items():
 		if abs(time_window_.end - time_window.end) > 1000*60*30:
-			del g_patchcache_vid_to_time_window_n_plausgroups[vid]
+			del g_patchcache_froute_n_vid_to_time_window_n_plausgroups[key]
 
 def trim_plausgroups_by_time_window(groups_, time_window_):
 	for group in groups_:
-		group[:] = [vi for vi in group if time_window_.start <= vi.time_retrieved <= time_window_.end]
+		time_window_.trim_vilist(group)
+	groups_[:] = [group for group in groups_ if group]
 
 def add_vi_to_appropriate_plausgroup(groups_, vi_):
 
 	if len(groups_) == 0:
 		groups_.append([vi_])
 	else:
-		def get_dist_from_vigroup(vigroup_):
-			groups_last_vi = vigroup_[-1]
+		def get_dist_from_group(group_):
+			groups_last_vi = group_[-1]
 			groups_last_vi_to_cur_vi_metres = vi_.latlng.dist_m(groups_last_vi.latlng)
 			return groups_last_vi_to_cur_vi_metres
 
-		def get_mps_from_vigroup(vigroup_):
-			groups_last_vi = vigroup_[-1]
+		def get_mps_from_group(group_):
+			groups_last_vi = group_[-1]
 			groups_last_vi_to_cur_vi_metres = vi_.latlng.dist_m(groups_last_vi.latlng)
 			groups_last_vi_to_cur_vi_secs = abs((vi_.time - groups_last_vi.time)/1000.0)
 			return groups_last_vi_to_cur_vi_metres/groups_last_vi_to_cur_vi_secs
 
-		def is_plausible_vigroup(vigroup_):
-			return is_plausible(get_dist_from_vigroup(vigroup_), mps_to_kmph(get_mps_from_vigroup(vigroup_)))
+		def is_plausible_group(group_):
+			return is_plausible(get_dist_from_group(group_), mps_to_kmph(get_mps_from_group(group_)))
 
-		closest_vigroup = min(groups_, key=get_dist_from_vigroup)
-		if is_plausible_vigroup(closest_vigroup):
-			closest_vigroup.append(vi_)
+		closest_group = min(groups_, key=get_dist_from_group)
+		if is_plausible_group(closest_group):
+			closest_group.append(vi_)
 		else:
 			groups_.append([vi_])
 
