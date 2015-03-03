@@ -1088,6 +1088,9 @@ def string_to_file(filename_, str_):
 	with open(filename_, 'w') as fout:
 		fout.write(str_)
 
+def seq_endswith(a_, b_):
+	return a_[-len(b_):] == b_
+
 def profile_data_to_svg_file(profile_data_filename_):
 	profile_moniker = re.sub('^(.*)\..*$', r'\1', os.path.basename(profile_data_filename_))
 	p1 = subprocess.Popen(['gprof2dot.py', '-f', 'pstats', profile_data_filename_], stdout=subprocess.PIPE)
