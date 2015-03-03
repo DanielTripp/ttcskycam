@@ -75,9 +75,9 @@ if test_opt:
 		noopt_mean = average(noopt_part2_cputimes)
 		noopt_stddev_over_mean = get_stddev_over_mean(noopt_part2_cputimes)
 		print '> CPU time, avg over %d runs, opt:    %.1f seconds.  (std. dev / mean: %.2f)' % (n, opt_mean, opt_stddev_over_mean)
-		print '> indiv times                 opt:    %s' % (opt_part2_cputimes)
+		print '> indiv times                opt:    %s' % (opt_part2_cputimes)
 		print '> CPU time, avg over %d runs, noopt:  %.1f seconds.  (std. dev / mean: %.2f)' % (n, noopt_mean, noopt_stddev_over_mean)
-		print '> indiv times                 noopt:  %s' % (noopt_part2_cputimes)
+		print '> indiv times                noopt:  %s' % (noopt_part2_cputimes)
 		print '> Ratio: %.2f' % (opt_mean/noopt_mean)
 else:
 	run_cmd(False, False, False)
