@@ -53,7 +53,7 @@ def print_traffic_report(report_):
 
 def print_locations_report(report_, locsbyvid_):
 	if locsbyvid_:
-		for vid, vis in get_locations_by_vid(report_).iteritems():
+		for vid, vis in iteritemssorted(get_locations_by_vid(report_)):
 			print 'vid=%s' % vid
 			for vi in vis:
 				print '  %s' % vi
