@@ -224,8 +224,7 @@ class VehicleInfo:
 	def is_a_streetcar(self):
 		return is_a_streetcar(self.vehicle_id)
 
-	# Probably shouldn't be used anywhere performance is important in it's present state, because 
-	# we nullifies _graph_locs. 
+	# Be careful using this anywhere performance is important, because we nullify _graph_locs. 
 	def copy(self):
 		r = copy.copy(self)
 		r.latlng = r.latlng.copy()
@@ -235,9 +234,15 @@ class VehicleInfo:
 	def mofrchunk(self, mofrstep_):
 		return int(self.widemofr)/mofrstep_
 
-	def set_latlng(self, latlng_):
-		self.latlng = latlng_.copy()
-		self._graph_locs = self._graph_locs_str = self._mofr = self._widemofr = None
+	def copy_pos_info(self, other_):
+		self.latlng = other_.latlng.copy()
+		# We could just copy the latlng and nullify the others, so that they are 
+		# recalculated from the latlng on first use.  But copying these too will 
+		# avoid that recalculation, and is a significant overall optimization.  
+		self._graph_locs = snapgraph.copy_graph_locs(other_.graph_locs)
+		self._graph_locs_str = other_._graph_locs_str
+		self._mofr = other_.mofr
+		self._widemofr = other_.widemofr
 
 def is_a_streetcar(vid_):
 	# At least, I think that starting w/ 4 means streetcar.  This logic is also implemented in traffic.php. 

@@ -1735,7 +1735,7 @@ def fix_doubleback_gps_noise(vis_, startidx=0, log_=False):
 		if i < 2:
 			i += 1
 		else:
-			preref_pos = vis_[i-2].latlng; ref_pos = vis_[i-1].latlng; i_pos = vis_[i].latlng
+			preref_pos = vis_[i-2].latlng; ref_vi = vis_[i-1]; ref_pos = ref_vi.latlng; i_pos = vis_[i].latlng
 			if ref_pos.dist_m(i_pos) > D:
 				i += 1
 			else:
@@ -1751,7 +1751,7 @@ def fix_doubleback_gps_noise(vis_, startidx=0, log_=False):
 								(vid, i, vis_[i].timestr, fix))
 							fixes.append(fix)
 						vis_[i] = vis_[i].copy() # Making a copy b/c that vi might be cached. 
-						vis_[i].set_latlng(ref_pos)
+						vis_[i].copy_pos_info(ref_vi)
 					for j in range(i+1, len(vis_)):
 						i = j
 						j_pos = vis_[j].latlng
@@ -1765,7 +1765,7 @@ def fix_doubleback_gps_noise(vis_, startidx=0, log_=False):
 										(vid, j, vis_[j].timestr, fix))
 									fixes.append(fix)
 								vis_[j] = vis_[j].copy() # Making a copy b/c that vi might be cached. 
-								vis_[j].set_latlng(ref_pos)
+								vis_[j].copy_pos_info(ref_vi)
 					else:
 						i = len(vis_)
 	if log_:
