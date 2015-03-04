@@ -477,7 +477,7 @@ def remove_time_duplicates_patch(old_vis_, new_vis_):
 
 def fix_dirtags(vis_, froute_, time_window_, log_=False):
 	assert vis_ and vinfo.same_vid(vis_) and is_sorted(vis_, key=lambda vi: vi.time)
-	D = 10
+	D = 50
 	if log_: printerr('dir=? %s' % vis_[0])
 	for curi in xrange(1, len(vis_)):
 		for olderi in xrange(curi-1, -1, -1):
@@ -918,8 +918,8 @@ def get_grade_stretch_info(vis_, be_clever_, log_):
 # 	- vi_to_grade: has a key set equal to vis_.  values are 'r', 'g', or 'o'.
 #		- vi_to_path: has a key set of only those vis which have a value of 'g' in vi_to_grade. 
 @lru_cache(100) 
-# Re: caching - It's important that this cache at least the maximum number of 
-# vehicle that will ever appear in the locations 
+# Re: lru_cache - It's important that this cache at least the maximum number of 
+# vehicles that will ever appear in the locations 
 # report for one route / one direction.  If this cache size is even 1 less than 
 # that, then every time around the loop over the datazooms in reports.py / 
 # make_all_reports_and_insert_into_db_once(), these will be forgotten, and 
