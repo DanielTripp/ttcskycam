@@ -2519,6 +2519,20 @@ def parse_posaddr(str_):
 	except ValueError:
 		return None
 
+def copy_graph_locs(locs_):
+	if locs_ is None:
+		return None
+	else:
+		r = []
+		for loc in locs_:
+			if isinstance(loc, Vertex):
+				r.append(loc)
+			elif isinstance(loc, PosAddr):
+				r.append(loc.copy())
+			else:
+				raise Exception()
+		return tuple(r)
+
 if __name__ == '__main__':
 
 	pass
