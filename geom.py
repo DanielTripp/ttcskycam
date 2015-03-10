@@ -130,7 +130,8 @@ class LatLng:
 		if not isinstance(other_, LatLng):
 			return False
 		else:
-			return self._key() == other_._key()
+			# Not using _key().  This way is a bit faster.  
+			return (self.lat == other_.lat and self.lng == other_.lng)
 
 	def __ne__(self, other_):
 		if not isinstance(other_, LatLng):
