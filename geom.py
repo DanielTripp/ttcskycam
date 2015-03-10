@@ -127,7 +127,7 @@ class LatLng:
 		return (self.lat, self.lng)
 
 	def __eq__(self, other_):
-		if not isinstance(other_, LatLng):
+		if type(self) != type(other_):
 			return False
 		else:
 			# Not using _key().  This way is a bit faster.  
