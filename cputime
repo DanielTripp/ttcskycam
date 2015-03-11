@@ -19,7 +19,7 @@ for i, arg in enumerate(args):
 		break
 
 if len(cmd_list) < 2:
-	sys.exit('Need at least one argument: the filename of a program.  Optionally argument, preceeding that: -n=X')
+	sys.exit('Need at least one argument: the filename of a program.  (Some optional arguments can preceed that.)')
 
 os.putenv('PROF_OPT', '1')
 

@@ -10,5 +10,7 @@ if __name__ == '__main__':
 	try:
 		subprocess.check_call([sys.executable] + (['-O'] if opt else []) + ['impl-calc-reports.py'] + args)
 	except subprocess.CalledProcessError, e:
-		pass # Enough info will probably already be printed to stdout / stderr by the child process. 
+		# Enough info will probably already be printed to stdout / stderr by the child process.  No need to print it.
+		sys.exit(e.returncode)
+
 
