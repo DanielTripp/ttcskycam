@@ -1,0 +1,45 @@
+#!/usr/bin/env python
+
+import sys, subprocess, pipes, os, filecmp
+from misc import *
+
+optlevel = 0
+args = sys.argv[1:]
+for i, arg in enumerate(args):
+	if arg.startswith('--optlevel='):
+		optlevel = int(arg.split('=')[1])
+	else:
+		cmd_list = args[i:]
+		break
+
+if len(cmd_list) < 2:
+	sys.exit('Need at least one argument: the filename of a program.  (Some optional arguments can preceed that.)')
+
+os.putenv('PROF_OPT', '1')
+
+def run_cmd(disable_opt_):
+	output_filename = ('d-level-%d-noopt' if disable_opt_ else 'd-level-%d-opt') % optlevel
+	if os.path.exists(output_filename):
+		os.remove(output_filename)
+	with open(output_filename, 'w') as fout:
+		os.putenv('PROF_DISABLE_OPT_LEVEL_%d' % optlevel, str(int(disable_opt_)))
+		try:
+			subprocess.check_call(cmd_list, stdout=fout, stderr=fout)
+		except subprocess.CalledProcessError, e:
+			if os.path.exists(output_filename):
+				subprocess.check_call(['cat', output_filename])
+			raise
+	return output_filename
+
+noopt_output_filename = run_cmd(True)
+opt_output_filename = run_cmd(False)
+
+files_are_identical = filecmp.cmp(noopt_output_filename, opt_output_filename)
+
+if files_are_identical:
+	print 'Outputs are identical.'
+	print 'tail:'
+	subprocess.check_call(['tail', opt_output_filename])
+else:
+	subprocess.check_call(['vimdiff', noopt_output_filename, opt_output_filename])
+

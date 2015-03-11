@@ -159,4 +159,7 @@ if __name__ == '__main__':
 	if args.prof:
 		dump_profiler_to_svg_file(profiler, (None if args.prof == 'default' else args.prof))
 
+	print 'Finished.'
+
+
 
