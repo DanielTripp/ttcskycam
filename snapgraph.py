@@ -19,6 +19,8 @@ from misc import *
 # si = spatial index 
 
 
+USE_PATCHCACHE_FIND_MULTIPATH = False
+
 # in meters
 DEFAULT_GRAPH_VERTEX_DIST_TOLERANCE = 0.5
 
@@ -196,25 +198,31 @@ class Vertex(object):
 	def idx(self):
 		return self.snapgraph.vertname_to_idx.get(self.name)
 
+# Immutable. 
 class PosAddr(object):
+
+	@classmethod
+	def new(cls_, plinename_, ptidx_, pals_):
+		return cls_(PtAddr(plinename_, ptidx_), pals_)
 
 	def __init__(self, linesegaddr_, pals_):
 		assert (isinstance(linesegaddr_, PtAddr) or is_seq_like(linesegaddr_, (0, 0))) and isinstance(pals_, float)
 		linesegaddr = (linesegaddr_ if isinstance(linesegaddr_, PtAddr) else PtAddr(linesegaddr_[0], linesegaddr_[1]))
 		assert 0.0 <= pals_ <= 1.0
+		super(PosAddr, self).__setattr__('plinename', linesegaddr.plinename)
 		if pals_ == 1.0: # Normalizing so that self.pals will be between 0.0 and 1.0 inclusive / exclusive.  
 			# Saves us from writing code to that effect elsewhere. 
-			self.plinename = linesegaddr.plinename
-			self.ptidx = linesegaddr.ptidx+1
-			self.pals = 0.0
+			ptidx = linesegaddr.ptidx+1
+			pals = 0.0
 		else:
-			self.plinename = linesegaddr.plinename
-			self.ptidx = linesegaddr.ptidx
-			self.pals = pals_
-		assert 0.0 <= self.pals < 1.0
-		self.pals = round(self.pals, POSADDR_PALS_NUM_DIGITS)
-		if self.pals == 1.0:
-			self.pals = 1.0 - 10**-POSADDR_PALS_NUM_DIGITS
+			ptidx = linesegaddr.ptidx
+			pals = pals_
+		assert 0.0 <= pals < 1.0
+		pals = round(pals, POSADDR_PALS_NUM_DIGITS)
+		if pals == 1.0:
+			pals = 1.0 - 10**-POSADDR_PALS_NUM_DIGITS
+		super(PosAddr, self).__setattr__('ptidx', ptidx)
+		super(PosAddr, self).__setattr__('pals', pals)
 
 	def __str__(self):
 		assert 0.0 <= self.pals < 1.0
@@ -235,8 +243,10 @@ class PosAddr(object):
 	def __repr__(self):
 		return self.__str__()
 
-	def copy(self):
-		return PosAddr(PtAddr(self.plinename, self.ptidx), self.pals)
+	def __setattr__(self, *args):
+		raise TypeError('Cannot modify immutable instance')
+
+	_delattr__ = __setattr__
 
 	def linesegaddr(self):
 		return PtAddr(self.plinename, self.ptidx)
@@ -382,7 +392,7 @@ class Path(object):
 class PathPiece(object):
 
 	def __init__(self, path_, pieceidx_, parent_sg_):
-		assert len(path_.piecestepses[pieceidx_]) > 0
+		assert isinstance(path_, Path) and len(path_.piecestepses[pieceidx_]) > 0
 		self.path = path_
 		piecesteps = self.path.piecestepses[pieceidx_]
 		assert len(piecesteps) >= 2
@@ -473,7 +483,7 @@ class SnapGraph(object):
 			self.plinename2pts = {plinename: pts for plinename, pts in self.plinename2pts.iteritems() if \
 					geom.dist_m_polyline(pts) > forpaths_disttolerance}
 			self.init_path_structures(forpaths_disttolerance, remove_crowded_vertexes, vertex_limit_zones_filename)
-			self.build_spatial_index() # rebuilding it because for those 
+			self.build_spatial_index() # Rebuilding this because for those 
 				# linesegs that were split within init_path_structures() - 
 				# say lineseg A was split into A1 and A2, and A covered the sets of 
 				# gridsquares S.  after init_path_structures() is done, 
@@ -493,6 +503,14 @@ class SnapGraph(object):
 			self.init_plinename_to_ptidx_to_mapl()
 		self.use_floyd_warshall = False
 		self.use_vert_only_floyd_warshall = False
+
+	@property 
+	def multipath_patchcache_vid_to_argses_n_results(self):
+		try:
+			self._multipath_patchcache_vid_to_argses_n_results
+		except AttributeError:
+			self._multipath_patchcache_vid_to_argses_n_results = defaultdict(list)
+		return self._multipath_patchcache_vid_to_argses_n_results
 
 	def init_plines(self, plines_):
 		self.init_plinename2pts(plines_)
@@ -622,62 +640,137 @@ class SnapGraph(object):
 			return self.get_latlng(loc_).dist_m(latlng_)*PATHS_GPS_ERROR_FACTOR
 
 	# return a Path, or None if no path is possible.
-	def find_multipath(self, latlngs_, vid_, locses=None, snap_tolerance=c.GRAPH_SNAP_RADIUS, log_=False):
-		return self.find_multipath_impl(tuple(latlngs_), vid_, locses=tuple(locses), snap_tolerance=snap_tolerance, log_=log_)
+	def find_multipath(self, latlngs_, vis_, locses=None, log_=False):
+		return self.find_multipath_impl(tuple(latlngs_), vis_, locses=tuple(locses), log_=log_)
 
-	# It's important for performance that this is large enough that it will cache everything for a route between 
-	# generating reports one minute and the next.  This 600 is based on 50 per fudgeroutes times 12 fudgeroutes.  
+	# arg snap_tolerance: If locses is not None, then snap_tolerance had better be the same as the snap tolerance 
+	# that was uses to get locses from latlngs_.  
+	#
+	# return a Path, or None if no path is possible.
+	# 
+	# RE: lru_cache - It's important for performance that this is large enough that it will cache everything for a route 
+	# between generating reports one minute and the next.  This 600 is based on 50 per fudgeroutes times 12 fudgeroutes.  
 	# If the number of fudgeroutes that we're calculating increases, so should this. 
-	@lru_cache(600) 
-	def find_multipath_impl(self, latlngs_, vid_, locses=None, snap_tolerance=c.GRAPH_SNAP_RADIUS, log_=False):
+	@lru_cache(0 if USE_PATCHCACHE_FIND_MULTIPATH else 600, posargkeymask=(1,1,0))
+	def find_multipath_impl(self, latlngs_, vis_, locses=None, log_=False):
 		if len(latlngs_) < 2:
 			raise Exception()
-		our_locses = ([self.multisnap(latlng, snap_tolerance) for latlng in latlngs_] if locses is None else locses)
-		assert len(our_locses) == len(latlngs_)
+		vid = vis_[0].vehicle_id
+		our_locses = ([self.multisnap(latlng, c.GRAPH_SNAP_RADIUS) for latlng in latlngs_] if locses is None else locses)
+		assert len(our_locses) == len(latlngs_) == len(vis_)
 		if len(latlngs_) == 2:
-			dists_n_pieces = self.find_paths(latlngs_[0], our_locses[0], latlngs_[1], our_locses[1], snap_tolerance=snap_tolerance)
+			dists_n_pieces = self.find_paths(latlngs_[0], our_locses[0], latlngs_[1], our_locses[1], snap_tolerance=c.GRAPH_SNAP_RADIUS)
 			if len(dists_n_pieces) > 0:
 				return Path([dists_n_pieces[0][1]], self)
 			else:
 				return None
 		else:
-			r_dist = 0
-			r_pieces = []
-			n = len(latlngs_)
-			i_startnendloc_to_distnpiece = []
-			for (latlng1, locses1), (latlng2, locses2) in hopscotch(zip(latlngs_, our_locses), 2):
-				i_startnendloc_to_distnpiece.append({})
-				for dist, path in self.find_paths(latlng1, locses1, latlng2, locses2, snap_tolerance=snap_tolerance):
-					startnendloc = (path[0], path[-1])
-					i_startnendloc_to_distnpiece[-1][startnendloc] = (dist, path)
-			assert len(i_startnendloc_to_distnpiece) == n-1
-			for idx_a, idx_b, idx_c in hopscotch(range(n), 3):
-				if idx_a == 0:
-					combo_args = our_locses[idx_a:idx_c+1]
-				else:
-					combo_args = ((r_pieces[-1][-1],),) + our_locses[idx_b:idx_c+1]
-				relative_i_startnendloc_to_distnpiece = i_startnendloc_to_distnpiece[idx_a:idx_a+len(combo_args)]
-				chosen_dists_n_pieces = self.find_multipath_single_step(combo_args, relative_i_startnendloc_to_distnpiece, 
-						snap_tolerance, idx_a, vid_, log_=log_)
-				if chosen_dists_n_pieces is None:
-					r_pieces = None
-					break
-				chosen_dist_n_piece_ab = chosen_dists_n_pieces[0]
-				r_dist += chosen_dist_n_piece_ab[0]
-				r_pieces.append(chosen_dist_n_piece_ab[1])
-				if idx_c == n-1:
-					chosen_dist_n_piece_bc = chosen_dists_n_pieces[1]
-					r_dist += chosen_dist_n_piece_bc[0]
-					r_pieces.append(chosen_dist_n_piece_bc[1])
-			r_pieces = self.fix_gps_artifact_path_doublebacks(r_pieces, snap_tolerance, vid_, log_)
-			return (Path(r_pieces, self) if r_pieces is not None else None)
+			r_pieces = None # When not None, each element is a list of locs / AKA a piece of a path. 
+			if USE_PATCHCACHE_FIND_MULTIPATH and vid in self.multipath_patchcache_vid_to_argses_n_results:
+				argses_n_results = self.multipath_patchcache_vid_to_argses_n_results[vid]
+				new_timekey = get_multipath_patchcache_timekey(vis_)
+				old_args = None; old_result = None
+				for args, result in argses_n_results:
+					if (new_timekey - 1000*60*20 < args.timekey <= new_timekey) and \
+								(old_args is None or old_args.timekey < args.timekey):
+						old_args = args
+						old_result = result
+				if old_args is not None:
+					common_latlngs = get_longest_common_subseq(old_args.latlngs, latlngs_)
+					if len(common_latlngs) >= 2:
+						patchable_and_no_work_required = (len(common_latlngs) == len(latlngs_))
+						patchable_and_some_work_required = ((len(latlngs_) > len(common_latlngs) >= 3) \
+								and (find_subseq(common_latlngs, latlngs_) == 0))
+						#        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+						# Sometimes new latlngs will have been added to the start of the list, due to grade ('r', 'g', 'o') having 
+						# changed between the old time window and this one.  We don't currently handle patch-caching for that case. 
+						# Only when latlngs added to the end. 
+						if patchable_and_no_work_required or patchable_and_some_work_required:
+							path_store = old_result.path_store
+							we_have_copied_path_store_already = False # For performance, trying not to copy path_store unless we need to.
+							num_early_latlngs_to_discard = find_subseq(common_latlngs, old_args.latlngs)
+							if num_early_latlngs_to_discard > 0:
+								path_store = path_store.copy()
+								we_have_copied_path_store_already = True
+								path_store.trim_left(num_early_latlngs_to_discard)
+							r_pieces = copy_path_pieces_for_multipath_patchcache(old_result.path_pieces)[num_early_latlngs_to_discard:]
+
+							num_late_latlngs_to_discard = len(old_args.latlngs) - (num_early_latlngs_to_discard + len(common_latlngs))
+							assert num_late_latlngs_to_discard >= 0
+							if num_late_latlngs_to_discard > 0:
+								del r_pieces[-num_late_latlngs_to_discard:] 
+								if not we_have_copied_path_store_already:
+									path_store = path_store.copy()
+									we_have_copied_path_store_already = True
+								path_store.trim_right(num_late_latlngs_to_discard)
+
+							if patchable_and_no_work_required:
+								pass
+							elif patchable_and_some_work_required:
+								new_latlngs = latlngs_[len(common_latlngs):]
+								new_locses = our_locses[len(common_latlngs):]
+								if not we_have_copied_path_store_already:
+									path_store = path_store.copy()
+									we_have_copied_path_store_already = True
+								path_store.expand_right(new_latlngs, new_locses)
+								del r_pieces[-1] # We want to re-do the last piece. 
+								self.find_multipath_partial(r_pieces, True, vid, path_store, log_=log_)
+			if r_pieces is None:
+				path_store = MultipathIndivPathStore.new(latlngs_, our_locses, self)
+				r_pieces = []
+				self.find_multipath_partial(r_pieces, False, vid, path_store, log_=log_)
+			if not r_pieces:
+				r_pieces = None
+			if USE_PATCHCACHE_FIND_MULTIPATH:
+				timekey = get_multipath_patchcache_timekey(vis_)
+				self.multipath_patchcache_vid_to_argses_n_results[vid].append(
+						(MultipathArgs(timekey, latlngs_), MultipathResult(path_store, r_pieces)))
+				self.prune_multipath_patchcache(timekey)
+			assert (len(r_pieces) == 0) or (len(r_pieces) == len(latlngs_)-1)
+			r_pieces = self.fix_gps_artifact_path_doublebacks(r_pieces, c.GRAPH_SNAP_RADIUS, vid, log_)
+			return (Path(r_pieces, self) if r_pieces else None)
+
+	def prune_multipath_patchcache(self, cur_timekey_):
+		vids_to_delete = []
+		for vid, argses_n_results in self.multipath_patchcache_vid_to_argses_n_results.iteritems():
+			idxes_to_delete = []
+			for i, (args, results) in enumerate(argses_n_results):
+				if args.timekey < cur_timekey_ - 1000*60*60*2:
+					idxes_to_delete.append(i)
+			for i in idxes_to_delete[::-1]:
+				del argses_n_results[i]
+			if not argses_n_results:
+				vids_to_delete.append(vid)
+		for vid in vids_to_delete:
+			del self.multipath_patchcache_vid_to_argses_n_results[vid]
+
+	def find_multipath_partial(self, r_pieces_, continue_, vid_, path_store_, log_=False):
+		if continue_ and not r_pieces_:
+			return
+		startidx = (len(r_pieces_) if continue_ else 0)
+		for idx_a, idx_b, idx_c in islice(hopscotch(xrange(path_store_.num_pts()), 3), startidx, None):
+			if idx_a == 0:
+				combo_args = path_store_.locses[idx_a:idx_c+1]
+			else:
+				combo_args = ((r_pieces_[-1][-1],),) + tuple(path_store_.locses[idx_b:idx_c+1])
+			relative_i_startnendloc_to_distnpiece = path_store_.get_slice_startnendloc_to_distnpiece(idx_a, idx_a+len(combo_args))
+			chosen_dists_n_pieces = self.find_multipath_single_step(combo_args, relative_i_startnendloc_to_distnpiece, 
+					idx_a, vid_, log_=log_)
+			if chosen_dists_n_pieces is None:
+				r_pieces_[:] = []
+				break
+			chosen_dist_n_piece_ab = chosen_dists_n_pieces[0]
+			r_pieces_.append(chosen_dist_n_piece_ab[1])
+			if idx_c == path_store_.num_pts()-1:
+				chosen_dist_n_piece_bc = chosen_dists_n_pieces[1]
+				r_pieces_.append(chosen_dist_n_piece_bc[1])
 
 	# It's important for performance that this is large enough that it will cache everything for a route between 
 	# generating reports one minute and the next.  This 6000 is based on 500 per fudgeroutes times 12 fudgeroutes.  
 	# If the number of fudgeroutes that we're calculating increases, so should this. 
-	@lru_cache(6000, posargkeymask=[1,1,0,1,0,1])
+	@lru_cache(0 if USE_PATCHCACHE_FIND_MULTIPATH else 6000, posargkeymask=[1,1,0,0,1])
 	def find_multipath_single_step(self, combo_args_, relative_i_startnendloc_to_distnpiece_, 
-			snap_tolerance_, log_idx_a_, log_vid_, log_=False):
+			log_idx_a_, log_vid_, log_=False):
 		combined_dists_n_pieces = []
 		for loc_combo in product(*combo_args_):
 			cur_dists_n_pieces = []
@@ -691,7 +784,7 @@ class SnapGraph(object):
 				printerr('Multipath is not possible.  (snapgraph: "%s").  idx_a=[%d] %s' \
 						% (self.name, log_idx_a_, combo_args_))
 			return None # No path possible for this part.  No path is possible at all. 
-		combined_dists_n_pieces.sort(key=lambda e: self.get_combined_cost(e, snap_tolerance_))
+		combined_dists_n_pieces.sort(key=lambda e: self.get_combined_cost(e, c.GRAPH_SNAP_RADIUS))
 		if log_:
 			printerr('find_multipath: combined dists/pieces for idx_a=%d, sorted:' % (log_idx_a_))
 			for i, ((dist_ab, pieces_ab), (dist_bc, pieces_bc)) in enumerate(combined_dists_n_pieces):
@@ -2519,19 +2612,96 @@ def parse_posaddr(str_):
 	except ValueError:
 		return None
 
-def copy_graph_locs(locs_):
-	if locs_ is None:
-		return None
-	else:
-		r = []
-		for loc in locs_:
-			if isinstance(loc, Vertex):
-				r.append(loc)
-			elif isinstance(loc, PosAddr):
-				r.append(loc.copy())
-			else:
-				raise Exception()
-		return tuple(r)
+class MultipathIndivPathStore(object):
+
+	@classmethod
+	def new(cls_, latlngs_, locses_, parent_sg_):
+		r = cls_()
+		r.latlngs = latlngs_[:]
+		r.locses = locses_[:]
+		r.parent_sg = parent_sg_
+		r.i_startnendloc_to_distnpiece = []
+		r.build()
+		r.assert_misc()
+		return r
+
+	def build(self, startidx_=0):
+		for (latlng1, locses1), (latlng2, locses2) in islice(hopscotch(zip(self.latlngs, self.locses), 2), startidx_, None):
+			self.i_startnendloc_to_distnpiece.append({})
+			for dist, path in self.parent_sg.find_paths(latlng1, locses1, latlng2, locses2, snap_tolerance=c.GRAPH_SNAP_RADIUS):
+				startnendloc = (path[0], path[-1])
+				self.i_startnendloc_to_distnpiece[-1][startnendloc] = (dist, path)
+		self.assert_misc()
+
+	def get_slice_startnendloc_to_distnpiece(self, startidx_, endidx_):
+		return self.i_startnendloc_to_distnpiece[startidx_:endidx_]
+
+	def trim_left(self, n_):
+		assert n_ >= 0
+		self.assert_misc()
+		self.latlngs = self.latlngs[n_:]
+		self.locses = self.locses[n_:]
+		self.i_startnendloc_to_distnpiece = self.i_startnendloc_to_distnpiece[n_:]
+		self.assert_misc()
+
+	def trim_right(self, n_):
+		assert n_ >= 0
+		self.assert_misc()
+		self.latlngs = self.latlngs[:-n_]
+		self.locses = self.locses[:-n_]
+		self.i_startnendloc_to_distnpiece = self.i_startnendloc_to_distnpiece[:-n_]
+		self.assert_misc()
+
+	def expand_right(self, new_latlngs_, new_locses_):
+		self.assert_misc()
+		self.latlngs += new_latlngs_
+		self.locses += new_locses_
+		prev_num_pieces = len(self.i_startnendloc_to_distnpiece)
+		self.build(prev_num_pieces)
+		self.assert_misc()
+
+	def assert_misc(self):
+		assert len(self.latlngs) == len(self.locses) == len(self.i_startnendloc_to_distnpiece)+1
+
+	def copy(self):
+		r = MultipathIndivPathStore()
+		r.latlngs = self.latlngs[:]
+		r.locses = self.locses[:]
+		r.parent_sg = self.parent_sg
+
+		# A lot of i_startnendloc_to_distnpiece is immutable, but the dicts and the pieces (lists) aren't. 
+		r.i_startnendloc_to_distnpiece = []
+		for orig_startnendloc_to_distnpiece in self.i_startnendloc_to_distnpiece:
+			r_startnendloc_to_distnpiece = {}
+			r.i_startnendloc_to_distnpiece.append(r_startnendloc_to_distnpiece)
+			for startnendloc, (dist, piece) in orig_startnendloc_to_distnpiece.iteritems():
+				r_startnendloc_to_distnpiece[startnendloc] = (dist, piece[:])
+
+		r.assert_misc()
+
+		return r
+
+	def num_pts(self):
+		return len(self.latlngs)
+
+class MultipathResult(object):
+
+	def __init__(self, path_store_, path_pieces_):
+		self.path_store = path_store_
+		self.path_pieces = copy_path_pieces_for_multipath_patchcache(path_pieces_)
+
+class MultipathArgs(object):
+
+	def __init__(self, timekey_, latlngs_):
+		self.timekey = timekey_
+		self.latlngs = latlngs_
+
+def get_multipath_patchcache_timekey(vis_):
+	assert is_sorted(vis_, key=lambda vi: vi.time)
+	return vis_[-1].time_retrieved
+
+def copy_path_pieces_for_multipath_patchcache(path_pieces_):
+	return [path_piece[:] for path_piece in path_pieces_]
 
 if __name__ == '__main__':
 

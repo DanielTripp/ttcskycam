@@ -981,23 +981,40 @@ class Heap(list):
 		self[listidx] = (new_priority_, value_)
 		heapq._siftdown(self, 0, listidx)
 
-# Will also return true if sublist_ == list_.
-def is_sublist(sublist_, list_):
-	assert all(isinstance(x, Sequence) for x in (sublist_, list_))
+# Thanks to http://en.wikipedia.org/wiki/Longest_common_substring_problem#Pseudocode 
+def get_longest_common_subseq(S, T):
+	m = len(S); n = len(T)
+	L = [[0]*n for x in xrange(m)]
+	z = 0
+	ret = []
+	for i in xrange(m):
+		for j in xrange(n):
+			if S[i] == T[j]:
+				if i == 0 or j == 0:
+					L[i][j] = 1
+				else:
+					L[i][j] = L[i-1][j-1] + 1
+				if L[i][j] > z:
+					z = L[i][j]
+					ret = [S[i-z+1:i+1]]
+				elif L[i][j] == z:
+					ret.append(S[i-z+1:i+1])
+			else:
+				L[i][j] = 0
+	return (ret[0] if ret else [])
 
-	if len(sublist_) > len(list_):
-		return False
-
-	def get_length_n_slices(n__, list__):
-		for i in xrange(len(list__) + 1 - n__):
-			yield list__[i:i+n__]
-
-	for slyce in get_length_n_slices(len(sublist_), list_):
-		if slyce == sublist_:
-			return True
-
-	return False
-
+# Returns the starting index if found, like str.find(), but accepts sequences 
+# of arbitrary objects instead of just strings.
+def find_subseq(subseq_, seq_):
+	if len(subseq_) > len(seq_):
+		return -1
+	def get_length_n_slices(n):
+		for i in xrange(len(seq_) + 1 - n):
+			yield seq_[i:i+n]
+	for i, slyce in enumerate(get_length_n_slices(len(subseq_))):
+		if slyce == subseq_:
+			return i
+	return -1
 
 # This is limited.  For example, it won't handle item deletions in the source list unless they're in the 
 # viewed part of the list.
@@ -1105,7 +1122,7 @@ def profile_data_to_svg_file(profile_data_filename_):
 def dump_profiler_to_svg_file(profiler_, profile_moniker_):
 	assert isinstance(profiler_, profile.Profile) or isinstance(profiler_, cProfile.Profile)
 	profiler_.create_stats()
-	profile_data_filename = '/tmp/%s.profile' % (profile_moniker_ or os.getenv('PROFILE_MONIKER') or now_str())
+	profile_data_filename = '/tmp/%s.profile' % (profile_moniker_ or os.getenv('PROFILE_MONIKER') or now_str().replace(' ', '_'))
 	profiler_.dump_stats(profile_data_filename)
 	profile_data_to_svg_file(profile_data_filename)
 
@@ -1114,8 +1131,8 @@ def cpu_prof_exit_early_maybe():
 		printerr('> cpu prof - exiting early.')
 		sys.exit(0)
 
-def cpu_prof_disable_opt():
-	return int(os.getenv('PROF_DISABLE_OPT', '0'))
+def cpu_prof_disable_opt(level_=0):
+	return int(os.getenv('PROF_DISABLE_OPT_LEVEL_%d' % level_, '0'))
 
 if __name__ == '__main__':
 

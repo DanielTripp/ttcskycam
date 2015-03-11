@@ -418,13 +418,13 @@ class SystemSnapGraph(snapgraph.SnapGraph):
 	def get_dir(self, loc1_, loc2_):
 		if isinstance(loc1_, int) and isinstance(loc2_, snapgraph.PosAddr):
 			posaddr1 = self.verts[loc1_].get_posaddr(loc2_.plinename)
-			posaddr2 = loc2_.copy()
+			posaddr2 = loc2_
 			if posaddr2.pals == 0.0:
-				posaddr2.pals += 0.1
+				posaddr2 = PosAddr(posaddr2.linesegaddr(), posaddr2.pals+0.1)
 		elif isinstance(loc1_, snapgraph.PosAddr) and isinstance(loc2_, int):
-			posaddr1 = loc1_.copy()
+			posaddr1 = loc1_
 			if posaddr1.pals == 0.0:
-				posaddr1.pals += 0.1
+				posaddr1 = PosAddr(posaddr1.linesegaddr(), posaddr1.pals+0.1)
 			posaddr2 = self.verts[loc2_].get_posaddr(loc1_.plinename)
 		elif isinstance(loc1_, snapgraph.PosAddr) and isinstance(loc2_, snapgraph.PosAddr):
 			posaddr1 = loc1_

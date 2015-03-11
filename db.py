@@ -44,8 +44,6 @@ PREDICTION_COLS = ' fudgeroute, configroute, stoptag, time_retrieved, time_of_pr
 
 DISABLE_GRAPH_PATHS = False
 
-USE_PATCHCACHES = True
-
 g_conn = None
 g_forced_hostmoniker = None
 g_lock = threading.RLock()
@@ -333,7 +331,7 @@ g_patchcache_froute_to_time_window_n_vid_to_vis_bothdirs_raw = {}
 def get_vid_to_vis_bothdirs_raw(froute_, time_window_, log_=False):
 	assert froute_ and isinstance(time_window_, TimeWindow)
 	r = None
-	if USE_PATCHCACHES and froute_ in g_patchcache_froute_to_time_window_n_vid_to_vis_bothdirs_raw:
+	if c.USE_PATCHCACHES and froute_ in g_patchcache_froute_to_time_window_n_vid_to_vis_bothdirs_raw:
 		old_time_window, old_vid_to_vis_bothdirs_raw = g_patchcache_froute_to_time_window_n_vid_to_vis_bothdirs_raw[froute_]
 		if old_time_window.span == time_window_.span and 0 <= time_window_.end - old_time_window.end < 1000*60*20:
 			r = copy_vid_to_vis_bothdirs_raw_for_patchcache(old_vid_to_vis_bothdirs_raw)
@@ -931,6 +929,8 @@ def get_grade_stretch_info_impl(vis_, be_clever_, log_):
 	if not be_clever_:
 		return (dict((vi, 'o') for vi in vis_), {})
 
+	if log_: printerr('Calculating grades for vid %s:' % vis_[0].vehicle_id)
+
 	vi_to_offroute = dict((vi, vi.mofr == -1) for vi in vis_)
 
 	# Set the vis near the ends of on-route stretches to be off-route.  
@@ -942,17 +942,21 @@ def get_grade_stretch_info_impl(vis_, be_clever_, log_):
 			if stretchi > 0:
 				ref_mofr = stretch[0].mofr
 				vi_to_offroute[stretch[0]] = True
+				if log_: printerr('Set grade to OFF-ROUTE due to it being near end of on-route stretch:\n%s' % stretch[0])
 				for vi in stretch[1:]:
 					if abs(vi.mofr - ref_mofr) < c.GRAPH_SNAP_RADIUS:
 						vi_to_offroute[vi] = True
+						if log_: printerr('Set grade to OFF-ROUTE due to it being near end of on-route stretch:\n%s' % vi)
 					else:
 						break
 			if stretchi < len(stretches) - 1:
 				ref_mofr = stretch[-1].mofr
 				vi_to_offroute[stretch[-1]] = True
+				if log_: printerr('Set grade to OFF-ROUTE due to it being near end of on-route stretch:\n%s' % stretch[-1])
 				for vi in stretch[-2::-1]:
 					if abs(vi.mofr - ref_mofr) < c.GRAPH_SNAP_RADIUS:
 						vi_to_offroute[vi] = True
+						if log_: printerr('Set grade to OFF-ROUTE due to it being near end of on-route stretch:\n%s' % vi)
 					else:
 						break
 			
@@ -966,6 +970,7 @@ def get_grade_stretch_info_impl(vis_, be_clever_, log_):
 			if mofr_span < c.GRAPH_SNAP_RADIUS:
 				for vi in stretch:
 					vi_to_offroute[vi] = True
+					if log_: printerr('Set grade to OFF-ROUTE due to it being part of an on-route stretch that is too short:\n%s' % vi)
 
 	vi_to_grade = dict((vi, 'o' if vi_to_offroute[vi] else 'r') for vi in vis_)
 
@@ -996,8 +1001,9 @@ def get_grade_stretch_info_impl(vis_, be_clever_, log_):
 	stretches = get_maximal_sublists3(vis_, lambda vi: vi_to_grade[vi])
 	for i, stretch, isfirst, islast in enumerate2(stretches):
 		if get_grade(stretch) == 'g' and len(stretch) == 1 and \
-					(isfirst or get_grade(stretches[i-1])) and (islast or get_grade(stretches[i+1])):
+					(isfirst or get_grade(stretches[i-1]) == 'o') and (islast or get_grade(stretches[i+1]) == 'o'):
 			vi_to_grade[stretch[0]] = 'o'
+			if log_: printerr('Set grade to \'o\' due to it being part of len=1 by itself:\n%s' % stretch[0])
 
 	vi_to_path = {}
 	stretches = get_maximal_sublists3(vis_, lambda vi: vi_to_grade[vi])
@@ -1005,19 +1011,22 @@ def get_grade_stretch_info_impl(vis_, be_clever_, log_):
 		if get_grade(stretch) == 'g':
 			latlngs = [vi.latlng for vi in stretch]
 			locses = [vi.graph_locs for vi in stretch]
+			path_vis = stretch[:]
 			if stretchi > 0 and get_grade(stretches[stretchi-1]) == 'r':
 				vi = stretches[stretchi-1][-1]
 				latlngs.insert(0, vi.latlng)
 				locses.insert(0, vi.graph_locs)
+				path_vis.insert(0, vi)
 			if stretchi < len(stretches)-1 and get_grade(stretches[stretchi+1]) == 'r':
 				vi = stretches[stretchi+1][0]
 				latlngs.append(vi.latlng)
 				locses.append(vi.graph_locs)
+				path_vis.append(vi)
 			if log_:
 				printerr('latlngs / locses for stretch %d:' % stretchi)
 				for i, (latlng, locs) in enumerate(zip(latlngs, locses)): 
 					printerr('[%3d] %s, %s' % (i, latlng, locs))
-			path = sg.find_multipath(latlngs, vis_[0].vehicle_id, locses, c.GRAPH_SNAP_RADIUS, log_)
+			path = sg.find_multipath(latlngs, path_vis, locses, log_)
 			assert path is not None
 			if log_:
 				printerr('Path for stretch %d:' % stretchi)
@@ -1603,7 +1612,7 @@ def get_plausgroups(vis_, froute_, time_window_):
 	vid = vis_[0].vehicle_id
 	r = None
 	cachekey = (froute_, vid)
-	if USE_PATCHCACHES and cachekey in g_patchcache_froute_n_vid_to_time_window_n_plausgroups:
+	if c.USE_PATCHCACHES and cachekey in g_patchcache_froute_n_vid_to_time_window_n_plausgroups:
 		old_time_window, old_plausgroups = g_patchcache_froute_n_vid_to_time_window_n_plausgroups[cachekey]
 		assert old_plausgroups
 		if old_time_window.span == time_window_.span and 0 <= time_window_.end - old_time_window.end < 1000*60*20:

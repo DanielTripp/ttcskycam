@@ -239,7 +239,8 @@ class VehicleInfo:
 		# We could just copy the latlng and nullify the others, so that they are 
 		# recalculated from the latlng on first use.  But copying these too will 
 		# avoid that recalculation, and is a significant overall optimization.  
-		self._graph_locs = snapgraph.copy_graph_locs(other_.graph_locs)
+		self._graph_locs = other_.graph_locs[:] # Each element is either a PosAddr or a Vertex.  
+				# The former is immutable and only a lunatic would modify the latter. 
 		self._graph_locs_str = other_._graph_locs_str
 		self._mofr = other_.mofr
 		self._widemofr = other_.widemofr

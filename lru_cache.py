@@ -38,7 +38,7 @@ def lru_cache(maxsize=100, posargkeymask=None, cacheable=None):
 
         @functools.wraps(user_function)
         def wrapper(*args, **kwds):
-            if cacheable is not None and not cacheable(args, kwds):
+            if (cacheable is not None and not cacheable(args, kwds)) or (maxsize == 0):
               return user_function(*args, **kwds)
             # cache key records both positional and keyword args
             key = args
