@@ -32,7 +32,8 @@ def get_snapgraph():
 	]
 	]
 
-	r = system.SystemSnapGraph(plines)
+	#r = system.SystemSnapGraph(plines)
+	r = snapgraph.SnapGraph(plines)
 	return r
 
 if __name__ == '__main__':

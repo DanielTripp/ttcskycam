@@ -43,6 +43,8 @@ MAX_DATAZOOM = max(VALID_DATAZOOMS)
 # 150 meters might seem high but I observed 140 before - vid 4114, 2014-01-31 11:14:47.
 GRAPH_SNAP_RADIUS = 150 
 
+USE_PATCHCACHES = True
+
 if __name__ == '__main__':
 
 	pass

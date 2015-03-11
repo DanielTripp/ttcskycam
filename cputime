@@ -4,19 +4,24 @@ import sys, subprocess, pipes, os, tempfile, numpy
 from misc import *
 
 n = 1
-test_opt = False
+opt = False
+optlevel = 0
 args = sys.argv[1:]
 for i, arg in enumerate(args):
 	if arg.startswith('--n='):
 		n = int(arg.split('=')[1])
 	elif arg == '--opt':
-		test_opt = True
+		opt = True
+	elif arg.startswith('--optlevel='):
+		optlevel = int(arg.split('=')[1])
 	else:
 		cmd_list = args[i:]
 		break
 
 if len(cmd_list) < 2:
 	sys.exit('Need at least one argument: the filename of a program.  Optionally argument, preceeding that: -n=X')
+
+os.putenv('PROF_OPT', '1')
 
 TIMEFORMAT_PREFIX = '> CPU times: '
 os.putenv('TIMEFORMAT', TIMEFORMAT_PREFIX+'%U %S')
@@ -27,7 +32,7 @@ def run_cmd(exit_early_, print_output_, disable_opt_):
 	try:
 		cmd_str = '{ time %s ; } >%s 2>&1' % (' '.join(pipes.quote(x) for x in cmd_list), pipes.quote(output_filename))
 		os.putenv('PROF_EXIT_EARLY', str(int(exit_early_)))
-		os.putenv('PROF_DISABLE_OPT', str(int(disable_opt_)))
+		os.putenv('PROF_DISABLE_OPT_LEVEL_%d' % optlevel, str(int(disable_opt_)))
 		retcode = subprocess.call(cmd_str, shell=True, executable='/bin/bash', stderr=subprocess.STDOUT)
 		with open(output_filename) as fin:
 			output = fin.read()
@@ -44,7 +49,7 @@ def run_cmd(exit_early_, print_output_, disable_opt_):
 	finally:
 		os.remove(output_filename)
 
-if test_opt:
+if opt:
 	run_cmd(False, False, False)
 	opt_part2_cputimes = []
 	for i in range(n):
