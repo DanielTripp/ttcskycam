@@ -144,7 +144,7 @@ class LatLng:
 		return cmp(self._key(), other_._key())
 
 	def __hash__(self):
-		return int(self.lat*100000 + self.lng*100000)
+		return hash(self.lat + self.lng)
 
 	def __str__(self):
 		return '(%.7f,%.7f)' % (self.lat, self.lng) # Avoiding spaces in case one of these ends up in a memcache key.
