@@ -910,20 +910,22 @@ def get_piece_idx(vis_, lo_idx_, vi_to_grade_):
 	return r
 
 def get_grade_stretch_info(vis_, be_clever_, log_):
-	return get_grade_stretch_info_impl(tuple(vis_), be_clever_, log_)
+	vid = vis_[0].vehicle_id
+	latlngs = tuple(vi.latlng for vi in vis_)
+	return get_grade_stretch_info_impl(tuple(vis_), be_clever_, vid, latlngs, log_)
 
 # returns (vi_to_grade, vi_to_path): 
 # 	- vi_to_grade: has a key set equal to vis_.  values are 'r', 'g', or 'o'.
 #		- vi_to_path: has a key set of only those vis which have a value of 'g' in vi_to_grade. 
-@lru_cache(100) 
+@lru_cache(100, posargkeymask=(0,1,1,1,1))
 # Re: lru_cache - It's important that this cache at least the maximum number of 
 # vehicles that will ever appear in the locations 
 # report for one route / one direction.  If this cache size is even 1 less than 
 # that, then every time around the loop over the datazooms in reports.py / 
 # make_all_reports_and_insert_into_db_once(), these will be forgotten, and 
 # performance will suffer badly. 
-def get_grade_stretch_info_impl(vis_, be_clever_, log_):
-	assert vinfo.same_vid(vis_)
+def get_grade_stretch_info_impl(vis_, be_clever_, vid_, latlngs_, log_):
+	assert vis_ and vinfo.same_vid(vis_)
 	assert is_sorted(vis_, key=lambda vi: vi.time)
 
 	if not be_clever_:
@@ -934,7 +936,8 @@ def get_grade_stretch_info_impl(vis_, be_clever_, log_):
 	vi_to_offroute = dict((vi, vi.mofr == -1) for vi in vis_)
 
 	# Set the vis near the ends of on-route stretches to be off-route.  
-	# Precisely: all vis within GRAPH_SNAP_RADIUS of the last (or first) on-route vi (including that vi itself). 
+	# Precisely: all vis within GRAPH_SNAP_RADIUS of the last (or first) on-route vi 
+	# right before (or after) an off-route stretch (including that vi itself). 
 	stretches = get_maximal_sublists3(vis_, lambda vi: vi_to_offroute[vi])
 	for stretchi in range(len(stretches)):
 		stretch = stretches[stretchi]
@@ -1005,8 +1008,9 @@ def get_grade_stretch_info_impl(vis_, be_clever_, log_):
 			vi_to_grade[stretch[0]] = 'o'
 			if log_: printerr('Set grade to \'o\' due to it being part of len=1 by itself:\n%s' % stretch[0])
 
-	vi_to_path = {}
 	stretches = get_maximal_sublists3(vis_, lambda vi: vi_to_grade[vi])
+
+	vi_to_path = {}
 	for stretchi, stretch in enumerate(stretches):
 		if get_grade(stretch) == 'g':
 			latlngs = [vi.latlng for vi in stretch]
