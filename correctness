@@ -31,8 +31,8 @@ def run_cmd(disable_opt_):
 			raise
 	return output_filename
 
-noopt_output_filename = run_cmd(True)
 opt_output_filename = run_cmd(False)
+noopt_output_filename = run_cmd(True)
 
 files_are_identical = filecmp.cmp(noopt_output_filename, opt_output_filename)
 
