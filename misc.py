@@ -1134,6 +1134,20 @@ def cpu_prof_exit_early_maybe():
 def cpu_prof_disable_opt(level_=0):
 	return int(os.getenv('PROF_DISABLE_OPT_LEVEL_%d' % level_, '0'))
 
+def count_lines(filename_):
+	with open(filename_) as fin:
+		r = 0
+		for line in fin:
+			r += 1
+		return r
+
+# Like dict.update() but this doesn't modify any of the arguments, and returns the result.
+def updated(*args_):
+	r = args_[0].copy()
+	for d in args_[1:]:
+		r.update(d)
+	return r
+
 if __name__ == '__main__':
 
 	pass
