@@ -836,7 +836,7 @@ def interp(vis_, be_clever_, current_conditions_, dir_=None, datazoom_=None, sta
 	vid = vis_[0].vehicle_id
 	if log_: printerr('Interpolating locations for vid %s...' % vid)
 	assert is_sorted(vis_, key=lambda vi: vi.time)
-	vi_to_grade, vi_to_path = get_grade_stretch_info(vis_, be_clever_, log_)
+	grades, paths = get_grade_stretch_info(vis_, be_clever_, log_)
 	for interptime in interptimes:
 		lolo_vi, lo_vi, hi_vi, lolo_idx, lo_idx, hi_idx = get_nearest_time_vis(vis_, interptime)
 		i_vi = None
@@ -845,10 +845,10 @@ def interp(vis_, be_clever_, current_conditions_, dir_=None, datazoom_=None, sta
 					or dirs_disagree(lo_vi.dir_tag_int, dir_) or (lo_vi.fudgeroute != hi_vi.fudgeroute)):
 				continue
 			time_ratio = (interptime - lo_vi.time)/float(hi_vi.time - lo_vi.time)
-			lo_grade = vi_to_grade[lo_vi]; hi_grade = vi_to_grade[hi_vi]
+			lo_grade = grades[lo_idx]; hi_grade = grades[hi_idx]
 			if (lo_grade, hi_grade) in (('g', 'g'), ('g', 'r'), ('r', 'g')):
 				i_latlon, i_heading, i_mofr = interp_with_path_latlonnheadingnmofr(
-						lo_vi, hi_vi, time_ratio, lo_idx, vis_, vi_to_grade, vi_to_path, log_)
+						lo_vi, hi_vi, time_ratio, lo_idx, hi_idx, vis_, grades, paths, log_)
 			else:
 				i_latlon, i_heading, i_mofr = interp_latlonnheadingnmofr(lo_vi, hi_vi, time_ratio, datazoom_, be_clever_)
 			i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, i_heading, vid, i_latlon.lat, i_latlon.lng,
@@ -859,8 +859,8 @@ def interp(vis_, be_clever_, current_conditions_, dir_=None, datazoom_=None, sta
 			if current_conditions_:
 				if be_clever_ and ((interptime - lo_vi.time > 3*60*1000) or dirs_disagree(dir_, lo_vi.dir_tag_int)):
 					continue
-				if vi_to_grade[lo_vi] == 'g':
-					latlng, heading = vi_to_path[lo_vi].get_piece(-1).mapl_to_latlngnheading('max')
+				if grades[lo_idx] == 'g':
+					latlng, heading = paths[lo_idx].get_piece(-1).mapl_to_latlngnheading('max')
 				else:
 					latlng, heading = get_latlonnheadingnmofr_from_lo_sample(lolo_vi, lo_vi, datazoom_, be_clever_)[:2]
 				i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, heading, vid, latlng.lat, latlng.lng,
@@ -879,11 +879,11 @@ def interp(vis_, be_clever_, current_conditions_, dir_=None, datazoom_=None, sta
 
 	return interptime_to_vi
 
-def interp_with_path_latlonnheadingnmofr(lo_vi_, hi_vi_, time_ratio_, lo_idx_, vis_, vi_to_grade_, vi_to_path_, log_):
+def interp_with_path_latlonnheadingnmofr(lo_vi_, hi_vi_, time_ratio_, lo_idx_, hi_idx_, vis_, grades_, paths_, log_):
 	assert lo_vi_.vehicle_id == hi_vi_.vehicle_id
-	lo_grade = vi_to_grade_[lo_vi_]
-	path = vi_to_path_[lo_vi_ if lo_grade == 'g' else hi_vi_]
-	pieceidx = get_piece_idx(vis_, lo_idx_, vi_to_grade_)
+	lo_grade = grades_[lo_idx_]
+	path = paths_[lo_idx_ if lo_grade == 'g' else hi_idx_]
+	pieceidx = get_piece_idx(vis_, lo_idx_, grades_)
 	i_latlng, i_heading = get_latlngnheading_from_path(path, pieceidx, time_ratio_)
 	i_mofr = None
 	if log_:
@@ -898,11 +898,11 @@ def get_latlngnheading_from_path(path_, pieceidx_, time_ratio_):
 	mapl = piece.length_m() * time_ratio_
 	return piece.mapl_to_latlngnheading(mapl)
 
-def get_piece_idx(vis_, lo_idx_, vi_to_grade_):
+def get_piece_idx(vis_, lo_idx_, grades_):
 	r = -1
 	for i in range(lo_idx_, -1, -1):
 		r += 1
-		grade = vi_to_grade_[vis_[i]]
+		grade = grades_[i]
 		if grade != 'g':
 			if grade == 'o':
 				r -= 1
@@ -914,9 +914,10 @@ def get_grade_stretch_info(vis_, be_clever_, log_):
 	latlngs = tuple(vi.latlng for vi in vis_)
 	return get_grade_stretch_info_impl(tuple(vis_), be_clever_, vid, latlngs, log_)
 
-# returns (vi_to_grade, vi_to_path): 
-# 	- vi_to_grade: has a key set equal to vis_.  values are 'r', 'g', or 'o'.
-#		- vi_to_path: has a key set of only those vis which have a value of 'g' in vi_to_grade. 
+# returns (grades, paths): 
+#   Both lists have the same length as vis_, and their elements correspond to vis_. 
+# 	- grades: all elements are meaningful.  values are 'r', 'g', or 'o'.
+#		- paths: only indexes which have a value of 'g' in grades are not None. 
 @lru_cache(100, posargkeymask=(0,1,1,1,1))
 # Re: lru_cache - It's important that this cache at least the maximum number of 
 # vehicles that will ever appear in the locations 
@@ -928,68 +929,72 @@ def get_grade_stretch_info_impl(vis_, be_clever_, vid_, latlngs_, log_):
 	assert vis_ and vinfo.same_vid(vis_)
 	assert is_sorted(vis_, key=lambda vi: vi.time)
 
+	n = len(vis_)
+
 	if not be_clever_:
-		return (dict((vi, 'o') for vi in vis_), {})
+		return (['o']*n, [None]*n)
 
 	if log_: printerr('Calculating grades for vid %s:' % vis_[0].vehicle_id)
 
-	vi_to_offroute = dict((vi, vi.mofr == -1) for vi in vis_)
+	offroute = [vi.mofr == -1 for vi in vis_]
+
+	def mofr(i__):
+		return vis_[i__].mofr
 
 	# Set the vis near the ends of on-route stretches to be off-route.  
 	# Precisely: all vis within GRAPH_SNAP_RADIUS of the last (or first) on-route vi 
 	# right before (or after) an off-route stretch (including that vi itself). 
-	stretches = get_maximal_sublists3(vis_, lambda vi: vi_to_offroute[vi])
+	stretches = get_maximal_sublists3(range(n), lambda i: offroute[i])
 	for stretchi in range(len(stretches)):
 		stretch = stretches[stretchi]
-		if not vi_to_offroute[stretch[0]]:
+		if not offroute[stretch[0]]:
 			if stretchi > 0:
-				ref_mofr = stretch[0].mofr
-				vi_to_offroute[stretch[0]] = True
-				if log_: printerr('Set grade to OFF-ROUTE due to it being near end of on-route stretch:\n%s' % stretch[0])
-				for vi in stretch[1:]:
-					if abs(vi.mofr - ref_mofr) < c.GRAPH_SNAP_RADIUS:
-						vi_to_offroute[vi] = True
-						if log_: printerr('Set grade to OFF-ROUTE due to it being near end of on-route stretch:\n%s' % vi)
+				ref_mofr = mofr(stretch[0])
+				offroute[stretch[0]] = True
+				if log_: printerr('Set grade to OFF-ROUTE due to it being near end of on-route stretch:\n%s' % vis_[stretch[0]])
+				for i in stretch[1:]:
+					if abs(mofr(i) - ref_mofr) < c.GRAPH_SNAP_RADIUS:
+						offroute[i] = True
+						if log_: printerr('Set grade to OFF-ROUTE due to it being near end of on-route stretch:\n%s' % vis_[i])
 					else:
 						break
 			if stretchi < len(stretches) - 1:
-				ref_mofr = stretch[-1].mofr
-				vi_to_offroute[stretch[-1]] = True
-				if log_: printerr('Set grade to OFF-ROUTE due to it being near end of on-route stretch:\n%s' % stretch[-1])
-				for vi in stretch[-2::-1]:
-					if abs(vi.mofr - ref_mofr) < c.GRAPH_SNAP_RADIUS:
-						vi_to_offroute[vi] = True
-						if log_: printerr('Set grade to OFF-ROUTE due to it being near end of on-route stretch:\n%s' % vi)
+				ref_mofr = mofr(stretch[-1])
+				offroute[stretch[-1]] = True
+				if log_: printerr('Set grade to OFF-ROUTE due to it being near end of on-route stretch:\n%s' % vis_[stretch[-1]])
+				for i in stretch[-2::-1]:
+					if abs(mofr(i) - ref_mofr) < c.GRAPH_SNAP_RADIUS:
+						offroute[i] = True
+						if log_: printerr('Set grade to OFF-ROUTE due to it being near end of on-route stretch:\n%s' % vis_[i])
 					else:
 						break
 			
 	# Set vis that are part of trivially short (distance-wise) on-route stretches to be off-route: 
-	stretches = get_maximal_sublists3(vis_, lambda vi: vi_to_offroute[vi])
+	stretches = get_maximal_sublists3(range(n), lambda i: offroute[i])
 	for stretchi in range(len(stretches)):
 		stretch = stretches[stretchi]
-		if not vi_to_offroute[stretch[0]]:
-			mofrs = [vi.mofr for vi in stretch]
+		if not offroute[stretch[0]]:
+			mofrs = [mofr(i) for i in stretch]
 			mofr_span = max(mofrs) - min(mofrs)
 			if mofr_span < c.GRAPH_SNAP_RADIUS:
-				for vi in stretch:
-					vi_to_offroute[vi] = True
-					if log_: printerr('Set grade to OFF-ROUTE due to it being part of an on-route stretch that is too short:\n%s' % vi)
+				for i in stretch:
+					offroute[i] = True
+					if log_: printerr('Set grade to OFF-ROUTE due to it being part of an on-route stretch that is too short:\n%s' % vis_[i])
 
-	vi_to_grade = dict((vi, 'o' if vi_to_offroute[vi] else 'r') for vi in vis_)
+	grades = ['o' if offroute[i] else 'r' for i in xrange(n)]
 
 	if DISABLE_GRAPH_PATHS:
-		return (vi_to_grade, {})
+		return (grades, [None]*n)
 
-	vi_to_locs = {}
 	sg = (tracks.get_snapgraph() if vis_[0].is_a_streetcar() else streets.get_snapgraph())
-	for vi in vis_:
-		if vi_to_grade[vi] == 'o':
-			locs = vi.graph_locs
+	for i in xrange(n):
+		if grades[i] == 'o':
+			locs = vis_[i].graph_locs
 			if len(locs) > 0:
-				vi_to_grade[vi] = 'g'
+				grades[i] = 'g'
 
 	def get_grade(stretch__):
-		return vi_to_grade[stretch__[0]]
+		return grades[stretch__[0]]
 
 	# We can't use 'g' stretches of length 1 which are surrounded by either 'o' stretches or nothing.  
 	# So here we remove them and make them 'o'. 
@@ -1001,28 +1006,28 @@ def get_grade_stretch_info_impl(vis_, be_clever_, vid_, latlngs_, log_):
 	# So here we filter out those useless stretches, both because they are useless, and because if we 
 	# don't, the find_multipath() code below will fail because it doesn't like being passed a latlngs 
 	# list of length 1. 
-	stretches = get_maximal_sublists3(vis_, lambda vi: vi_to_grade[vi])
+	stretches = get_maximal_sublists3(range(n), lambda i: grades[i])
 	for i, stretch, isfirst, islast in enumerate2(stretches):
 		if get_grade(stretch) == 'g' and len(stretch) == 1 and \
 					(isfirst or get_grade(stretches[i-1]) == 'o') and (islast or get_grade(stretches[i+1]) == 'o'):
-			vi_to_grade[stretch[0]] = 'o'
-			if log_: printerr('Set grade to \'o\' due to it being part of len=1 by itself:\n%s' % stretch[0])
+			grades[stretch[0]] = 'o'
+			if log_: printerr('Set grades to \'o\' due to it being part of len=1 by itself:\n%s' % vis_[stretch[0]])
 
-	stretches = get_maximal_sublists3(vis_, lambda vi: vi_to_grade[vi])
+	stretches = get_maximal_sublists3(range(n), lambda i: grades[i])
 
-	vi_to_path = {}
+	paths = [None]*n
 	for stretchi, stretch in enumerate(stretches):
 		if get_grade(stretch) == 'g':
-			latlngs = [vi.latlng for vi in stretch]
-			locses = [vi.graph_locs for vi in stretch]
-			path_vis = stretch[:]
+			latlngs = [vis_[i].latlng for i in stretch]
+			locses = [vis_[i].graph_locs for i in stretch]
+			path_vis = [vis_[i] for i in stretch]
 			if stretchi > 0 and get_grade(stretches[stretchi-1]) == 'r':
-				vi = stretches[stretchi-1][-1]
+				vi = vis_[stretches[stretchi-1][-1]]
 				latlngs.insert(0, vi.latlng)
 				locses.insert(0, vi.graph_locs)
 				path_vis.insert(0, vi)
 			if stretchi < len(stretches)-1 and get_grade(stretches[stretchi+1]) == 'r':
-				vi = stretches[stretchi+1][0]
+				vi = vis_[stretches[stretchi+1][0]]
 				latlngs.append(vi.latlng)
 				locses.append(vi.graph_locs)
 				path_vis.append(vi)
@@ -1037,15 +1042,15 @@ def get_grade_stretch_info_impl(vis_, be_clever_, vid_, latlngs_, log_):
 				for piecei, piecesteps in enumerate(path.piecestepses):
 					printerr('piece %d: %s' % (piecei, piecesteps))
 				printerr('path for stretch %d, all latlngs: %s' % (stretchi, path.latlngs()))
-			for vi in stretch:
-				vi_to_path[vi] = path
+			for i in stretch:
+				paths[i] = path
 
 	if log_:
 		printerr('Grades for vid %s:' % vis_[0].vehicle_id)
-		for vi in vis_:
-			printerr('\t%s / %s: %s' % (vi.timestr, vi.latlng, vi_to_grade[vi]))
+		for i, vi in enumerate(vis_):
+			printerr('\t%s / %s: %s' % (vi.timestr, vi.latlng, grades[i]))
 
-	return (vi_to_grade, vi_to_path)
+	return (grades, paths)
 
 # Either arg could be None (i.e. blank dir_tag).  For this we consider None to 'agree' with 0 or 1.
 def dirs_disagree(dir1_, dir2_):
