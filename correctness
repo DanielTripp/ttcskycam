@@ -32,7 +32,12 @@ def run_cmd(disable_opt_):
 	return output_filename
 
 opt_output_filename = run_cmd(False)
+printerr('Finished opt run.')
+if count_lines(opt_output_filename) < 100:
+	for i in xrange(10):
+		printerr('----------------- WARNING: not many lines in output -----------------')
 noopt_output_filename = run_cmd(True)
+printerr('Finished noopt run.')
 
 files_are_identical = filecmp.cmp(noopt_output_filename, opt_output_filename)
 
