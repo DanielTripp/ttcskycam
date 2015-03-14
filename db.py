@@ -219,40 +219,6 @@ def get_vid_to_vis_singledir(fudge_route_, dir_, num_minutes_, end_time_em_, log
 		r[vid] = [vi for vi in vis if vi.dir_tag_int == dir_]
 	return r
 
-# Unlike the non-patch version of this function, this one never removes, it only (maybe) adds, 
-# because the addition of vis can only turn an undesirable stretch into a desirable one - 
-# not the other way around. 
-def remove_undesirable_dirstretches_patch(pvis_, new_vis_, log_=False):
-	if pvis_.dirstretches and new_vis_:
-		all_dirstretches = copy.deepcopy(pvis_.dirstretches[:])
-		for new_vi in new_vis_:
-			if new_vi.dir_tag_int == all_dirstretches[-1][0].dir_tag_int:
-				all_dirstretches[-1].append(new_vi)
-			else:
-				all_dirstretches.append([new_vi])
-		all_desirability_by_dirstretchidx = pvis_.desirability_by_dirstretchidx[:]
-		last_old_dirstretchidx = len(pvis_.dirstretches)-1
-		all_desirability_by_dirstretchidx[last_old_dirstretchidx] = \
-				is_dirstretch_desirable(all_dirstretches[last_old_dirstretchidx], log_=log_)
-		for stretchidx in xrange(last_old_dirstretchidx+1, len(all_dirstretches)):
-			stretch = all_dirstretches[stretchidx]
-			all_desirability_by_dirstretchidx.append(is_dirstretch_desirable(stretch), log_=log_)
-		assert len(all_dirstretches) == len(all_desirability_by_dirstretchidx)
-		if all_desirability_by_dirstretchidx[last_old_dirstretchidx] != pvis_.desirability_by_dirstretchidx[-1]:
-			assert not pvis_.desirability_by_dirstretchidx[-1] 
-			new_vis = all_dirstretches[last_old_dirstretchidx]
-		else:
-			new_vis = all_dirstretches[last_old_dirstretchidx][len(pvis_.dirstretches[last_old_dirstretchidx]):]
-		new_desirable_dirstretches = [stretch for i, stretch in enumerate(all_dirstretches) if \
-				i > last_old_dirstretchidx and all_desirability_by_dirstretchidx[i]]
-		new_vis += sum(new_desirable_dirstretches, [])
-		return new_vis
-	elif new_vis_:
-		remove_undesirable_dirstretches(new_vis_, None, log_=log_)
-		return new_vis_
-	else:
-		return []
-
 # 'stretch' here means a list of consecutive (time-wise) vis, for a single vehicle, 
 # that have the same direction. 
 def remove_undesirable_dirstretches(vis_, pvis_, log_=False):
@@ -265,13 +231,6 @@ def remove_undesirable_dirstretches(vis_, pvis_, log_=False):
 		pvis_.desirability_by_dirstretchidx = copy.deepcopy(desirability_by_dirstretchidx)
 	desirable_dirstretches = [stretch for i, stretch in enumerate(dirstretches) if desirability_by_dirstretchidx[i]]
 	vis_[:] = sum(desirable_dirstretches, [])
-
-class PatchableViList(object):
-
-	def __init__(self):
-		pass
-
-WRITE_PATCHABLES = False
 
 def get_history_overshoot_start_time(end_time_, num_minutes_):
 	start_time = end_time_ - num_minutes_*60*1000
@@ -404,32 +363,6 @@ def adopt_or_discard_vis_with_blank_froutes(froute_, vis_, log_=False):
 	for idx in idxes_to_discard[::-1]:
 		vis_.pop(idx)
 
-def adopt_or_discard_vis_with_blank_froutes_patch(froute_, old_vis_, new_vis_, log_=False):
-	assert len(froute_) > 0 and vinfo.same_vid(old_vis_) and vinfo.same_vid(new_vis_)
-	assert all(is_sorted(x, key=lambda vi: vi.time) for x in (old_vis_, new_vis_))
-	if len(old_vis_) and len(new_vis_):
-		assert old_vis_[-1].time < new_vis_[0].time
-	idxes_to_discard = []
-	for i, vi in enumerate(new_vis_):
-		if vi.fudgeroute == '':
-			for which_vis, j in [('new', k) for k in range(i-1, -1, -1)] + [('old', k) for k in range(len(old_vis_)-1, -1, -1)]:
-				if which_vis == 'new':
-					prev_vi = new_vis_[j]
-				else:
-					prev_vi = old_vis_[j]
-				if prev_vi.fudgeroute != '':
-					if vi.time - prev_vi.time < 1000*60*2:
-						if log_:
-							printerr('Adopting vi w/ blank froute:\n%s' % vi)
-						vi.correct_fudgeroute(froute_)
-					else:
-						if log_:
-							printerr('Discarding vi w/ blank froute:\n%s' % vi)
-						idxes_to_discard.append(i)
-					break
-	for idx in idxes_to_discard[::-1]:
-		new_vis_.pop(idx)
-
 # Can handle multiple vids. 
 def work_around_secssincereport_bug(vis_):
 	assert all(isinstance(e, vinfo.VehicleInfo) for e in vis_)
@@ -460,18 +393,6 @@ def remove_time_duplicates(vis_):
 		prev_vi = vis_[i-1]
 		if vis_[i].time == prev_vi.time:
 			del vis_[i]
-
-def remove_time_duplicates_patch(old_vis_, new_vis_):
-	for i in range(len(new_vis_)-1, -1, -1): # Removing duplicates by time.  Not sure if this ever happens.
-			# I think that it could happen if the code that gets overshots is sloppy. 
-		if i >= 1:
-			prev_vi = new_vis_[i-1]
-		elif len(old_vis_):
-			prev_vi = old_vis_[-1]
-		else:
-			break
-		if new_vis_[i].time == prev_vi.time:
-			del new_vis_[i]
 
 def fix_dirtags(vis_, froute_, time_window_, log_=False):
 	assert vis_ and vinfo.same_vid(vis_) and is_sorted(vis_, key=lambda vi: vi.time)
@@ -674,15 +595,12 @@ def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, datazoom
 	vid_to_interptime_to_vi = {}
 	for vid, vis in iteritemssorted(vid_to_vis):
 		if log_:
-			printerr('For locations, pre-interp: vid %s: %d vis, from %s to %s (widemofrs %d to %d)' \
+			printerr('For locations, pre-interpolation: vid %s: %d vis, from %s to %s (widemofrs %d to %d)' \
 				% (vid, len(vis), em_to_str_hms(vis[0].time), em_to_str_hms(vis[-1].time), vis[0].widemofr, vis[-1].widemofr))
 			for vi in vis:
 				printerr('\t%s' % vi)
 		vid_to_interptime_to_vi[vid] = \
 				interp(vis, True, True, direction, datazoom_, starttime, time_window_end_, log_=log_)
-	if WRITE_PATCHABLES:
-		with open('d-patchable-vid_to_interptime_to_vi', 'w') as fout:
-			cPickle.dump(vid_to_interptime_to_vi, fout, cPickle.HIGHEST_PROTOCOL)
 	return get_locations_clientside_list(vid_to_interptime_to_vi, starttime, time_window_end_, log_=log_)
 
 def massage_direction(direction_, fudgeroute_):
@@ -691,20 +609,6 @@ def massage_direction(direction_, fudgeroute_):
 		return direction_
 	else:
 		return routes.routeinfo(fudgeroute_).dir_from_latlngs(direction_[0], direction_[1])
-
-def get_recent_vehicle_locations_patch(vid_to_pvis_, p_vid_to_interptime_to_vi_, fudgeroute_, num_minutes_, 
-		direction_, datazoom_, old_end_time_, new_end_time_, log_=False):
-	direction = massage_direction(direction_, fudgeroute_)
-	redo_vids, vid_to_new_vis = get_vid_to_vis_bothdirs_patch(vid_to_pvis_, fudgeroute_, num_minutes_, 
-			old_end_time_, new_end_time_, log_=log_)
-	if redo_vids: raise Exception('not supported') # tdr but implement first 
-	for vid, new_vis in vid_to_new_vis.iteritems():
-		interp_patch(old_vis, new_vis, direction, datazoom_, starttime, time_window_end_, log_=log_)
-
-# In terms of the non-patch version of interp(), we act like be_clever_ and current_conditions_ are True. 
-# Also unlike the non-patch version, our dir_, datazoom_, start_time_, and end_time_ must not be None.
-def interp_patch(old_vis_, new_vis_, dir_, datazoom_, start_time_, end_time_, log_=False):
-	assert vinfo.same_vid(old_vis_ + new_vis_)
 
 # Return only elements for which predicate is true.  (It's a one-argument predicate.  It takes one element.)
 # Group them as they appeared in input list as runs of trues.
@@ -870,7 +774,7 @@ def interp(vis_, be_clever_, current_conditions_, dir_=None, datazoom_=None, sta
 		if i_vi:
 			interptime_to_vi[interptime] = i_vi
 			if log_:
-				printerr('vid %s, interp result for %s' % (vid, em_to_str_hms(interptime)))
+				printerr('vid %s, interpolation result for %s' % (vid, em_to_str_hms(interptime)))
 				printerr('\tlo: %s' % lo_vi)
 				if hi_vi:
 					printerr('\thi: %s' % hi_vi)
@@ -887,7 +791,7 @@ def interp_with_path_latlonnheadingnmofr(lo_vi_, hi_vi_, time_ratio_, lo_idx_, h
 	i_latlng, i_heading = get_latlngnheading_from_path(path, pieceidx, time_ratio_)
 	i_mofr = None
 	if log_:
-		printerr('vid %s path interp between [%s,%s]:' % (lo_vi_.vehicle_id, lo_vi_.latlng, hi_vi_.latlng))
+		printerr('vid %s path interpolation between [%s,%s]:' % (lo_vi_.vehicle_id, lo_vi_.latlng, hi_vi_.latlng))
 		printerr('\ttime_ratio=%.2f, pieceidx=%d' % (time_ratio_, pieceidx))
 		printerr('\tpiece=%s' % path.latlngs(pieceidx))
 		printerr('\tresult=%s' % i_latlng)
