@@ -4,10 +4,13 @@ import sys, subprocess, pipes, os, filecmp
 from misc import *
 
 optlevel = 0
+moniker = None
 args = sys.argv[1:]
 for i, arg in enumerate(args):
 	if arg.startswith('--optlevel='):
 		optlevel = int(arg.split('=')[1])
+	elif arg.startswith('--m='):
+		moniker = arg.split('=')[1]
 	else:
 		cmd_list = args[i:]
 		break
@@ -18,7 +21,9 @@ if len(cmd_list) < 2:
 os.putenv('PROF_OPT', '1')
 
 def run_cmd(disable_opt_):
-	output_filename = ('d-level-%d-noopt' if disable_opt_ else 'd-level-%d-opt') % optlevel
+	moniker_filename_part = ('%s-' % moniker if moniker else '')
+	opt_or_not_filename_part = ('noopt' if disable_opt_ else 'opt')
+	output_filename = 'd-%slevel-%d-%s' % (moniker_filename_part, optlevel, opt_or_not_filename_part)
 	if os.path.exists(output_filename):
 		os.remove(output_filename)
 	with open(output_filename, 'w') as fout:
