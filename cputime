@@ -4,21 +4,21 @@ import sys, subprocess, pipes, os, tempfile, numpy
 from misc import *
 
 n = 1
-compare = True
+optcompare = True
 optlevel = 0
 args = sys.argv[1:]
 for i, arg in enumerate(args):
 	if arg.startswith('--n='):
 		n = int(arg.split('=')[1])
-	elif arg == '--nocompare':
-		comapre = False
+	elif arg == '--nooptcompare':
+		optcompare = False
 	elif arg.startswith('--optlevel='):
 		optlevel = int(arg.split('=')[1])
 	else:
 		cmd_list = args[i:]
 		break
 
-if len(cmd_list) < 2:
+if len(cmd_list) < 1:
 	sys.exit('Need at least one argument: the filename of a program.  (Some optional arguments can preceed that.)')
 
 os.environ['PROF_OPT'] = '1'
@@ -52,7 +52,7 @@ def run_cmd(exit_early_, print_output_, disable_opt_):
 	finally:
 		os.remove(output_filename)
 
-if compare:
+if optcompare:
 	run_cmd(False, False, False)
 	opt_part2_cputimes = []
 	for i in range(n):
