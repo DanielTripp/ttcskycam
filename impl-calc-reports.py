@@ -108,8 +108,8 @@ if __name__ == '__main__':
 		sys.exit('Invalid times arg.')
 	yeararg, montharg, dayarg, timearg = [mo.group(i) for i in range(1, 5)]
 
-	if args.prof and os.getenv('PROF_OPT'):
-		sys.exit("------------ Don't want to profile when running under cputime ------------")
+	if args.prof and (os.getenv('PROF_OPT') or args.log or args.out):
+		sys.exit('Conflicting arguments.')
 
 	stdout_and_stderr_both_ttys = os.isatty(sys.stdout.fileno()) and os.isatty(sys.stderr.fileno())
 	stderr_is_a_tty = os.isatty(sys.stderr.fileno())
