@@ -60,20 +60,20 @@ if optcompare:
 		part1_cputime = run_cmd(True, True, False)
 		part2_cputime = full_cputime - part1_cputime
 		opt_part2_cputimes.append(part2_cputime)
-		print '> opt run #%d (of %d) time: %.1f' % (i, n, part2_cputime)
+		print '> opt run #%d (of %d) time: %.3f' % (i, n, part2_cputime)
 	noopt_part2_cputimes = []
 	for i in range(n):
 		full_cputime = run_cmd(False, True, True)
 		part1_cputime = run_cmd(True, True, True)
 		part2_cputime = full_cputime - part1_cputime
 		noopt_part2_cputimes.append(part2_cputime)
-		print '> noopt run #%d (of %d) time: %.1f' % (i, n, part2_cputime)
+		print '> noopt run #%d (of %d) time: %.3f' % (i, n, part2_cputime)
 
 	if n == 1:
 		opt_time = opt_part2_cputimes[0]
 		noopt_time = noopt_part2_cputimes[0]
 		ratio = opt_part2_cputimes[0]/noopt_part2_cputimes[0]
-		print '> CPU times: opt: %.1f seconds, noopt: %.1f seconds' % (opt_time, noopt_time)
+		print '> CPU times: opt: %.3f seconds, noopt: %.3f seconds' % (opt_time, noopt_time)
 		print '> Ratio: %.2f' % (ratio)
 	else:
 		def get_stddev_over_mean(times_):
@@ -82,10 +82,10 @@ if optcompare:
 		opt_stddev_over_mean = get_stddev_over_mean(opt_part2_cputimes)
 		noopt_mean = average(noopt_part2_cputimes)
 		noopt_stddev_over_mean = get_stddev_over_mean(noopt_part2_cputimes)
-		print '> CPU time, avg over %d runs, opt:    %.1f seconds.  (std. dev / mean: %.2f)' % (n, opt_mean, opt_stddev_over_mean)
-		print '> indiv times                opt:    %s' % ['%.1f' % t for t in opt_part2_cputimes]
-		print '> CPU time, avg over %d runs, noopt:  %.1f seconds.  (std. dev / mean: %.2f)' % (n, noopt_mean, noopt_stddev_over_mean)
-		print '> indiv times                noopt:  %s' % ['%.1f' % t for t in noopt_part2_cputimes]
+		print '> CPU time, avg over %d runs, opt:    %.3f seconds.  (std. dev / mean: %.2f)' % (n, opt_mean, opt_stddev_over_mean)
+		print '> indiv times                opt:    %s' % ['%.3f' % t for t in opt_part2_cputimes]
+		print '> CPU time, avg over %d runs, noopt:  %.3f seconds.  (std. dev / mean: %.2f)' % (n, noopt_mean, noopt_stddev_over_mean)
+		print '> indiv times                noopt:  %s' % ['%.3f' % t for t in noopt_part2_cputimes]
 		print '> Ratio: %.2f' % (opt_mean/noopt_mean)
 else:
 	run_cmd(False, False, False)
@@ -95,13 +95,13 @@ else:
 		part1_cputime = run_cmd(True, True, False)
 		part2_cputime = full_cputime - part1_cputime
 		part2_cputimes.append(part2_cputime)
-		print '> run #%d (of %d) time %.1f' % (i, n, part2_cputime)
+		print '> run #%d (of %d) time %.3f' % (i, n, part2_cputime)
 
 	if n == 1:
-		print '> CPU time: %.1f' % (part2_cputimes[0])
+		print '> CPU time: %.3f' % (part2_cputimes[0])
 	else:
 		stddev_over_mean = numpy.std(numpy.array(part2_cputimes))/numpy.mean(numpy.array(part2_cputimes))
-		print '> CPU time (averaged over %d runs): %.1f seconds.  (std. dev / mean: %.5f)' % (n, average(part2_cputimes), stddev_over_mean)
-		print '> indiv times                     :  %s' % ['%.1f' % t for t in part2_cputimes]
+		print '> CPU time (averaged over %d runs): %.3f seconds.  (std. dev / mean: %.5f)' % (n, average(part2_cputimes), stddev_over_mean)
+		print '> indiv times                     :  %s' % ['%.3f' % t for t in part2_cputimes]
 
 
