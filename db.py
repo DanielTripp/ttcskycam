@@ -44,6 +44,8 @@ PREDICTION_COLS = ' fudgeroute, configroute, stoptag, time_retrieved, time_of_pr
 
 DISABLE_GRAPH_PATHS = False
 
+INTERP_USE_PATCHCACHE = c.USE_PATCHCACHES
+
 g_conn = None
 g_forced_hostmoniker = None
 g_lock = threading.RLock()
@@ -325,7 +327,7 @@ def get_vid_to_vis_bothdirs_raw(froute_, time_window_, log_=False):
 def log_get_vid_to_vis_bothdirs_raw(froute_, time_window_, r_):
 	printerr('Raw vis for froute=%s, %s' % (froute_, time_window_))
 	for vid, vis in iteritemssorted(r_):
-		printerr('vid=%s' % vid)
+		printerr('raw vis for vid %s:' % vid)
 		for vi in vis:
 			printerr(vi)
 
@@ -397,7 +399,9 @@ def remove_time_duplicates(vis_):
 def fix_dirtags(vis_, froute_, time_window_, log_=False):
 	assert vis_ and vinfo.same_vid(vis_) and is_sorted(vis_, key=lambda vi: vi.time)
 	D = 50
-	if log_: printerr('dir=? %s' % vis_[0])
+	if log_:
+		printerr('Fixing dirtags for vid %s' % vis_[0].vehicle_id)
+		printerr('dir=? %s' % vis_[0])
 	for curi in xrange(1, len(vis_)):
 		for olderi in xrange(curi-1, -1, -1):
 			widemofr_diff = vis_[curi].widemofr - vis_[olderi].widemofr
@@ -577,7 +581,7 @@ def query1(whereclause_, maxrows_, interp_):
 			vid_to_interptime_to_vi[vid] = interp(sorted(raw_vis, key=lambda vi: vi.time), False, False)
 		times = set(sum((interptime_to_vi.keys() for interptime_to_vi in vid_to_interptime_to_vi.itervalues()), []))
 		starttime = min(times); endtime = max(times)
-		all_vis = get_locations_clientside_list(vid_to_interptime_to_vi, starttime, endtime)
+		all_vis = get_locations_clientside_list(vid_to_interptime_to_vi, TimeWindow(starttime, endtime))
 	else:
 		all_vis = group_by_time(all_vis)
 	return all_vis
@@ -591,7 +595,8 @@ def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, datazoom
 	assert (fudgeroute_ in routes.NON_SUBWAY_FUDGEROUTES) and type(num_minutes_) == int and datazoom_ in c.VALID_DATAZOOMS 
 	direction = massage_direction(direction_, fudgeroute_)
 	vid_to_vis = get_vid_to_vis_bothdirs(fudgeroute_, num_minutes_, time_window_end_, log_=log_)
-	starttime = time_window_end_ - num_minutes_*60*1000
+	time_window_start = time_window_end_ - num_minutes_*60*1000
+	time_window = TimeWindow(time_window_start, time_window_end_)
 	vid_to_interptime_to_vi = {}
 	for vid, vis in iteritemssorted(vid_to_vis):
 		if log_:
@@ -600,8 +605,8 @@ def get_recent_vehicle_locations(fudgeroute_, num_minutes_, direction_, datazoom
 			for vi in vis:
 				printerr('\t%s' % vi)
 		vid_to_interptime_to_vi[vid] = \
-				interp(vis, True, True, direction, datazoom_, starttime, time_window_end_, log_=log_)
-	return get_locations_clientside_list(vid_to_interptime_to_vi, starttime, time_window_end_, log_=log_)
+				interp(vis, True, True, direction, datazoom_, time_window, log_=log_)
+	return get_locations_clientside_list(vid_to_interptime_to_vi, time_window, log_=log_)
 
 def massage_direction(direction_, fudgeroute_):
 	assert direction_ in (0, 1) or (len(direction_) == 2 and all(isinstance(e, geom.LatLng) for e in direction_))
@@ -713,6 +718,9 @@ def group_by_time(vilist_):
 		r[time_idx].append(vi)
 	return r
 
+g_interp_patchcache_vid_to_infos = defaultdict(list)
+g_interp_patchcache_prune_counter = 0
+
 # note [1]: This is for the scenario of eg. this function is meant to get 
 # dir=1, and we're looking at a vehicle for which raw vis exist
 # at mofr=0 @ 12:00, mofr=1000 @ 12:15, and mofr=1100 @ 12:16.  The vehicle was 
@@ -729,32 +737,101 @@ def group_by_time(vilist_):
 # vehicles going both directions on a route is visual chaos and
 # makes it a lot harder to make sense of the dir=1 vehicles that they do want 
 # to see.
-def interp(vis_, be_clever_, current_conditions_, dir_=None, datazoom_=None, start_time_=None, end_time_=None, log_=False):
+def interp(vis_, be_clever_, current_conditions_, dir_=None, datazoom_=None, time_window_=None, log_=False):
 	assert isinstance(vis_, Sequence) and vinfo.same_vid(vis_)
 	if len(vis_) == 0:
 		return []
-	starttime = (round_up_by_minute(start_time_) if start_time_ is not None else round_down_by_minute(min(vi.time for vi in vis_)))
-	endtime = (round_up_by_minute(end_time_) if end_time_ is not None else max(vi.time for vi in vis_))
-	interptimes = list(lrange(starttime, endtime+1, 60*1000))
-	interptime_to_vi = dict((interptime, None) for interptime in interptimes)
 	vid = vis_[0].vehicle_id
+	old_info, num_old_vis_lost = get_interp_info_from_patchcache(vis_, be_clever_, current_conditions_, dir_, datazoom_, time_window_)
+	starttime = (round_up_by_minute(time_window_.start) if time_window_ else round_down_by_minute(min(vi.time for vi in vis_)))
+	endtime = (round_up_by_minute(time_window_.end) if time_window_ else max(vi.time for vi in vis_))
+	interptimes = list(lrange(starttime, endtime+1, 60*1000))
+	grades, paths = get_grade_stretch_info(vis_, be_clever_, log_)
+	if old_info is None:
+		interptime_to_vi = dict((interptime, None) for interptime in interptimes)
+		important_vi_idxes = None
+		if log_: printerr('Not using patch-cache for interp of vid %s' % vid)
+	else:
+		interptime_to_vi = old_info.r_interptime_to_vi.copy()
+		for interptime in interptime_to_vi.keys():
+			if interptime not in interptimes:
+				del interptime_to_vi[interptime]
+
+		important_vi_idxes = set()
+		for new_idx in xrange(len(vis_)):
+			old_idx = new_idx + num_old_vis_lost
+			if new_idx < 2 or old_idx >= len(old_info.vis)-2 or old_info.grades[old_idx] != grades[new_idx] \
+					or old_info.paths[old_idx] != paths[new_idx]:
+				important_vi_idxes.add(new_idx)
+
+		if log_:
+			printerr('Using patch-cache for interp of vid %s' % vid)
+			printerr('old vis:')
+			for i, vi in enumerate(old_info.vis):
+				printerr('[%2d] %s' % (i, vi))
+			printerr('new vis:')
+			for i, vi in enumerate(vis_):
+				printerr('[%2d] %s' % (i, vi))
+			printerr('Important indexes in new vis: %s' % sorted(important_vi_idxes))
+
 	if log_: printerr('Interpolating locations for vid %s...' % vid)
 	assert is_sorted(vis_, key=lambda vi: vi.time)
-	grades, paths = get_grade_stretch_info(vis_, be_clever_, log_)
-	for interptime in interptimes:
+	interp_impl(interptime_to_vi, interptimes, important_vi_idxes, vis_, grades, paths, 
+			be_clever_, current_conditions_, dir_, datazoom_, log_)
+	if log_: printerr('Finished interpolating locations for vid %s.' % vid)
+	prune_interp_patchcache(time_window_)
+	if interp_should_use_patchcache(be_clever_, current_conditions_, dir_, datazoom_, time_window_):
+		g_interp_patchcache_vid_to_infos[vid].append(
+				(InterpInfo(vis_, time_window_, dir_, datazoom_, grades, paths, interptime_to_vi)))
+	return interptime_to_vi
+
+def prune_interp_patchcache(time_window_):
+	global g_interp_patchcache_prune_counter
+	g_interp_patchcache_prune_counter += 1
+	if g_interp_patchcache_prune_counter > 200:
+		g_interp_patchcache_prune_counter = 0
+		vids_to_remove = []
+		for vid, infos in g_interp_patchcache_vid_to_infos.iteritems():
+			info_idxes_to_remove = []
+			for idx, info in enumerate(infos):
+				if info.time_window.end <= time_window_.end - 1000*60*20:
+					info_idxes_to_remove.append(idx)
+			for idx in info_idxes_to_remove[::-1]:
+				infos.remove(idx)
+			if not infos:
+				vids_to_remove.append(vid)
+		for vid in vids_to_remove:
+			del g_interp_patchcache_vid_to_info[vid]
+
+# important_vi_idxes_ None means they're all important.   Non-None means we're patching. 
+def interp_impl(r_interptime_to_vi_, interptimes_, important_vi_idxes_, vis_, grades_, paths_, 
+		be_clever_, current_conditions_, dir_, datazoom_, log_):
+	if important_vi_idxes_ is not None:
+		assert isinstance(important_vi_idxes_, set)
+		assert -1 not in important_vi_idxes_
+		assert all(idx in range(len(vis_)) for idx in important_vi_idxes_)
+	vid = vis_[0].vehicle_id
+	for interptime in interptimes_:
 		lolo_vi, lo_vi, hi_vi, lolo_idx, lo_idx, hi_idx = get_nearest_time_vis(vis_, interptime)
+		if important_vi_idxes_ is not None:
+			if not any(idx in important_vi_idxes_ for idx in (lolo_idx, lo_idx, hi_idx)):
+				continue
+			elif interptime in r_interptime_to_vi_:
+				del r_interptime_to_vi_[interptime]
 		i_vi = None
+		time_ratio = 0.0
 		if lo_vi and hi_vi:
 			if be_clever_ and ((min(interptime - lo_vi.time, hi_vi.time - interptime) > 3*60*1000) or dirs_disagree(dir_, hi_vi.dir_tag_int)\
 					or dirs_disagree(lo_vi.dir_tag_int, dir_) or (lo_vi.fudgeroute != hi_vi.fudgeroute)):
 				continue
 			time_ratio = (interptime - lo_vi.time)/float(hi_vi.time - lo_vi.time)
-			lo_grade = grades[lo_idx]; hi_grade = grades[hi_idx]
+			lo_grade = grades_[lo_idx]; hi_grade = grades_[hi_idx]
 			if (lo_grade, hi_grade) in (('g', 'g'), ('g', 'r'), ('r', 'g')):
-				i_latlon, i_heading, i_mofr = interp_with_path_latlonnheadingnmofr(
-						lo_vi, hi_vi, time_ratio, lo_idx, hi_idx, vis_, grades, paths, log_)
+				i_latlon, i_heading, i_mofr = path_interp_single_latlonnheadingnmofr(
+						lo_vi, hi_vi, time_ratio, lo_idx, hi_idx, grades_, paths_, log_)
 			else:
-				i_latlon, i_heading, i_mofr = interp_latlonnheadingnmofr(lo_vi, hi_vi, time_ratio, datazoom_, be_clever_)
+				i_latlon, i_heading, i_mofr = \
+						nonpath_interp_single_latlonnheadingnmofr(lo_vi, hi_vi, time_ratio, datazoom_, be_clever_, log_)
 			i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, i_heading, vid, i_latlon.lat, i_latlon.lng,
 									 lo_vi.predictable and hi_vi.predictable,
 									 lo_vi.fudgeroute, lo_vi.route_tag, 0, interptime, interptime, i_mofr, None, 
@@ -763,35 +840,88 @@ def interp(vis_, be_clever_, current_conditions_, dir_=None, datazoom_=None, sta
 			if current_conditions_:
 				if be_clever_ and ((interptime - lo_vi.time > 3*60*1000) or dirs_disagree(dir_, lo_vi.dir_tag_int)):
 					continue
-				if grades[lo_idx] == 'g':
-					latlng, heading = paths[lo_idx].get_piece(-1).mapl_to_latlngnheading('max')
+				if grades_[lo_idx] == 'g':
+					latlng, heading = paths_[lo_idx].get_piece(-1).mapl_to_latlngnheading('max')
 				else:
-					latlng, heading = get_latlonnheadingnmofr_from_lo_sample(lolo_vi, lo_vi, datazoom_, be_clever_)[:2]
+					latlng, heading = get_latlonnheadingnmofr_from_lo_sample(lolo_vi, lo_vi, datazoom_, be_clever_, log_)[:2]
 				i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, heading, vid, latlng.lat, latlng.lng,
 						lo_vi.predictable, lo_vi.fudgeroute, lo_vi.route_tag, 0, interptime, interptime, lo_vi.mofr, lo_vi.widemofr, 
 						None, None)
 
 		if i_vi:
-			interptime_to_vi[interptime] = i_vi
+			r_interptime_to_vi_[interptime] = i_vi
 			if log_:
-				printerr('vid %s, interpolation result for %s' % (vid, em_to_str_hms(interptime)))
+				printerr('vid %s, interpolation result for %s %s' % 
+						(vid, em_to_str_hms(interptime), ('(time ratio: %.2f)' % time_ratio if time_ratio else '')))
 				printerr('\tlo: %s' % lo_vi)
 				if hi_vi:
 					printerr('\thi: %s' % hi_vi)
 				printerr('\t==> %s' % i_vi)
-	if log_: printerr('Finished interpolating locations for vid %s.' % vid)
 
-	return interptime_to_vi
+def get_interp_info_from_patchcache(vis_, be_clever_, current_conditions_, dir_, datazoom_, time_window_):
+	r = (None, None)
+	should_use_patchcache = interp_should_use_patchcache(be_clever_, current_conditions_, dir_, datazoom_, time_window_)
+	vid = vis_[0].vehicle_id
+	if should_use_patchcache:
+		if vid in g_interp_patchcache_vid_to_infos:
+			infos = g_interp_patchcache_vid_to_infos[vid]
+			info = max2((info for info in infos if info.args_match(dir_, datazoom_)), key=lambda info: info.time_window.end)
+			if info is not None and info.time_window.span == time_window_.span \
+						and time_window_.end - 1000*60*20 < info.time_window.end < time_window_.end:
+				earliest_new_vi_in_old_vis_idx = is_there_a_useful_vi_subseq_for_interp_patchcache(info.vis, vis_)
+				if earliest_new_vi_in_old_vis_idx != -1:
+					r = (info, earliest_new_vi_in_old_vis_idx)
+	return r
 
-def interp_with_path_latlonnheadingnmofr(lo_vi_, hi_vi_, time_ratio_, lo_idx_, hi_idx_, vis_, grades_, paths_, log_):
+def is_there_a_useful_vi_subseq_for_interp_patchcache(old_vis_, new_vis_):
+	for vis in (old_vis_, new_vis_):
+		assert vis
+		assert is_sorted(vis, key=lambda vi: vi.time)
+		assert len(set(vi.time for vi in vis)) == len(vis)
+	r = -1
+	timekeyfunc = lambda vi: vi.time
+	earliest_new_vi_time = new_vis_[0].time
+	earliest_new_vi_in_old_vis_idx = find(old_vis_, earliest_new_vi_time, timekeyfunc)
+	if earliest_new_vi_in_old_vis_idx != -1:
+		old_vis_subseq = old_vis_[earliest_new_vi_in_old_vis_idx:]
+		if len(old_vis_subseq) > 5: # arbitrary 
+			new_vis_subseq = new_vis_[:len(old_vis_subseq)]
+			if are_lists_equal(old_vis_subseq, new_vis_subseq, vinfo.VehicleInfo.fast_partial_eq):
+				r = earliest_new_vi_in_old_vis_idx
+	return r
+
+def interp_should_use_patchcache(be_clever_, current_conditions_, dir_, datazoom_, time_window_):
+	return INTERP_USE_PATCHCACHE and be_clever_ and current_conditions_ and dir_ is not None \
+			and datazoom_ is not None and time_window_ is not None
+
+class InterpInfo(object):
+
+	def __init__(self, vis_, time_window_, dir_, datazoom_, grades_, paths_, interptime_to_vi_):
+		self.time_window = time_window_
+		self.direction = dir_
+		self.datazoom = datazoom_
+		assert len(vis_) == len(grades_)
+		self.vis = vis_ # these are the source vis, from the database. 
+		self.grades = grades_
+		self.paths = paths_
+		self.r_interptime_to_vi = interptime_to_vi_ # these are the generated, interpolated vis.
+
+	def args_match(self, dir_, datazoom_):
+		return (self.direction == dir_ and self.datazoom == datazoom_)
+
+	def latest_vi_dir(self):
+		return self.src_vi_time_to_dir[max(self.src_vi_time_to_dir.iterkeys())]
+
+def path_interp_single_latlonnheadingnmofr(lo_vi_, hi_vi_, time_ratio_, lo_idx_, hi_idx_, grades_, paths_, log_):
 	assert lo_vi_.vehicle_id == hi_vi_.vehicle_id
 	lo_grade = grades_[lo_idx_]
 	path = paths_[lo_idx_ if lo_grade == 'g' else hi_idx_]
-	pieceidx = get_piece_idx(vis_, lo_idx_, grades_)
+	pieceidx = get_piece_idx(lo_idx_, grades_)
 	i_latlng, i_heading = get_latlngnheading_from_path(path, pieceidx, time_ratio_)
 	i_mofr = None
 	if log_:
-		printerr('vid %s path interpolation between [%s,%s]:' % (lo_vi_.vehicle_id, lo_vi_.latlng, hi_vi_.latlng))
+		printerr('vid %s path interpolation between %s and %s /\n%s and %s:' % \
+				(lo_vi_.vehicle_id, lo_vi_.latlng, hi_vi_.latlng, lo_vi_.timestr, hi_vi_.timestr))
 		printerr('\ttime_ratio=%.2f, pieceidx=%d' % (time_ratio_, pieceidx))
 		printerr('\tpiece=%s' % path.latlngs(pieceidx))
 		printerr('\tresult=%s' % i_latlng)
@@ -802,7 +932,7 @@ def get_latlngnheading_from_path(path_, pieceidx_, time_ratio_):
 	mapl = piece.length_m() * time_ratio_
 	return piece.mapl_to_latlngnheading(mapl)
 
-def get_piece_idx(vis_, lo_idx_, grades_):
+def get_piece_idx(lo_idx_, grades_):
 	r = -1
 	for i in range(lo_idx_, -1, -1):
 		r += 1
@@ -838,7 +968,7 @@ def get_grade_stretch_info_impl(vis_, be_clever_, vid_, latlngs_, log_):
 	if not be_clever_:
 		return (['o']*n, [None]*n)
 
-	if log_: printerr('Calculating grades for vid %s:' % vis_[0].vehicle_id)
+	if log_: printerr('Calculating grades for vid %s...' % vis_[0].vehicle_id)
 
 	offroute = [vi.mofr == -1 for vi in vis_]
 
@@ -936,21 +1066,22 @@ def get_grade_stretch_info_impl(vis_, be_clever_, vid_, latlngs_, log_):
 				locses.append(vi.graph_locs)
 				path_vis.append(vi)
 			if log_:
-				printerr('latlngs / locses for stretch %d:' % stretchi)
+				printerr('vid %s - latlngs / locses for stretch %d:' % (vid_, stretchi))
 				for i, (latlng, locs) in enumerate(zip(latlngs, locses)): 
 					printerr('[%3d] %s, %s' % (i, latlng, locs))
 			path = sg.find_multipath(latlngs, path_vis, locses, log_)
 			assert path is not None
 			if log_:
-				printerr('Path for stretch %d:' % stretchi)
+				first_vi = vis_[stretch[0]]; last_vi = vis_[stretch[-1]]
+				printerr('vid %s - path for stretch %d (%s to %s):' % (vid_, stretchi, first_vi.timestr, last_vi.timestr))
 				for piecei, piecesteps in enumerate(path.piecestepses):
 					printerr('piece %d: %s' % (piecei, piecesteps))
-				printerr('path for stretch %d, all latlngs: %s' % (stretchi, path.latlngs()))
+				printerr('vid %s - path for stretch %d, all latlngs: %s' % (vid_, stretchi, path.latlngs()))
 			for i in stretch:
 				paths[i] = path
 
 	if log_:
-		printerr('Grades for vid %s:' % vis_[0].vehicle_id)
+		printerr('vid %s - final grades:' % vid_)
 		for i, vi in enumerate(vis_):
 			printerr('\t%s / %s: %s' % (vi.timestr, vi.latlng, grades[i]))
 
@@ -961,19 +1092,19 @@ def dirs_disagree(dir1_, dir2_):
 	return (dir1_ == 0 and dir2_ == 1) or (dir1_ == 1 and dir2_ == 0)
 
 # To do it this way may seem odd but we get the latest of these things by interpolating between the second-last (lolo) and 
-# the last (lo) with a ratio of 1.0, because that extrapolation code (interp_latlonnheadingnmofr()) has some nice code that does 
+# the last (lo) with a ratio of 1.0, because that extrapolation code (nonpath_interp_single_latlonnheadingnmofr()) has some nice code that does 
 # snap-by-mofr or snap-to-tracks, which I don't feel like copying and pasting and stripping down for the ratio = 1.0 case. 
 
 # lolo_vi_ may seem unnecessary here because of the ratio of 1.0, but it is used to find the heading 
 # if tracks are being used - will be a choice between X and X + 180.  If we have only one sample (lo_vi_) then common sense 
 # says that there's no way that we can figure out that heading.  
-def get_latlonnheadingnmofr_from_lo_sample(lolo_vi_, lo_vi_, datazoom_, be_clever_):
+def get_latlonnheadingnmofr_from_lo_sample(lolo_vi_, lo_vi_, datazoom_, be_clever_, log_):
 	assert lo_vi_ is not None
 	if lolo_vi_ is not None:
-		return interp_latlonnheadingnmofr(lolo_vi_, lo_vi_, 1.0, datazoom_, be_clever_)
+		return nonpath_interp_single_latlonnheadingnmofr(lolo_vi_, lo_vi_, 1.0, datazoom_, be_clever_, log_)
 	else:
 		# We would do something like this:
-		#return interp_latlonnheadingnmofr(lo_vi_, lo_vi_, 1.0, datazoom_, be_clever_)
+		#return nonpath_interp_single_latlonnheadingnmofr(lo_vi_, lo_vi_, 1.0, datazoom_, be_clever_, log_)
 		# ... but I don't think we'll ever encounter this scenario, because we only want to return vehicle locations
 		# if we have about 5 or 6 raw samples for that vid, right?
 		# If we hit this case, that means that we have one sample.
@@ -991,7 +1122,7 @@ def get_latlonnheadingnmofr_from_lo_sample(lolo_vi_, lo_vi_, datazoom_, be_cleve
 # much and more importantly - nobody is looking at this interpolated mofr - neither human nor code.  
 # So even though None would be more honest, I'm setting it to -1 for a slight performance increase (about 5% of a full 
 # reports generation run, as it stands now).
-def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, datazoom_, be_clever_):
+def nonpath_interp_single_latlonnheadingnmofr(vi1_, vi2_, time_ratio_, datazoom_, be_clever_, log_):
 	assert isinstance(vi1_, vinfo.VehicleInfo) and isinstance(vi2_, vinfo.VehicleInfo) and (vi1_.vehicle_id == vi2_.vehicle_id)
 	assert vi1_.time < vi2_.time and (datazoom_ is None or datazoom_ in c.VALID_DATAZOOMS)
 	r = None
@@ -1001,7 +1132,7 @@ def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, datazoom_, be_clever_):
 		assert (vi1_.dir_tag_int == vi2_.dir_tag_int)
 		froute = vi1_.fudgeroute
 		if vi1_.mofr!=-1 and vi2_.mofr!=-1:
-			interp_mofr = geom.avg(vi1_.mofr, vi2_.mofr, ratio_)
+			interp_mofr = geom.avg(vi1_.mofr, vi2_.mofr, time_ratio_)
 			dir_tag_int = vi2_.dir_tag_int
 			if dir_tag_int == None:
 				raise Exception('Could not determine dir_tag_int of %s' % (str(vi2_)))
@@ -1014,11 +1145,18 @@ def interp_latlonnheadingnmofr(vi1_, vi2_, ratio_, datazoom_, be_clever_):
 				vi1_latlng = routes.mofr_to_latlon(vi1_.fudgeroute, vi1_.mofr, vi1_.dir_tag_int, datazoom_)
 			if vi2_.mofr!=-1:
 				vi2_latlng = routes.mofr_to_latlon(vi2_.fudgeroute, vi2_.mofr, vi2_.dir_tag_int, datazoom_)
-		r = (vi1_latlng.avg(vi2_latlng, ratio_), vi1_latlng.heading(vi2_latlng), -1) # see note 23906728947234 
+		r = (vi1_latlng.avg(vi2_latlng, time_ratio_), vi1_latlng.heading(vi2_latlng), -1) # see note 23906728947234 
+
+	if log_:
+		printerr('vid %s non-path interpolation between %s and %s /\n%s and %s:' % \
+				(vi1_.vehicle_id, vi1_.latlng, vi2_.latlng, vi1_.timestr, vi2_.timestr))
+		printerr('\ttime_ratio=%.2f' % time_ratio_)
+		printerr('\tresult=%s' % r[0])
+
 	return r
 
-def get_locations_clientside_list(vid_to_interptime_to_vi_, starttime_, endtime_, log_=False):
-	time_to_vis = {time: [] for time in lrange(starttime_, endtime_+1, 60*1000)}
+def get_locations_clientside_list(vid_to_interptime_to_vi_, time_window_, log_=False):
+	time_to_vis = {time: [] for time in lrange(time_window_.start, time_window_.end+1, 60*1000)}
 	for interptime_to_vi in vid_to_interptime_to_vi_.itervalues():
 		for interptime, vi in interptime_to_vi.iteritems():
 			if vi is not None:

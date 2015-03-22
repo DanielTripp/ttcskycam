@@ -663,7 +663,7 @@ def latlon_to_mofr(route_, latlon_, tolerance_=0):
 def latlon_to_mofrndist(route_, latlon_, tolerance_=0):
 	assert isinstance(latlon_, geom.LatLng)
 	if route_ not in CONFIGROUTES and route_ not in FUDGEROUTES:
-		return -1
+		return (-1, 0.0)
 	else:
 		return routeinfo(route_).latlon_to_mofrndist(latlon_, tolerance_)
 

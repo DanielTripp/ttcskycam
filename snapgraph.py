@@ -275,6 +275,19 @@ class Path(object):
 			return False
 		return True
 
+	def __eq__(self, other_):
+		if self is other_:
+			return True
+		elif type(self) != type(other_):
+			return False
+		elif self.snapgraph is not other_.snapgraph:
+			return False
+		else:
+			return self.piecestepses == other_.piecestepses
+
+	def __ne__(self, other_):
+		return not self.__eq__(other_)
+
 	def latlngs(self, pieceidx_=None):
 		allsteps = (sum(self.piecestepses, []) if pieceidx_ is None else self.piecestepses[pieceidx_])
 		assert len(allsteps) > 0

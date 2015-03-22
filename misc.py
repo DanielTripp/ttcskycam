@@ -1016,6 +1016,22 @@ def find_subseq(subseq_, seq_):
 			return i
 	return -1
 
+def find(seq_, val_, key_):
+	for i, e in enumerate(seq_):
+		if key_(e) == val_:
+			return i
+	else:
+		return -1
+
+def are_lists_equal(list1_, list2_, eq_func_):
+	if len(list1_) != len(list2_):
+		return False
+	else:
+		for e1, e2 in zip(list1_, list2_):
+			if not eq_func_(e1, e2):
+				return False
+		return True
+
 # This is limited.  For example, it won't handle item deletions in the source list unless they're in the 
 # viewed part of the list.
 # Thanks to http://stackoverflow.com/a/3485490/321556
