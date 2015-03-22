@@ -246,6 +246,17 @@ class TimeWindow(object):
 		self.start = start_
 		self.end = end_
 
+	def __hash__(self):
+		return hash(self.start) + hash(self.end)
+
+	def __eq__(self, other_):
+		if self is other_:
+			return True
+		elif type(self) != type(other_):
+			return False
+		else:
+			return self.start == other_.start and self.end == other_.end
+
 	@property
 	def span(self):
 		return self.end - self.start
@@ -746,7 +757,7 @@ def interp(vis_, be_clever_, current_conditions_, dir_=None, datazoom_=None, tim
 	starttime = (round_up_by_minute(time_window_.start) if time_window_ else round_down_by_minute(min(vi.time for vi in vis_)))
 	endtime = (round_up_by_minute(time_window_.end) if time_window_ else max(vi.time for vi in vis_))
 	interptimes = list(lrange(starttime, endtime+1, 60*1000))
-	grades, paths = get_grade_stretch_info(vis_, be_clever_, log_)
+	grades, paths = get_grade_stretch_info(vis_, time_window_, be_clever_, log_)
 	if old_info is None:
 		interptime_to_vi = dict((interptime, None) for interptime in interptimes)
 		important_vi_idxes = None
@@ -797,11 +808,11 @@ def prune_interp_patchcache(time_window_):
 				if info.time_window.end <= time_window_.end - 1000*60*20:
 					info_idxes_to_remove.append(idx)
 			for idx in info_idxes_to_remove[::-1]:
-				infos.remove(idx)
+				del infos[idx]
 			if not infos:
 				vids_to_remove.append(vid)
 		for vid in vids_to_remove:
-			del g_interp_patchcache_vid_to_info[vid]
+			del g_interp_patchcache_vid_to_infos[vid]
 
 # important_vi_idxes_ None means they're all important.   Non-None means we're patching. 
 def interp_impl(r_interptime_to_vi_, interptimes_, important_vi_idxes_, vis_, grades_, paths_, 
@@ -943,23 +954,22 @@ def get_piece_idx(lo_idx_, grades_):
 			break
 	return r
 
-def get_grade_stretch_info(vis_, be_clever_, log_):
+def get_grade_stretch_info(vis_, time_window_, be_clever_, log_):
 	vid = vis_[0].vehicle_id
-	latlngs = tuple(vi.latlng for vi in vis_)
-	return get_grade_stretch_info_impl(tuple(vis_), be_clever_, vid, latlngs, log_)
+	return get_grade_stretch_info_impl(tuple(vis_), time_window_, vis_[0].time, vis_[-1].time, be_clever_, vid, log_)
 
 # returns (grades, paths): 
 #   Both lists have the same length as vis_, and their elements correspond to vis_. 
 # 	- grades: all elements are meaningful.  values are 'r', 'g', or 'o'.
 #		- paths: only indexes which have a value of 'g' in grades are not None. 
-@lru_cache(100, posargkeymask=(0,1,1,1,1))
+@lru_cache(100, posargkeymask=(0,1,1,1,1,1,1))
 # Re: lru_cache - It's important that this cache at least the maximum number of 
 # vehicles that will ever appear in the locations 
 # report for one route / one direction.  If this cache size is even 1 less than 
 # that, then every time around the loop over the datazooms in reports.py / 
 # make_all_reports_and_insert_into_db_once(), these will be forgotten, and 
 # performance will suffer badly. 
-def get_grade_stretch_info_impl(vis_, be_clever_, vid_, latlngs_, log_):
+def get_grade_stretch_info_impl(vis_, time_window_, t1_, t2_, be_clever_, vid_, log_):
 	assert vis_ and vinfo.same_vid(vis_)
 	assert is_sorted(vis_, key=lambda vi: vi.time)
 
