@@ -52,7 +52,8 @@ class VehicleInfo:
 		self.predictable = predictable_
 		self.fudgeroute = fudgeroute_
 		self.route_tag = route_tag_
-		self.secs_since_report = secs_since_report_
+		self.secs_since_report = max(secs_since_report_, 0) # -1 values are pretty common.  
+				# A few per day according to a brief survey in march 2015. 
 		self.time_retrieved = time_retrieved_
 		self.time = time_
 		self._mofr = mofr_
@@ -102,11 +103,33 @@ class VehicleInfo:
 				self.route_tag, self.secs_since_report, self.time_retrieved, self.time, self._mofr, self._widemofr, 
 				self.is_dir_tag_corrected, self.is_fudgeroute_corrected)
 
+	EQ_ATTRS = ['time_retrieved', 'dir_tag', 'latlng', 'vehicle_id', 'mofr', 'widemofr', 'fudgeroute',
+			'predictable', 'route_tag', 'time', 'heading', 'secs_since_report']
+
 	def __eq__(self, other_):
-		return (self is other_) or (isinstance(other_, VehicleInfo) and (self._key() == other_._key()))
+		if self is other_:
+			return True
+		elif type(self) is not type(other_):
+			return False
+		else:
+			for attr in self.__class__.EQ_ATTRS:
+				if getattr(self, attr) != getattr(other_, attr):
+					return False
+			return True
 
 	def __ne__(self, other_):
 		return not self.__eq__(other_)
+
+	FAST_PARTIAL_EQ_ATTRS = ['time', 'dir_tag', 'latlng', 'fudgeroute', 'route_tag']
+
+	def fast_partial_eq(self, other_):
+		if self is other_:
+			return True
+		else:
+			for attr in self.__class__.FAST_PARTIAL_EQ_ATTRS:
+				if getattr(self, attr) != getattr(other_, attr):
+					return False
+			return True
 
 	def calc_time(self):
 		self.time = self.time_retrieved - self.secs_since_report*1000
@@ -157,8 +180,9 @@ class VehicleInfo:
 				# and probably rewrite this function, to make sure that the values it returns are always the same length, 
 				# so that when I print out a list of them, every field lines up in the same columns. 
 		mofrs_are_ok = (self.mofr == self.widemofr) or (self.mofr == -1 and self.widemofr != -1)
-		return '%s  r=%-6s, vid=%s, dir: %s%-12s, (%.7f,%.7f), h=%3d, mofr=%5d%s%5d%s' \
-			% (self.timestr, routestr, self.vehicle_id, 
+		time_retrieved_str = (em_to_str_millis(self.time_retrieved)[-9:] if self.time_retrieved - self.time < 1000*60 else '!'*9)
+		return '%s (%s)  r=%-6s, vid=%s, dir: %s%-12s, (%.7f,%.7f), h=%3d, mofr=%5d%s%5d%s' \
+			% (self.timestr, time_retrieved_str, routestr, self.vehicle_id, 
 					('*' if self.is_dir_tag_corrected else ' '), self.dir_tag,
 			   self.latlng.lat, self.latlng.lng, self.heading, self.mofr, (' ' if mofrs_are_ok else ' '), self.widemofr,
 			   ('  ' if self.predictable else ' U'))
@@ -250,10 +274,10 @@ def is_a_streetcar(vid_):
 	return vid_.startswith('4') 
 
 def makevi1(**kwargs):
-	r = VehicleInfo('', -4, '9999', 43.0, -79.0, True, '', '', 0, 0L, 0L,
-		None, None, None, None)
+	r = VehicleInfo('', -4, '9999', 43.0, -79.0, True, 'king', '504', 0, 0L, 0L, None, None, None, None)
 	for key, val in kwargs.iteritems():
 		setattr(r, key, val)
+	r.calc_time()
 	return r
 
 def makevi(pos_, timestr_, *args_):
