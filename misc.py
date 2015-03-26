@@ -1164,6 +1164,29 @@ def updated(*args_):
 		r.update(d)
 	return r
 
+def minmax(seq_, key=None):
+	if key is None:
+		def keycmp(x__, y__):
+			return cmp(x__, y__)
+	else:
+		def keycmp(x__, y__):
+			return cmp(key(x__), key(y__))
+
+	got_elem = False
+	for e in seq_:
+		if not got_elem:
+			minimum = maximum = e
+		elif keycmp(e, minimum) < 0: 
+			minimum = e 
+		elif keycmp(e, maximum) > 0: 
+			maximum = e
+		got_elem = True
+
+	if not got_elem:
+		raise ValueError("Can't get min/max of an empty sequence.")
+
+	return (minimum, maximum)
+
 if __name__ == '__main__':
 
 	pass
