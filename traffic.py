@@ -172,10 +172,10 @@ def get_traffic_rawspeeds(fudgeroute_name_, dir_, datazoom_, time_, window_minut
 				continue
 			def mofr(vi__): return (vi__.widemofr if usewidemofr_ else vi__.mofr)
 			assert all(mofr(vi) != -1 for vi in vis)
-			mofrchunk_to_vis = get_mofrchunk_to_vis(vis, mofrstep)
+			chunked_vilist = ChunkedViList(vis, mofrstep, usewidemofr_)
 			for interp_mofr in mofrs_to_get:
 				if log_: printerr('\tFor mofr %d:' % (interp_mofr))
-				vi_lo, vi_hi = get_bounding_mofr_vis(interp_mofr, mofrstep, mofrchunk_to_vis, usewidemofr_)
+				vi_lo, vi_hi = get_bounding_mofr_vis(interp_mofr, mofrstep, chunked_vilist, usewidemofr_)
 				if vi_lo and vi_hi:
 					if log_: printerr('\t\tFound bounding vis at mofrs %d and %d (%s and %s).' % (mofr(vi_lo), mofr(vi_hi), vi_lo.timestr, vi_hi.timestr))
 					interp_ratio = (interp_mofr - mofr(vi_lo))/float(mofr(vi_hi) - mofr(vi_lo))
@@ -206,15 +206,6 @@ def get_traffic_rawspeeds(fudgeroute_name_, dir_, datazoom_, time_, window_minut
 #			hi_idx += 1
 #		else:
 #			hi_idx += 1
-
-def get_mofrchunk_to_vis(vis_, mofrstep_):
-	r = defaultdict(lambda: [])
-	for vi in vis_:
-		r[int(vi.widemofr)/mofrstep_].append(vi)
-	r = sorteddict(r)
-	if __debug__:
-		assert all(len(vis) > 0 for vis in r.values())
-	return r
 
 def get_stretches(vis_, dir_):
 	if len(vis_) == 0:
@@ -249,10 +240,6 @@ def get_observed_headway(froute_, stoptag_, time_, window_minutes_, usewidemofr_
 	else:
 		return None
 
-# arg mofrchunk_to_vis_: This might have (or we might put) a key of -1 in it, which might seem to represent 
-# mofr==-1, but it's not - the value for -1 is going to be an empty list, and the code is slightly cleaner 
-# if we use than rather than having a special case for -1 which amounts to the same thing.
-# 
 # [1] Here I am trying to implement the following judgement call:
 # It is better to show no traffic at all (white) than a misleading orange
 # that is derived from one or more vehicles that never traversed that stretch of road,
@@ -262,44 +249,73 @@ def get_observed_headway(froute_, stoptag_, time_, window_minutes_, usewidemofr_
 # between 13:05 and 13:35, and how this could result in vid 4087 single-handedly causing a
 # decent-looking traffic report for that stretch of road.  I would rather show white (or whatever
 # I'm showing to signify 'no traffic data' now) and thus encourage the user to look for the detour.
-def get_bounding_mofr_vis(mofr_, mofrstep_, mofrchunk_to_vis_, usewidemofr_):
-	assert isinstance(mofr_, int) and isinstance(mofrchunk_to_vis_, sorteddict) and isinstance(usewidemofr_, bool)
-	if __debug__:
-		all_vis = sum(mofrchunk_to_vis_.values(), [])
-		assert all(vi1.vehicle_id == vi2.vehicle_id for vi1, vi2 in hopscotch(all_vis))
-		assert all(vi1.fudgeroute == vi2.fudgeroute for vi1, vi2 in hopscotch(all_vis))
-
-	def mofr_time_key(vi__):
-		return ((vi__.widemofr if usewidemofr_ else vi__.mofr), vi__.time)
+def get_bounding_mofr_vis(mofr_, mofrstep_, chunked_vilist_, usewidemofr_):
+	assert isinstance(mofr_, int) and isinstance(chunked_vilist_, ChunkedViList) and isinstance(usewidemofr_, bool)
 
 	prev_mofrchunk = mofr_/mofrstep_ - 1
-	prev_chunk_vis = (mofrchunk_to_vis_[prev_mofrchunk] if prev_mofrchunk in mofrchunk_to_vis_ else [])
-	if len(prev_chunk_vis) > 0:
-		vi_lo = min(prev_chunk_vis, key=mofr_time_key)
-	else:
-		for mofrchunk in (x for x in xrange(mofr_/mofrstep_ - 2, mofrchunk_to_vis_.minkey()-1, -1) if x in mofrchunk_to_vis_):
-			vis_in_chunk = mofrchunk_to_vis_[mofrchunk]
-			if len(vis_in_chunk) > 0:
-				vi_lo = max(vis_in_chunk, key=mofr_time_key)
+	vi_lo = chunked_vilist_.get_min_vi(prev_mofrchunk)
+	if not vi_lo:
+		for mofrchunk in xrange(min(prev_mofrchunk-1,chunked_vilist_.max_mofrchunk), chunked_vilist_.min_mofrchunk-1, -1):
+			vi_lo = chunked_vilist_.get_max_vi(mofrchunk)
+			if vi_lo:
 				break
-		else:
-			vi_lo = None
 
-	for mofrchunk in (x for x in xrange(mofr_/mofrstep_, mofrchunk_to_vis_.maxkey()+1) if x in mofrchunk_to_vis_):
-		vis_in_chunk = mofrchunk_to_vis_[mofrchunk]
-		if len(vis_in_chunk) > 0:
-			vi_hi = min(vis_in_chunk, key=mofr_time_key)
+	vi_hi = None
+	for mofrchunk in xrange(max(mofr_/mofrstep_,chunked_vilist_.min_mofrchunk), chunked_vilist_.max_mofrchunk+1):
+		vi_hi = chunked_vilist_.get_min_vi(mofrchunk)
+		if vi_hi:
 			break
-	else:
-		vi_hi = None
 
 	if vi_lo and vi_hi:
-		assert mofr_time_key(vi_lo) < mofr_time_key(vi_hi)
+		assert chunked_vilist_.mofr_time_key(vi_lo) < chunked_vilist_.mofr_time_key(vi_hi)
 
 	if vi_lo and vi_hi and (abs(vi_hi.time - vi_lo.time) > 1000*60*8): # see [1] above.
 		return (None, None)
 	else:
 		return (vi_lo, vi_hi)
+
+class ChunkedViList(object):
+
+	def __init__(self, vis_, mofrstep_, usewidemofr_):
+		assert vis_
+		assert all(vi1.vehicle_id == vi2.vehicle_id for vi1, vi2 in hopscotch(vis_))
+		assert all(vi1.fudgeroute == vi2.fudgeroute for vi1, vi2 in hopscotch(vis_))
+
+		vis_by_mofrchunk = []
+		for vi in vis_:
+			mofrchunk = int(vi.widemofr)/mofrstep_
+			assert mofrchunk >= 0
+			while mofrchunk >= len(vis_by_mofrchunk):
+				vis_by_mofrchunk.append([])
+			vis_by_mofrchunk[mofrchunk].append(vi)
+		self.max_mofrchunk = len(vis_by_mofrchunk)-1
+		self.min_mofrchunk = 0
+		while len(vis_by_mofrchunk) > 0 and len(vis_by_mofrchunk[0]) == 0:
+			vis_by_mofrchunk.pop(0)
+			self.min_mofrchunk += 1
+
+		if usewidemofr_:
+			self.mofr_time_key = lambda vi__: (vi__.widemofr, vi__.time)
+		else:
+			self.mofr_time_key = lambda vi__: (vi__.mofr, vi__.time)
+
+		self.min_vi_by_mofrchunk = [None]*(self.max_mofrchunk - self.min_mofrchunk + 1)
+		self.max_vi_by_mofrchunk = [None]*(self.max_mofrchunk - self.min_mofrchunk + 1)
+		for mofrchunk, vis in enumerate(vis_by_mofrchunk):
+			if vis:
+				self.min_vi_by_mofrchunk[mofrchunk], self.max_vi_by_mofrchunk[mofrchunk] = minmax(vis, key=self.mofr_time_key)
+
+	def get_min_vi(self, mofrchunk_):
+		if self.min_mofrchunk <= mofrchunk_ <= self.max_mofrchunk:
+			return self.min_vi_by_mofrchunk[mofrchunk_ - self.min_mofrchunk]
+		else:
+			return None
+
+	def get_max_vi(self, mofrchunk_):
+		if self.min_mofrchunk <= mofrchunk_ <= self.max_mofrchunk:
+			return self.max_vi_by_mofrchunk[mofrchunk_ - self.min_mofrchunk]
+		else:
+			return None
 
 # return -1 if one or more parts of the route have no traffic data.
 # otherwise - return value is in seconds.
