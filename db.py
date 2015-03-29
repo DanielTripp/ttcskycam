@@ -238,44 +238,6 @@ def get_history_overshoot_start_time(end_time_, num_minutes_):
 	start_time = end_time_ - num_minutes_*60*1000
 	return start_time - (end_time_ - start_time)/2
 
-class TimeWindow(object):
-
-	def __init__(self, start_, end_):
-		assert (0 < start_ < end_) and (end_ - start_ < 1000*60*60*3) and (abs(now_em() - start_) < 1000*60*60*24*365*50)
-		#         ^^ important             ^^ not as important                 ^^ not as important  
-		self.start = start_
-		self.end = end_
-
-	def __hash__(self):
-		return hash(self.start) + hash(self.end)
-
-	def __eq__(self, other_):
-		if self is other_:
-			return True
-		elif type(self) != type(other_):
-			return False
-		else:
-			return self.start == other_.start and self.end == other_.end
-
-	@property
-	def span(self):
-		return self.end - self.start
-
-	def __str__(self):
-		return 'TimeWindow(%s, %s)' % (em_to_str_millis(self.start), em_to_str_millis(self.end))
-
-	def trim_vilist(self, vilist_):
-		assert all(isinstance(e, vinfo.VehicleInfo) for e in vilist_)
-		vilist_[:] = [vi for vi in vilist_ if self.start < vi.time_retrieved <= self.end]
-
-	def trimmed_vilist(self, vilist_):
-		vilist_copy = vilist_[:]
-		self.trim_vilist(vilist_copy)
-		return vilist_copy
-
-	def gt_trimmed_vilist(self, vilist_):
-		return [vi for vi in vilist_ if vi.time_retrieved > self.end]
-
 @lru_cache(10)
 def get_vid_to_vis_bothdirs(froute_, num_minutes_, end_time_, log_=False):
 	time_window = TimeWindow(get_history_overshoot_start_time(end_time_, num_minutes_), end_time_)
