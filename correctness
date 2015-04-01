@@ -38,7 +38,7 @@ def run_cmd(disable_opt_):
 
 opt_output_filename = run_cmd(False)
 printerr('Finished opt run.')
-if count_lines(opt_output_filename) < 100:
+if count_lines(opt_output_filename) < 200:
 	for i in xrange(10):
 		printerr('----------------- WARNING: not many lines in output -----------------')
 noopt_output_filename = run_cmd(True)
