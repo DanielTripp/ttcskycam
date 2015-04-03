@@ -166,6 +166,7 @@ def poll_once(routelist_, insert_into_db_, pollstate_filename_, xml_filename_, x
 			pool.close()
 			pool.join()
 
+@include_entire_traceback_for_multiproc
 def get_data_from_web_and_deal_with_it(route_, nextbus_lasttime_, insert_into_db_, xml_filename_, xml_headers_, vis_filename_):
 	data_xmldoc = get_data_from_web_as_xml(route_, nextbus_lasttime_, xml_filename_, xml_headers_)
 	r = deal_with_xml(data_xmldoc, insert_into_db_, vis_filename_)
