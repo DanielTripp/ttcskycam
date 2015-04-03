@@ -165,12 +165,16 @@ def make_all_reports_and_insert_into_db_forever():
 	routes.prime_routeinfos()
 	while True:
 		wait_for_locations_poll_to_finish()
+		redirect_stdstreams_to_file('reports_generation_')
 		t0 = time.time()
 		make_all_reports_and_insert_into_db_once(round_up_by_minute(now_em()), True)
 		t1 = time.time()
 		reports_took_secs = t1 - t0
+		printerr('%s,%d,%s' % (now_str(), reports_took_secs, c.VERSION))
 		if reports_took_secs > 60:
 			printerr('Reports took too long to generate - %s seconds.  (Finished at %s.)' % (int(reports_took_secs), now_str()))
+		sys.stdout.flush()
+		sys.stderr.flush()
 
 #	NUM_PROCS = multiprocessing.cpu_count()
 #	pools = [multiprocessing.Pool(1, multiproc.initializer) for i in range(NUM_PROCS)]

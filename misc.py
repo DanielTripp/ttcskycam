@@ -560,10 +560,12 @@ def get_opt(opts_, optname_):
 		return None
 
 def redirect_stdstreams_to_file(filename_prefix_):
-	file = os.path.expanduser('~/ttc-logs/%s%s.txt' % (filename_prefix_, datetime.datetime.now().strftime('%Y-%m-%d')))
-	if not os.path.exists(os.path.dirname(file)):
-		os.makedirs(os.path.dirname(file))
-	fout = open(file, 'a+')
+	filename = os.path.expanduser('~/ttc-logs/%s%s.txt' % (filename_prefix_, datetime.datetime.now().strftime('%Y-%m-%d')))
+	if not os.path.exists(os.path.dirname(filename)):
+		os.makedirs(os.path.dirname(filename))
+	fout = open(filename, 'a+')
+	sys.stdout.close()
+	sys.stderr.close()
 	sys.stdout = fout
 	sys.stderr = fout
 
