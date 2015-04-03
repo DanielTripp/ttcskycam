@@ -146,6 +146,7 @@ def make_all_reports_and_insert_into_db_once(report_time_, multiproc_):
 		for froute in FROUTES:
 			make_reports_and_insert_into_db_single_route(report_time_, froute)
 
+@include_entire_traceback_for_multiproc
 def make_reports_and_insert_into_db_single_route(report_time_, froute_):
 	for direction in (0, 1):
 		reporttype_to_datazoom_to_reportdataobj = defaultdict(lambda: {})
