@@ -8,8 +8,6 @@ from misc import *
 
 TIME_WINDOW_MINUTES = 30
 RAWSPEEDS_USE_PATCHCACHE = c.USE_PATCHCACHES
-#RAWSPEEDS_USE_PATCHCACHE = not cpu_prof_disable_opt() # tdr 
-RAWSPEEDS_USE_PATCHCACHE = False
 
 def get_recent_vehicle_locations(fudgeroute_, dir_, datazoom_, time_, last_returned_timestr_, log_=False):
 	assert (fudgeroute_ in routes.NON_SUBWAY_FUDGEROUTES)
@@ -132,6 +130,7 @@ def get_traffic_avgspeedsandweights(fudgeroute_name_, dir_, datazoom_, time_, cu
 			if log_: printerr('\tNo raw traffics.')
 			r[mofr] = None
 		else:
+			rawtraffics = [x.copy() for x in rawtraffics] # copying b/c it's cached.
 			for rawtraf in rawtraffics:
 				rawtraf['weight'] = (time_to_weight(rawtraf['time'], time_, window_minutes_) if current_ else 1.0)
 				if log_: printerr('\tInterpolated time %s (kmph=%.1f, vid=%s) ==> weight %.3f' \
@@ -169,38 +168,53 @@ def get_traffic_rawspeeds(froute_, dir_, datazoom_, time_, window_minutes_, usew
 				get_vid_to_vis_from_db_for_traffic(froute_, dir_, time_, window_minutes_, usewidemofr_=usewidemofr_, log_=log_).items():
 		vis_all_stretches = vis_all_stretches[::-1]
 		for vis in get_stretches(vis_all_stretches, dir_):
-			for mofr, rawtraffics in get_traffic_rawspeeds_single_stretch(froute_, dir_, vis[::-1], datazoom_, time_window, usewidemofr_, 
+			for mofr, rawtraffic in get_traffic_rawspeeds_single_stretch(froute_, dir_, vis[::-1], datazoom_, time_window, usewidemofr_, 
 						mofrs_to_get, log_).iteritems():
-				for rawtraffic in rawtraffics:
-					mofr_to_rawtraffics[mofr].append(rawtraffic)
+				mofr_to_rawtraffics[mofr].append(rawtraffic)
 	return (mofr_to_rawtraffics if singlemofr_ is None else mofr_to_rawtraffics.values()[0])
 
-g_froute_to_vid_to_rawspeedsinfo = defaultdict(lambda: defaultdict(list))
+g_froute_to_vid_to_rawspeedsinfos = defaultdict(lambda: defaultdict(list))
 
 def get_traffic_rawspeeds_single_stretch(froute_, dir_, vis_, datazoom_, time_window_, usewidemofr_, mofrs_to_get_, log_):
 	mofrstep = c.DATAZOOM_TO_MOFRSTEP[datazoom_]
 	vid = vis_[0].vehicle_id
 	if log_: printerr('For vid "%s":' % (vid))
 	if log_:
-		for vi in vis[::-1]:
+		for vi in vis_[::-1]:
 			printerr('\traw vinfo: %s' % (str(vi)))
-	mofr_to_rawtraffics = defaultdict(list)
+	mofr_to_rawtraffic = {}
 	if len(vis_) >= 2:
 		get_mofr = (lambda vi__: vi__.widemofr) if usewidemofr_ else (lambda vi__: vi__.mofr)
 		assert all(get_mofr(vi) != -1 for vi in vis_)
 
+		chunked_vilist = None
 		if RAWSPEEDS_USE_PATCHCACHE:
 			old_info, num_old_vis_lost = get_rawspeeds_info_from_patchcache(froute_, dir_, vis_, datazoom_, time_window_, 
 					usewidemofr_, mofrs_to_get_)
 			if old_info is not None:
-				#new_vis = 
-				for new_vi in new_vis:
-					chunked_vilist.add_vi(new_vi)
-
-		chunked_vilist = ChunkedViList(vis_, mofrstep, usewidemofr_)
-		for mofr in mofrs_to_get_:
-			if not cpu_prof_disable_opt() and not chunked_vilist.influences_traffic_at(mofr):
-				continue
+				mofr_to_rawtraffic = copy_mofr_to_rawtraffic(old_info.r_mofr_to_rawtraffic)
+				new_vis = vis_[len(old_info.vis)-num_old_vis_lost:]
+				lost_vis = old_info.vis[:num_old_vis_lost]
+				if not lost_vis and not new_vis:
+					return mofr_to_rawtraffic
+				chunked_vilist = old_info.chunked_vilist.copy()
+				influenced_traffic_mofrs = chunked_vilist.get_influenced_traffic_mofrs(new_vis)
+				influenced_mofrs = chunked_vilist.add_new_vis(new_vis)
+				chunked_vilist.remove_old_vis(lost_vis)
+				influenced_traffic_mofrs |= chunked_vilist.get_influenced_traffic_mofrs(lost_vis)
+				if log_:
+					printerr('\tLost vis:') 
+					for vi in lost_vis:
+						printerr('\t', vi)
+					printerr('\tNew vis:') 
+					for vi in new_vis:
+						printerr('\t', vi)
+					printerr('\tPatching traffic at mofrs %s' % (sorted(influenced_traffic_mofrs),))
+				real_mofrs_to_get = sorted(set(mofrs_to_get_) & influenced_traffic_mofrs)
+		if chunked_vilist is None:
+			chunked_vilist = ChunkedViList.create(vis_, mofrstep, usewidemofr_)
+			real_mofrs_to_get = (mofr for mofr in mofrs_to_get_ if chunked_vilist.influences_traffic_at(mofr))
+		for mofr in real_mofrs_to_get:
 			if log_: printerr('\tFor mofr %d:' % (mofr))
 			vi_lo, vi_hi = get_bounding_mofr_vis(mofr, mofrstep, chunked_vilist, usewidemofr_)
 			if vi_lo and vi_hi:
@@ -210,21 +224,49 @@ def get_traffic_rawspeeds_single_stretch(froute_, dir_, vis_, datazoom_, time_wi
 				speed_kmph = ((get_mofr(vi_hi) - get_mofr(vi_lo))/1000.0)/((vi_hi.time - vi_lo.time)/(1000.0*60*60))
 				if log_: printerr('\t\tSpeed: %.1f.  Interpolated time at this mofr: %s' % (speed_kmph, em_to_str_hms(interp_t)))
 				# TODO: fix buggy negative speeds a better way, maybe.
-				mofr_to_rawtraffics[mofr].append({'speed_kmph': speed_kmph, 'time':interp_t, 'vid': vid})
+				mofr_to_rawtraffic[mofr] = {'speed_kmph': speed_kmph, 'time':interp_t, 'vid': vid}
 			else:
 				if log_: printerr('\t\tNo bounding vis found for this mofr step / vid.')
+				mofr_to_rawtraffic.pop(mofr, None)
 		if RAWSPEEDS_USE_PATCHCACHE:
+			prune_rawspeeds_patchcache(time_window_)
 			if rawspeeds_should_use_patchcache(mofrs_to_get_):
-				g_froute_to_vid_to_rawspeedsinfo[froute_][vid].append(
-						RawSpeedsInfo(dir_, vis_, datazoom_, time_window_, usewidemofr_, mofrs_to_get_, chunked_vilist, mofr_to_rawtraffics))
-	return mofr_to_rawtraffics
+				g_froute_to_vid_to_rawspeedsinfos[froute_][vid].append(
+						RawSpeedsInfo(dir_, vis_, datazoom_, time_window_, usewidemofr_, mofrs_to_get_, chunked_vilist, mofr_to_rawtraffic))
+	return mofr_to_rawtraffic
+
+g_prune_rawspeeds_counter = 0
+
+def prune_rawspeeds_patchcache(time_window_):
+	global g_prune_rawspeeds_counter
+	g_prune_rawspeeds_counter += 1
+	if g_prune_rawspeeds_counter > 3000:
+		g_prune_rawspeeds_counter = 0
+		froutes_to_remove = []
+		for froute, vid_to_rawspeedsinfos in g_froute_to_vid_to_rawspeedsinfos.iteritems():
+			vids_to_remove = []
+			for vid, rawspeedsinfos in vid_to_rawspeedsinfos.iteritems():
+				idxes_to_remove = []
+				for idx, rawspeedsinfo in enumerate(rawspeedsinfos):
+					if rawspeedsinfo.time_window.end <= time_window_.end - 1000*60*20:
+						idxes_to_remove.append(idx)
+				for idx in idxes_to_remove[::-1]:
+					del rawspeedsinfos[idx]
+				if not rawspeedsinfos:
+					vids_to_remove.append(vid)
+			for vid in vids_to_remove:
+				del vid_to_rawspeedsinfos[vid]
+			if not vid_to_rawspeedsinfos:
+				froutes_to_remove.append(froute)
+		for froute in froutes_to_remove:
+			g_froute_to_vid_to_rawspeedsinfos[froute]
 
 def get_rawspeeds_info_from_patchcache(froute_, dir_, vis_, datazoom_, time_window_, usewidemofr_, mofrs_to_get_):
 	assert vinfo.same_vid(vis_)
 	r = (None, None)
 	if rawspeeds_should_use_patchcache(mofrs_to_get_):
 		vid = vis_[0].vehicle_id
-		infos = g_froute_to_vid_to_rawspeedsinfo[froute_][vid]
+		infos = g_froute_to_vid_to_rawspeedsinfos[froute_][vid]
 		info = max2((info for info in infos if info.args_match(dir_, datazoom_, usewidemofr_, mofrs_to_get_)), 
 				key=lambda info: info.time_window.end)
 		if info is not None and info.time_window.span == time_window_.span \
@@ -232,10 +274,6 @@ def get_rawspeeds_info_from_patchcache(froute_, dir_, vis_, datazoom_, time_wind
 			earliest_new_vi_in_old_vis_idx = is_there_a_useful_vi_subseq_for_rawspeeds_patchcache(info.vis, vis_)
 			if earliest_new_vi_in_old_vis_idx != -1:
 				r = (info, earliest_new_vi_in_old_vis_idx)
-				#print '%s got from cache:\n%s' % ((froute_, dir_, datazoom_, time_window_, usewidemofr_, len(mofrs_to_get_)), info) # tdr 
-	if 0: # tdr 
-		if r[0] is None:
-			print 'did not get from cache' 
 	return r
 
 def is_there_a_useful_vi_subseq_for_rawspeeds_patchcache(old_vis_, new_vis_):
@@ -253,13 +291,6 @@ def is_there_a_useful_vi_subseq_for_rawspeeds_patchcache(old_vis_, new_vis_):
 			new_vis_subseq = new_vis_[:len(old_vis_subseq)]
 			if are_lists_equal(old_vis_subseq, new_vis_subseq, vinfo.VehicleInfo.fast_partial_eq):
 				r = earliest_new_vi_in_old_vis_idx
-	if 0: # tdr 
-		if r == -1:
-			print 'denial:' 
-			print 'old vis:'
-			pprint.pprint(old_vis_)
-			print 'new vis:'
-			pprint.pprint(new_vis_)
 	return r
 
 def rawspeeds_should_use_patchcache(mofrs_to_get_):
@@ -267,7 +298,7 @@ def rawspeeds_should_use_patchcache(mofrs_to_get_):
 
 class RawSpeedsInfo(object):
 
-	def __init__(self, dir_, vis_, datazoom_, time_window_, usewidemofr_, mofrs_to_get_, chunked_vilist_, r_mofr_to_rawtraffics_):
+	def __init__(self, dir_, vis_, datazoom_, time_window_, usewidemofr_, mofrs_to_get_, chunked_vilist_, r_mofr_to_rawtraffic_):
 		self.direction = dir_
 		self.vis = vis_
 		self.datazoom = datazoom_
@@ -275,7 +306,7 @@ class RawSpeedsInfo(object):
 		self.usewidemofr = usewidemofr_
 		self.mofrs_to_get = mofrs_to_get_
 		self.chunked_vilist = chunked_vilist_
-		self.r_mofr_to_rawtraffics = r_mofr_to_rawtraffics_
+		self.r_mofr_to_rawtraffic = r_mofr_to_rawtraffic_
 
 	def args_match(self, dir_, datazoom_, usewidemofr_, mofrs_to_get_):
 		return self.direction == dir_ and self.datazoom == datazoom_ and self.usewidemofr == usewidemofr_ \
@@ -287,6 +318,12 @@ class RawSpeedsInfo(object):
 
 	def __repr__(self):
 		return self.__str__()
+
+def copy_mofr_to_rawtraffic(mofr_to_rawtraffic_):
+	r = {}
+	for mofr, rawtraffic in mofr_to_rawtraffic_.iteritems():
+		r[mofr] = rawtraffic.copy()
+	return r
 
 # This is almost a great way to get all the pertinent bounding vi pairs, 
 # except it doesn't handle correctly the case where there are multiple vis in chunk X, 
@@ -378,11 +415,7 @@ def get_bounding_mofr_vis(mofr_, mofrstep_, chunked_vilist_, usewidemofr_):
 
 class ChunkedViList(object):
 
-	def __init__(self, vis_, mofrstep_, usewidemofr_):
-		assert vis_
-		assert all(vi1.vehicle_id == vi2.vehicle_id for vi1, vi2 in hopscotch(vis_))
-		assert all(vi1.fudgeroute == vi2.fudgeroute for vi1, vi2 in hopscotch(vis_))
-
+	def __init__(self, mofrstep_, usewidemofr_):
 		self.mofrstep = mofrstep_
 
 		self.usewidemofr = usewidemofr_
@@ -390,25 +423,45 @@ class ChunkedViList(object):
 			self.get_mofr = lambda vi__: vi__.widemofr
 		else:
 			self.get_mofr = lambda vi__: vi__.mofr
+
 		self.mofr_time_key = lambda vi__: (self.get_mofr(vi__), vi__.time)
 
-		self.vis_by_idx = []
-		for vi in vis_:
-			mofrchunk = self.get_mofrchunk(vi)
-			assert mofrchunk >= 0
-			while mofrchunk >= len(self.vis_by_idx):
-				self.vis_by_idx.append([])
-			self.vis_by_idx[mofrchunk].append(vi)
-		self.max_mofrchunk = len(self.vis_by_idx)-1
-		self.min_mofrchunk = 0
-		while len(self.vis_by_idx) > 0 and len(self.vis_by_idx[0]) == 0:
-			del self.vis_by_idx[0]
-			self.min_mofrchunk += 1
+	@classmethod
+	def create(cls_, vis_, mofrstep_, usewidemofr_):
+		assert vis_
+		assert all(vi1.vehicle_id == vi2.vehicle_id for vi1, vi2 in hopscotch(vis_))
+		assert all(vi1.fudgeroute == vi2.fudgeroute for vi1, vi2 in hopscotch(vis_))
 
-		self.min_vi_by_idx = [None]*(self.max_mofrchunk - self.min_mofrchunk + 1)
-		self.max_vi_by_idx = [None]*(self.max_mofrchunk - self.min_mofrchunk + 1)
-		for mofrchunk in self.mofrchunks():
-			self.calc_minmax(mofrchunk)
+		r = cls_(mofrstep_, usewidemofr_)
+
+		r.vis_by_idx = []
+		for vi in vis_:
+			mofrchunk = r.get_mofrchunk(vi)
+			assert mofrchunk >= 0
+			while mofrchunk >= len(r.vis_by_idx):
+				r.vis_by_idx.append([])
+			r.vis_by_idx[mofrchunk].append(vi)
+		r.max_mofrchunk = len(r.vis_by_idx)-1
+		r.min_mofrchunk = 0
+		while len(r.vis_by_idx) > 0 and len(r.vis_by_idx[0]) == 0:
+			del r.vis_by_idx[0]
+			r.min_mofrchunk += 1
+
+		r.min_vi_by_idx = [None]*(r.max_mofrchunk - r.min_mofrchunk + 1)
+		r.max_vi_by_idx = [None]*(r.max_mofrchunk - r.min_mofrchunk + 1)
+		for mofrchunk in r.mofrchunks():
+			r.calc_minmax(mofrchunk)
+
+		return r
+
+	def copy(self):
+		r = self.__class__(self.mofrstep, self.usewidemofr)
+		r.vis_by_idx = self.vis_by_idx[:]
+		r.min_mofrchunk = self.min_mofrchunk
+		r.max_mofrchunk = self.max_mofrchunk
+		r.min_vi_by_idx = self.min_vi_by_idx[:]
+		r.max_vi_by_idx = self.max_vi_by_idx[:]
+		return r
 
 	def influences_traffic_at(self, mofr_):
 		if mofr_ % self.mofrstep != 0:  
@@ -421,30 +474,84 @@ class ChunkedViList(object):
 		return xrange(self.min_mofrchunk, self.max_mofrchunk+1)
 
 	def calc_minmax(self, mofrchunk_):
-		idx = self._idx(mofrchunk_)
-		vis = self.vis_by_idx[idx]
+		vis = self.get_vis(mofrchunk_)
 		if vis:
 			min_vi, max_vi = minmax(vis, key=self.mofr_time_key)
 		else:
 			min_vi, max_vi = (None, None)
+		idx = self._idx(mofrchunk_)
 		self.min_vi_by_idx[idx], self.max_vi_by_idx[idx] = min_vi, max_vi
 
-	def add_vi(self, new_vi_):
-		new_vi_mofrchunk = self.get_mofrchunk(new_vi_)
-		while new_vi_mofrchunk < self.min_mofrchunk:
-			self.vis_by_idx.insert(0, [])
-			self.min_vi_by_idx.insert(0, None)
-			self.max_vi_by_idx.insert(0, None)
-			self.min_mofrchunk -= 1
-		while new_vi_mofrchunk > self.max_mofrchunk:
-			self.vis_by_idx.append([])
-			self.min_vi_by_idx.append(None)
-			self.max_vi_by_idx.append(None)
-			self.max_mofrchunk += 1
-		self.calc_minmax(new_vi_mofrchunk)
-		
+	def add_new_vis(self, new_vis_):
+		new_vis_mofrchunks = set()
+		for new_vi in new_vis_:
+			new_vi_mofrchunk = self.get_mofrchunk(new_vi)
+			new_vis_mofrchunks.add(new_vi_mofrchunk)
+			while new_vi_mofrchunk < self.min_mofrchunk:
+				self.vis_by_idx.insert(0, [])
+				self.min_vi_by_idx.insert(0, None)
+				self.max_vi_by_idx.insert(0, None)
+				self.min_mofrchunk -= 1
+			while new_vi_mofrchunk > self.max_mofrchunk:
+				self.vis_by_idx.append([])
+				self.min_vi_by_idx.append(None)
+				self.max_vi_by_idx.append(None)
+				self.max_mofrchunk += 1
+			self.get_vis(new_vi_mofrchunk).append(new_vi)
+		for new_vi_mofrchunk in new_vis_mofrchunks:
+			self.calc_minmax(new_vi_mofrchunk)
+
+	def remove_old_vis(self, old_vis_):
+		old_vi_times = set(vi.time for vi in old_vis_)
+
+		affected_mofrchunks = set()
+		for mofrchunk in self.mofrchunks():
+			vis = self.get_vis(mofrchunk)
+			old_len = len(vis)
+			vis[:] = [vi for vi in vis if vi.time not in old_vi_times]
+			if len(vis) != old_len:
+				affected_mofrchunks.add(mofrchunk)
+
+		while len(self.vis_by_idx) > 0 and len(self.vis_by_idx[0]) == 0:
+			del self.vis_by_idx[0]
+			del self.min_vi_by_idx[0]
+			del self.max_vi_by_idx[0]
+			self.min_mofrchunk += 1
+
+		while len(self.vis_by_idx) > 0 and len(self.vis_by_idx[-1]) == 0:
+			del self.vis_by_idx[-1]
+			del self.min_vi_by_idx[-1]
+			del self.max_vi_by_idx[-1]
+			self.max_mofrchunk -= 1
+
+		assert len(self.vis_by_idx) > 0 # We don't support an empty ChunkedViList.  Assuming some new vis were already added.
+
+		mofrchunks = self.mofrchunks()
+		for affected_mofrchunk in (x for x in affected_mofrchunks if x in mofrchunks):
+			self.calc_minmax(affected_mofrchunk)
+
+	def get_influenced_traffic_mofrs(self, vis_):
+		r = set()
+		for vi in vis_:
+			vi_mofrchunk = self.get_mofrchunk(vi)
+			r.add(vi_mofrchunk*self.mofrstep)
+			all_mofrchunks = set(self.mofrchunks())
+			for mofrchunk in xrange(vi_mofrchunk+1, self.max_mofrchunk+1):
+				r.add(mofrchunk*self.mofrstep)
+				if mofrchunk in all_mofrchunks and len(self.get_vis(mofrchunk)) > 0:
+					break
+			for mofrchunk in xrange(vi_mofrchunk-1, self.min_mofrchunk-1, -1):
+				if mofrchunk in all_mofrchunks and len(self.get_vis(mofrchunk)) > 0:
+					break
+				else:
+					r.add(mofrchunk*self.mofrstep)
+		return r
+
 	def _idx(self, mofrchunk_):
 		return mofrchunk_ - self.min_mofrchunk
+
+	def get_vis(self, mofrchunk_):
+		return self.vis_by_idx[self._idx(mofrchunk_)]
 
 	def get_mofrchunk(self, vi_):
 		return int(self.get_mofr(vi_))/self.mofrstep
