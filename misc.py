@@ -351,7 +351,7 @@ def datetime_to_em(datetime_):
 def round_up_by_minute(t_em_):
 	dt = datetime.datetime.utcfromtimestamp(t_em_/1000.0)
 	dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
-	if dt.second > 0 or (t_em_ - round_down_by_minute(t_em_) < 1000):
+	if dt.second > 0 or (0 < t_em_ - round_down_by_minute(t_em_) < 1000):
 		dt -= datetime.timedelta(seconds=dt.second)
 		dt += datetime.timedelta(minutes=1)
 	r = datetime_to_em(dt)
