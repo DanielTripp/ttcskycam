@@ -8,7 +8,7 @@ if len(sys.argv) == 1:
 else:
 	for arg in sys.argv[1:]:
 		if re.match('^\\d+$', arg):
-			print em_to_str(int(arg))
+			print em_to_str_millis(int(arg))
 		else:
 			print str_to_em(arg)
 	
