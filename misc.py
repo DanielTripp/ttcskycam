@@ -1,6 +1,6 @@
 #!/usr/bin/python2.6
 
-import sys, os, os.path, time, math, datetime, calendar, bisect, tempfile, subprocess, StringIO, re, multiprocessing, heapq, random
+import sys, os, os.path, time, math, datetime, calendar, bisect, tempfile, subprocess, StringIO, re, multiprocessing, heapq, random, functools, traceback
 import profile, cProfile
 from collections import Sequence, MutableSequence, defaultdict, MutableSet
 from itertools import *
@@ -335,7 +335,7 @@ def round_down_by_minute(t_em_):
 	dt = datetime.datetime.utcfromtimestamp(t_em_/1000.0)
 	dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute) # Omitting second on purpose.  That's what
 			# does the rounding down.
-	r = long(calendar.timegm(dt.timetuple())*1000)
+	r = datetime_to_em(dt)
 	return r
 
 def round_down_by_minute_step(t_em_, step_):
@@ -345,13 +345,16 @@ def round_down_by_minute_step(t_em_, step_):
 	r = long(calendar.timegm(dt.timetuple())*1000)
 	return r
 
+def datetime_to_em(datetime_):
+	return long(calendar.timegm(datetime_.timetuple())*1000)
+
 def round_up_by_minute(t_em_):
 	dt = datetime.datetime.utcfromtimestamp(t_em_/1000.0)
 	dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
-	if dt.second > 0:
+	if dt.second > 0 or (t_em_ - round_down_by_minute(t_em_) < 1000):
 		dt -= datetime.timedelta(seconds=dt.second)
 		dt += datetime.timedelta(minutes=1)
-	r = long(calendar.timegm(dt.timetuple())*1000)
+	r = datetime_to_em(dt)
 	return r
 
 def betweenii(a_, b_, c_):
@@ -1228,6 +1231,17 @@ class TimeWindow(object):
 
 	def gt_trimmed_vilist(self, vilist_):
 		return [vi for vi in vilist_ if vi.time_retrieved > self.end]
+
+# Thanks to http://stackoverflow.com/a/16618842/321556 
+def include_entire_traceback_for_multiproc(real_func_):
+	@functools.wraps(real_func_)
+	def decorating_function(*args, **kwds):
+		try:
+			return real_func_(*args, **kwds)
+		except:
+			raise Exception("".join(traceback.format_exception(*sys.exc_info())))
+	
+	return decorating_function
 
 if __name__ == '__main__':
 
