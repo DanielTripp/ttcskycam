@@ -1,13 +1,14 @@
 #!/usr/bin/python2.6
 
 from collections import *
-import sys, os, os.path, json, getopt, traceback
+import sys, os, os.path, json, getopt, traceback, time
 import vinfo, db, routes, geom, mc, yards, traffic, c, util, multiproc
 from misc import *
 
 GET_CURRENT_REPORTS_FROM_DB = os.path.exists('GET_CURRENT_REPORTS_FROM_DB')
 GET_HISTORICAL_REPORTS_FROM_DB = os.path.exists('GET_HISTORICAL_REPORTS_FROM_DB')
 DISALLOW_HISTORICAL_REPORTS = os.path.exists('DISALLOW_HISTORICAL_REPORTS')
+LOG_INDIV_ROUTE_TIMES = False
 
 if os.path.exists('MAKE_REPORTS_FROUTES'):
 	with open('MAKE_REPORTS_FROUTES') as fin:
@@ -139,15 +140,26 @@ def wait_for_locations_poll_to_finish():
 	if cur_wait_secs > MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS:
 		printerr('%s: reports: watched poll locations flag file for %d seconds before it was touched.' % (now_str(), cur_wait_secs))
 
-def make_all_reports_and_insert_into_db_once(report_time_, multiproc_):
-	if multiproc_:
-		multiproc.run(8, make_reports_and_insert_into_db_single_route, [(report_time_, froute) for froute in FROUTES])
+g_froute_to_times = None
+
+def make_all_reports_and_insert_into_db_once(report_time_, shardpool_):
+	global g_froute_to_times
+	if shardpool_ is not None:
+		shardpool_.map(make_reports_and_insert_into_db_single_route, [(report_time_, froute) for froute in FROUTES])
 	else:
 		for froute in FROUTES:
 			make_reports_and_insert_into_db_single_route(report_time_, froute)
+	if LOG_INDIV_ROUTE_TIMES:
+		if g_froute_to_times is None:
+			g_froute_to_times = defaultdict(list)
+		for froute, times in g_froute_to_times.iteritems():
+			printerr(froute, average(times))
 
-@include_entire_traceback_for_multiproc
+@multiproc.include_entire_traceback
 def make_reports_and_insert_into_db_single_route(report_time_, froute_):
+	global g_froute_to_times
+	if LOG_INDIV_ROUTE_TIMES:
+		t0 = time.time()
 	for direction in (0, 1):
 		reporttype_to_datazoom_to_reportdataobj = defaultdict(lambda: {})
 		for datazoom in c.VALID_DATAZOOMS:
@@ -161,14 +173,41 @@ def make_reports_and_insert_into_db_single_route(report_time_, froute_):
 				traceback.print_exc()
 				raise
 		db.insert_reports(froute_, direction, report_time_, reporttype_to_datazoom_to_reportdataobj)
+	if LOG_INDIV_ROUTE_TIMES:
+		t1 = time.time()
+		if g_froute_to_times is not None:
+			g_froute_to_times[froute_].append(t1 - t0)
 
-def make_all_reports_and_insert_into_db_forever():
+def make_shardpool():
+	return multiproc.ShardPool(shardfunc, 8)
+
+def shardfunc(func_, args_):
+	assert func_ == make_reports_and_insert_into_db_single_route
+	froute = args_[1]
+	assert froute in routes.NON_SUBWAY_FUDGEROUTES
+	froute_to_shard = {
+			'king': 5,
+			'queen': 0,
+			'dufferin': 1,
+			'bathurst': 3,
+			'keele': 7,
+			'spadina': 2,
+			'carlton': 6,
+			'dundas': 4,
+			'dupont': 4,
+			'lansdowne': 5,
+			'ossington': 6,
+			'stclair': 7
+		}
+	return froute_to_shard[froute]
+
+def make_all_reports_and_insert_into_db_forever(shardpool_):
 	routes.prime_routeinfos()
 	while True:
 		wait_for_locations_poll_to_finish()
 		redirect_stdstreams_to_file('reports_generation_')
 		t0 = time.time()
-		make_all_reports_and_insert_into_db_once(round_up_by_minute(now_em()), True)
+		make_all_reports_and_insert_into_db_once(round_up_by_minute(now_em()), shardpool_)
 		t1 = time.time()
 		reports_took_secs = t1 - t0
 		printerr('%s,%d,%s' % (now_str(), reports_took_secs, c.VERSION))
@@ -177,22 +216,18 @@ def make_all_reports_and_insert_into_db_forever():
 		sys.stdout.flush()
 		sys.stderr.flush()
 
-#	NUM_PROCS = multiprocessing.cpu_count()
-#	pools = [multiprocessing.Pool(1, multiproc.initializer) for i in range(NUM_PROCS)]
-#	r = {}
-#	for i, froute in enumerate(FROUTES):
-#		r[froute] = pools[i % NUM_PROCS]
-#	return r
-
 if __name__ == '__main__':
 
 	if len(sys.argv) == 3:
 		report_time = (round_down_by_minute(now_em()) if sys.argv[1] == 'now' else str_to_em(sys.argv[1]))
 		assert sys.argv[2] in ('--multiproc', '--nomultiproc')
 		do_multiproc = (sys.argv[2] == '--multiproc')
-		make_all_reports_and_insert_into_db_once(report_time, do_multiproc)
-	elif len(sys.argv) == 1:
-		make_all_reports_and_insert_into_db_forever()
+		shardpool = (make_shardpool() if do_multiproc else None)
+		make_all_reports_and_insert_into_db_once(report_time, shardpool)
+	elif len(sys.argv) in (1, 2):
+		do_multiproc = (len(sys.argv) == 1) or (sys.argv[1] != '--nomultiproc')
+		shardpool = (make_shardpool() if do_multiproc else None)
+		make_all_reports_and_insert_into_db_forever(shardpool)
 	else:
 		raise Exception()
 

@@ -1232,17 +1232,6 @@ class TimeWindow(object):
 	def gt_trimmed_vilist(self, vilist_):
 		return [vi for vi in vilist_ if vi.time_retrieved > self.end]
 
-# Thanks to http://stackoverflow.com/a/16618842/321556 
-def include_entire_traceback_for_multiproc(real_func_):
-	@functools.wraps(real_func_)
-	def decorating_function(*args, **kwds):
-		try:
-			return real_func_(*args, **kwds)
-		except:
-			raise Exception("".join(traceback.format_exception(*sys.exc_info())))
-	
-	return decorating_function
-
 if __name__ == '__main__':
 
 	pass
