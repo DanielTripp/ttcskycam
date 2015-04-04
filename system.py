@@ -11,6 +11,8 @@ from lru_cache import lru_cache
 import vinfo, geom, grid, routes, predictions, mc, c, snapgraph, traffic, picklestore, streets
 from misc import *
 
+USE_CITY_TESTING_SUBSET = False
+
 class SystemSnapGraph(snapgraph.SnapGraph):
 
 	def __init__(self, froute_to_pline_):
@@ -529,8 +531,7 @@ def get_snapgraph():
 		subway_froute_weighted_name = snapgraph.set_plinename_weight(subway_froute, 0.6)
 		froute_to_pline[subway_froute_weighted_name] = pline
 
-	if 0: # tdr     
-		# testing subset of city.  
+	if USE_CITY_TESTING_SUBSET:
 		poly = [geom.LatLng(43.63446004,-79.43870544) , geom.LatLng(43.66228361,-79.44694519) , 
 				geom.LatLng(43.67047917,-79.40128326) , geom.LatLng(43.64570281,-79.38591957) ]
 
