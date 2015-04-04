@@ -201,11 +201,12 @@ def shardfunc(func_, args_):
 		}
 	return froute_to_shard[froute]
 
-def make_all_reports_and_insert_into_db_forever(shardpool_):
+def make_all_reports_and_insert_into_db_forever(shardpool_, redir_):
 	routes.prime_routeinfos()
 	while True:
 		wait_for_locations_poll_to_finish()
-		redirect_stdstreams_to_file('reports_generation_')
+		if redir_:
+			redirect_stdstreams_to_file('reports_generation_')
 		t0 = time.time()
 		make_all_reports_and_insert_into_db_once(round_up_by_minute(now_em()), shardpool_)
 		t1 = time.time()
@@ -221,12 +222,18 @@ if __name__ == '__main__':
 	arg_parser = argparse.ArgumentParser()
 	arg_parser.add_argument('--multiproc', choices=('y', 'n'), default='y')
 	arg_parser.add_argument('--time')
+	arg_parser.add_argument('--redir', action='store_true')
 	args = arg_parser.parse_args()
+	if args.time is not None and args.redir:
+		raise Exception('redir not allowed when doing a single time.')
+	if LOG_INDIV_ROUTE_TIMES and args.multiproc == 'y':
+		raise Exception('Don\'t know how to log individual route times when multiproc is on.')
+
 	shardpool = (make_shardpool() if args.multiproc == 'y' else None)
 	if args.time is not None:
 		report_time = (round_down_by_minute(now_em()) if args.time == 'now' else str_to_em(args.time))
 		make_all_reports_and_insert_into_db_once(report_time, shardpool)
 	else:
-		make_all_reports_and_insert_into_db_forever(shardpool)
+		make_all_reports_and_insert_into_db_forever(shardpool, args.redir)
 
 
