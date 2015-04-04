@@ -220,7 +220,7 @@ def make_all_reports_and_insert_into_db_forever(shardpool_, redir_):
 if __name__ == '__main__':
 
 	arg_parser = argparse.ArgumentParser()
-	arg_parser.add_argument('--multiproc', choices=('y', 'n'), default='y')
+	arg_parser.add_argument('--multiproc', choices=('y', 'n'), default='n')
 	arg_parser.add_argument('--time')
 	arg_parser.add_argument('--redir', action='store_true')
 	args = arg_parser.parse_args()
