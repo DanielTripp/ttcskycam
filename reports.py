@@ -1,7 +1,7 @@
 #!/usr/bin/python2.6
 
 from collections import *
-import sys, os, os.path, json, getopt, traceback, time
+import sys, os, os.path, json, argparse, traceback, time
 import vinfo, db, routes, geom, mc, yards, traffic, c, util, multiproc
 from misc import *
 
@@ -218,17 +218,15 @@ def make_all_reports_and_insert_into_db_forever(shardpool_):
 
 if __name__ == '__main__':
 
-	if len(sys.argv) == 3:
-		report_time = (round_down_by_minute(now_em()) if sys.argv[1] == 'now' else str_to_em(sys.argv[1]))
-		assert sys.argv[2] in ('--multiproc', '--nomultiproc')
-		do_multiproc = (sys.argv[2] == '--multiproc')
-		shardpool = (make_shardpool() if do_multiproc else None)
+	arg_parser = argparse.ArgumentParser()
+	arg_parser.add_argument('--multiproc', choices=('y', 'n'), default='y')
+	arg_parser.add_argument('--time')
+	args = arg_parser.parse_args()
+	shardpool = (make_shardpool() if args.multiproc == 'y' else None)
+	if args.time is not None:
+		report_time = (round_down_by_minute(now_em()) if args.time == 'now' else str_to_em(args.time))
 		make_all_reports_and_insert_into_db_once(report_time, shardpool)
-	elif len(sys.argv) in (1, 2):
-		do_multiproc = (len(sys.argv) == 1) or (sys.argv[1] != '--nomultiproc')
-		shardpool = (make_shardpool() if do_multiproc else None)
-		make_all_reports_and_insert_into_db_forever(shardpool)
 	else:
-		raise Exception()
+		make_all_reports_and_insert_into_db_forever(shardpool)
 
 
