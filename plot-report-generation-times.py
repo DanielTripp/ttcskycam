@@ -77,13 +77,17 @@ if __name__ == '__main__':
 
 	versions_in_time_order = sorted(version_to_timesamples.keys(), key=lambda v: version_to_timesamples[v][0].finishtime)
 
+	def get_texty(versionidx_):
+		ys = [0.85, 0.90, 0.95]
+		return ys[versionidx_ % len(ys)]
+
 	for versionidx, version in enumerate(versions_in_time_order):
 		timesamples = version_to_timesamples[version]
 		xvals = [em_to_datetime(s.finishtime) for s in timesamples]
 		yvals = [s.timetaken for s in timesamples]
 
 		textx = float(versionidx+1)/(len(version_to_timesamples)+1)
-		ax.annotate(version, xy=(xvals[0], yvals[0]), textcoords='axes fraction', xytext=(textx, 0.9), 
+		ax.annotate(version, xy=(xvals[0], yvals[0]), textcoords='axes fraction', xytext=(textx, get_texty(versionidx)), 
 				arrowprops=dict(arrowstyle='->'))
 
 		plt.plot(xvals, yvals, color=get_color(version), marker='+', linestyle='None')
