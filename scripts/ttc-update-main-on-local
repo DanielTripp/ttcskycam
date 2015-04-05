@@ -1,0 +1,86 @@
+#!/usr/bin/env bash
+
+#if [[ $(pwd) =~ ^/var/www/main.* ]] ; then
+#	echo 'Current directory is under /var/www/main.  Cannot continue.'
+#	exit 1
+#fi
+cd /tmp
+
+HOME=~dt
+
+if [ "$#" == "2" ] ; then 
+	revision=$1
+	branch=$2
+	use_cmdline_args=true
+elif [ "$#" == "0" ] ; then
+	# We'll figure out the head / trunk revision with 'svn info' shortly.
+	use_cmdline_args=false
+else
+	echo 'Wrong number of arguments.  Need either a) a revision and a branch, or b) no arguments (will default to head of trunk.)'
+	exit 1
+fi
+export use_cmdline_args
+export revision
+export branch
+
+sudo revision=$revision branch=$branch use_cmdline_args=$use_cmdline_args -i -u dt bash << _END_
+
+echo 'Synching svn mirror...'
+svn_mirror_proj_base_url=\$(~/bin/svn-sync-mirror)
+echo '... done.'
+
+if [ "\$use_cmdline_args" != "true" ] ; then
+	revision=\$(svn info \$svn_mirror_proj_base_url/trunk | grep '^Revision:' | sed 's/[^01-9]//g')
+	branch=trunk
+fi
+
+tmpsvndir=\$(mktemp -d --tmpdir=/tmp ttc-main-svn-XXXXXX)
+
+if [ "\$branch" == "trunk" ] ; then
+	echo Exporting revision \$revision / trunk ...
+	svn --quiet export "\$svn_mirror_proj_base_url"/trunk@"\$revision" \$tmpsvndir/main
+else
+	echo Exporting revision \$revision / branch \$branch ...
+	svn --quiet export "\$svn_mirror_proj_base_url"/branches/"\$branch"@"\$revision" \$tmpsvndir/main
+fi
+if [ "\$?" != "0" ] ; then echo 'Problem.  Exiting.'; exit 1; fi 
+echo '... done.'
+cd \$tmpsvndir/main
+./set-permissions.py 
+echo 'Mangling...'
+./mangle_this_sandbox_make_it_production.py --yes
+echo '... done.'
+
+echo "\$revision"-"\$branch" > VERSION 
+
+echo 'Priming routeinfos...'
+./prime_routeinfos.py
+echo '... done.'
+
+echo 'Priming memcache streetlabels...'
+./prime_memcache_streetlabels.py
+echo '... done.'
+_END_
+
+if [ "$?" != "0" ] ; then echo 'Problem.  Exiting.'; exit 1; fi 
+
+apachectl stop
+supervisorctl stop ttc-make-reports-main
+
+sudo -i -u dt bash << _END_
+tmpsvndir=\$(l -td /tmp/ttc-main-svn-* | head -1)
+rm -rf /var/www/main
+cd \$tmpsvndir
+mv main /var/www
+cd /
+rm -rf \$tmpsvndir
+_END_
+
+apachectl start
+supervisorctl start ttc-make-reports-main
+
+echo 'Sleeping for two minutes, to wait for new reports to appear in database...'
+sleep 120
+echo '... done.'
+
+
