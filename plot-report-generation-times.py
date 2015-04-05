@@ -71,9 +71,22 @@ if __name__ == '__main__':
 			return pl.num2date(x).strftime('%a %H:%M')
 
 	ax.xaxis.set_major_formatter(ticker.FuncFormatter(format_date))
-	for version, timesamples in version_to_timesamples.iteritems():
-		plt.plot([em_to_datetime(s.finishtime) for s in timesamples], [s.timetaken for s in timesamples], 
-				color=get_color(version), marker='+', linestyle='None')
+
+	for timesamples in version_to_timesamples.itervalues():
+		timesamples.sort(key=lambda s: s.finishtime)
+
+	versions_in_time_order = sorted(version_to_timesamples.keys(), key=lambda v: version_to_timesamples[v][0].finishtime)
+
+	for versionidx, version in enumerate(versions_in_time_order):
+		timesamples = version_to_timesamples[version]
+		xvals = [em_to_datetime(s.finishtime) for s in timesamples]
+		yvals = [s.timetaken for s in timesamples]
+
+		textx = float(versionidx+1)/(len(version_to_timesamples)+1)
+		ax.annotate(version, xy=(xvals[0], yvals[0]), textcoords='axes fraction', xytext=(textx, 0.9), 
+				arrowprops=dict(arrowstyle='->'))
+
+		plt.plot(xvals, yvals, color=get_color(version), marker='+', linestyle='None')
 	fig.autofmt_xdate()
 	out_png_filename = timeframe
 	plt.savefig(os.path.join(output_directory, out_png_filename), bbox_inches='tight')
