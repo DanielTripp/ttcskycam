@@ -1,0 +1,33 @@
+#!/usr/bin/env bash
+
+cd /tmp
+
+tmpsvndir=$(mktemp -d --tmpdir=/tmp ttc-dbman-svn-XXXXXX)
+chown dt $tmpsvndir
+chgrp dt $tmpsvndir
+sudo tmpsvndir=$tmpsvndir -i -u dt bash << _END_
+echo 'Synching svn mirror...'
+svn_mirror_proj_url=\$(svn-sync-mirror)
+echo '... done.'
+revision=\$(svn info \$svn_mirror_proj_url | g '^Revision:' | sed 's/[^01-9]//g')
+echo "Exporting revision \$revision ..."
+svn --quiet export "\$svn_mirror_proj_url"/trunk@"\$revision" \$tmpsvndir/ttc-dbman
+cd \$tmpsvndir/ttc-dbman
+./set-permissions.py 
+./mc.py restart dev
+./prime_routeinfos.py
+./prime_graphs.py
+echo 'Mangling...'
+./mangle_this_sandbox_make_it_dbman.py
+echo "\$revision"-trunk > VERSION 
+_END_
+supervisorctl stop ttc-poll-locations
+sudo tmpsvndir=$tmpsvndir -i -u dt bash << _END_
+rm -rf ~/ttc-dbman
+cd \$tmpsvndir
+mv ttc-dbman ~
+cd /
+rm -rf \$tmpsvndir
+_END_
+supervisorctl start ttc-poll-locations
+
