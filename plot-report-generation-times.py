@@ -24,6 +24,10 @@ class TimeSample(object):
 
 if __name__ == '__main__':
 
+	timeframe = sys.argv[1]
+	if timeframe not in ('day', 'week', 'month'):
+		raise Exception('invalid timeframe')
+
 	output_directory = 'report-generation-times'
 	logs_directory = '~/ttc-logs'
 
@@ -32,25 +36,39 @@ if __name__ == '__main__':
 
 	version_to_timesamples = defaultdict(list)
 
+	finishtime_cutoff_numdaysago = {'day': 1, 'week': 7, 'month': 30}[timeframe]
+	finishtime_cutoff_em = now_em() - finishtime_cutoff_numdaysago*24*60*60*1000
+
 	for dirpath, dirnames, filenames in os.walk(logs_directory):
 		dirnames[:] = []
 		for filename in (f for f in filenames if f.startswith('reports_generation_')):
-			with open(os.path.join(dirpath, filename)) as fin:
+			full_filename = os.path.join(dirpath, filename)
+			if os.stat(full_filename).st_mtime*1000 < finishtime_cutoff_em:
+				continue
+			with open(full_filename) as fin:
 				for line in fin:
 					splits = line.strip().split(',')
 					if len(splits) == 3 and (splits[0].startswith(str(current_year())) or splits[0].startswith(str(current_year()-1))):
-						finishtime = str_to_em(splits[0])
-						timetaken = int(splits[1])
-						timesample = TimeSample(finishtime, timetaken)
-						version = splits[2]
-						version_to_timesamples[version].append(timesample)
+						finishtime_em = str_to_em(splits[0])
+						if finishtime_em > finishtime_cutoff_em:
+							timetaken = int(splits[1])
+							timesample = TimeSample(finishtime_em, timetaken)
+							version = splits[2]
+							version_to_timesamples[version].append(timesample)
+
+	if not version_to_timesamples:
+		# An empty plot produces an error message in our date formatting function.  Here we're preventing that. 
+		version_to_timesamples['x'].append(TimeSample(now_em(), 0))
 
 	plt.figure(1)
 	fig, ax = plt.subplots()
 	fig.set_size_inches(15, 8)
 
 	def format_date(x, pos=None):
-		return pl.num2date(x).strftime('%a %H:%M')
+		if timeframe == 'month':
+			return pl.num2date(x).strftime('%b %d')
+		else:
+			return pl.num2date(x).strftime('%a %H:%M')
 
 	ax.xaxis.set_major_formatter(ticker.FuncFormatter(format_date))
 	for version, timesamples in version_to_timesamples.iteritems():
