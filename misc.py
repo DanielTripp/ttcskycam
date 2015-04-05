@@ -41,6 +41,9 @@ def em_to_str_hms(t_):
 def now_em():
 	return int(time.time()*1000)
 
+def current_year():
+	return int(time.strftime('%Y', time.localtime(now_em()/1000)))
+
 def now_str():
 	return em_to_str(now_em())
 
@@ -347,6 +350,9 @@ def round_down_by_minute_step(t_em_, step_):
 
 def datetime_to_em(datetime_):
 	return long(calendar.timegm(datetime_.timetuple())*1000)
+
+def em_to_datetime(em_):
+	return datetime.datetime.fromtimestamp(em_/1000.0)
 
 def round_up_by_minute(t_em_):
 	dt = datetime.datetime.utcfromtimestamp(t_em_/1000.0)
