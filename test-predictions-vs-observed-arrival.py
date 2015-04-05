@@ -11,7 +11,7 @@ if GRAPH:
 import matplotlib.pyplot as plt
 import matplotlib.dates as mpldates
 from misc import *
-import traffic, db, vinfo, routes, geom, mc, tracks, util, predictions, paths
+import traffic, db, vinfo, routes, geom, mc, tracks, util, predictions
 
 def em_to_datetime(em_):
 	return datetime.datetime.fromtimestamp(em_/1000.0)
@@ -43,14 +43,14 @@ if __name__ == '__main__':
 	# dundas  6205 broadview   6046 spadina      3665 bathurst    3702 ossington    1063 dufferin    1606 lansdowne    2954 howard
 	# lansdowne   6574 dundas    dupont 9085
 	stoptag = '6046'
-	stop = routes.routeinfo(froute).get_stop(stoptag)
+	stop_latlng = geom.LatLng(43.6527999, -79.39825)
 	vid_to_tminus_n_howlate = defaultdict(lambda: [])
 	for prediction in db.get_predictions_gen(froute, stoptag, None, start_time, end_time):
 		if PRINT:
 			print prediction
 		start_time = prediction.time - 1000*60*15
 		end_time = prediction.time + 1000*60*30
-		vis = db.find_passing(prediction.froute, prediction.vehicle_id, start_time, end_time, stop.latlng, direction)
+		vis = db.find_passing(prediction.froute, prediction.vehicle_id, start_time, end_time, stop_latlng, direction)
 		if vis is None:
 			if PRINT:
 				print '---> Passing not found'
@@ -58,7 +58,7 @@ if __name__ == '__main__':
 			if PRINT:
 				print vis[0]
 				print vis[1]
-			pass_time = vis[0].get_pass_time_interp(vis[1], stop.latlng)
+			pass_time = vis[0].get_pass_time_interp(vis[1], stop_latlng)
 			time_diff = pass_time - prediction.time
 			mins = abs(time_diff/1000) / 60
 			secs = abs(time_diff/1000) - mins*60
