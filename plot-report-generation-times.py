@@ -75,7 +75,8 @@ if __name__ == '__main__':
 		plt.plot([em_to_datetime(s.finishtime) for s in timesamples], [s.timetaken for s in timesamples], 
 				color=get_color(version), marker='+', linestyle='None')
 	fig.autofmt_xdate()
-	plt.savefig(os.path.join(output_directory, 'matplotoutput'), bbox_inches='tight')
+	out_png_filename = timeframe
+	plt.savefig(os.path.join(output_directory, out_png_filename), bbox_inches='tight')
 
 
 
