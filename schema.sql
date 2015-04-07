@@ -8,28 +8,71 @@ SET standard_conforming_strings = on;
 SET check_function_bodies = false;
 SET client_min_messages = warning;
 
---
--- Name: postgres; Type: COMMENT; Schema: -; Owner: postgres
---
-
-COMMENT ON DATABASE postgres IS 'default administrative connection database';
-
-
---
--- Name: plpgsql; Type: EXTENSION; Schema: -; Owner: 
---
-
-CREATE EXTENSION IF NOT EXISTS plpgsql WITH SCHEMA pg_catalog;
-
-
---
--- Name: EXTENSION plpgsql; Type: COMMENT; Schema: -; Owner: 
---
-
-COMMENT ON EXTENSION plpgsql IS 'PL/pgSQL procedural language';
-
-
 SET search_path = public, pg_catalog;
+
+--
+-- Name: printf(text, anyarray); Type: FUNCTION; Schema: public; Owner: dt
+--
+
+CREATE FUNCTION printf(fmt text, VARIADIC args anyarray) RETURNS text
+    LANGUAGE plpgsql
+    AS $$
+        DECLARE
+                argcnt  int = 1;
+                chrcnt  int = 0;
+                fmtlen  int;
+                CHR             text;
+                output  text = '';
+        BEGIN
+                fmtlen = LENGTH(fmt);
+                LOOP
+                        chrcnt = chrcnt + 1;
+ 
+                        -- ran out of format string? bail out
+                        IF chrcnt > fmtlen THEN
+                                EXIT;
+                        END IF;
+ 
+                        -- grab our char
+                        CHR = substring(fmt, chrcnt, 1);
+ 
+                        -- %% means output a single %, and skip them
+                        IF CHR = '%' AND substring(fmt, chrcnt + 1, 1) = '%' THEN
+                                output = output || '%';
+                                chrcnt = chrcnt + 1;
+                                continue;
+                        END IF;
+ 
+                        -- a % on its own means output an element from our arg list
+                        IF CHR = '%' THEN
+                                output = output || COALESCE(args[argcnt]::text, '');
+                                argcnt = argcnt + 1;
+                                continue;
+                        END IF;
+ 
+                        -- no special case? output the thing
+                        output = output || CHR;
+                END LOOP;
+ 
+                RETURN output;
+        END;
+$$;
+
+
+ALTER FUNCTION public.printf(fmt text, VARIADIC args anyarray) OWNER TO dt;
+
+--
+-- Name: %%; Type: OPERATOR; Schema: public; Owner: postgres
+--
+
+CREATE OPERATOR %% (
+    PROCEDURE = pst.format_op,
+    LEFTARG = text,
+    RIGHTARG = "any"
+);
+
+
+ALTER OPERATOR public.%% (text, "any") OWNER TO postgres;
 
 SET default_tablespace = '';
 
@@ -103,6 +146,18 @@ CREATE TABLE reports (
 ALTER TABLE public.reports OWNER TO dt;
 
 --
+-- Name: test; Type: TABLE; Schema: public; Owner: postgres; Tablespace: 
+--
+
+CREATE TABLE test (
+    i integer,
+    s character varying(10)
+);
+
+
+ALTER TABLE public.test OWNER TO postgres;
+
+--
 -- Name: ttc_vehicle_locations; Type: TABLE; Schema: public; Owner: dt; Tablespace: 
 --
 
@@ -121,7 +176,10 @@ CREATE TABLE ttc_vehicle_locations (
     time_str character varying(100),
     rowid integer NOT NULL,
     mofr integer,
-    widemofr integer
+    widemofr integer,
+    graph_locs character varying(1000),
+    graph_version integer,
+    froute_version integer
 );
 
 
