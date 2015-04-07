@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+
+cd /tmp
+
+if [ "$#" == "2" ] ; then 
+	revision=$1
+	branch=$2
+	using_cmdline_args=true
+elif [ "$#" == "0" ] ; then
+	using_cmdline_args=false
+else
+	echo 'Wrong number of arguments.  Need either a) a revision and a branch, or b) no arguments (will default to head of trunk.)'
+	exit 1
+fi
+export using_cmdline_args
+export revision
+export branch
+
+function check () {
+	if [ "$?" != "0" ] ; then echo 'Problem.  Exiting.'; exit 1; fi 
+}
+
+echo 'Synching svn mirror...'
+svn_mirror_proj_base_url=$(~/bin/svn-sync-mirror)
+echo '... done.'
+
+if [ "$using_cmdline_args" != "true" ] ; then
+	revision=$(svn info $svn_mirror_proj_base_url/trunk | grep '^Revision:' | sed 's/[^01-9]//g')
+	branch=trunk
+fi
+
+tmp_sandbox_copy_dir=$(mktemp -d --tmpdir=/tmp ttc-sandbox-copy-for-report-generation-XXXXXX)
+
+cd ~/svn-mirror-update-prod-report-generation-times
+check
+
+if [ "$using_cmdline_args" != "true" ] ; then
+	echo 'Switching to trunk...'
+	svn switch "$svn_mirror_proj_base_url"/trunk
+	check
+	echo 'Updating to latest revision...'
+	svn update
+	check
+else
+	if [ "$branch" == "trunk" ] ; then
+		echo 'Switching to trunk...'
+		svn switch "$svn_mirror_proj_base_url"/trunk
+		check
+		echo 'Updating to revision' $revision '...'
+		svn update -r $revision
+		check
+	else
+		echo 'Switching to branch' $branch '...'
+		svn switch "$svn_mirror_proj_base_url"/branches/$branch
+		check
+		echo 'Updating to revision' $revision '...'
+		svn update -r $revision
+		check
+	fi
+fi
+check
+echo '... done updating svn sandbox.'
+
+echo 'Copying sandbox content to tmp dir...'
+cp -r . $tmp_sandbox_copy_dir
+check
+echo '... done copying.'
+
+cd $tmp_sandbox_copy_dir
+check
+./set-permissions.py 
+check
+echo 'Mangling...'
+./mangle_this_sandbox_make_it_production.py --yes
+check
+echo '... done mangling.'
+
+echo "$revision"-"$branch" > VERSION 
+
+./plot-report-generation-times.py month
+check
+./plot-report-generation-times.py week
+check
+./plot-report-generation-times.py day
+check
+
+rm -rf /var/www/report-generation-times
+mv $tmp_sandbox_copy_dir /var/www/report-generation-times
+cd /
+rm -rf $tmp_sandbox_copy_dir
+check
+
