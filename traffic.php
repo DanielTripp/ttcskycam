@@ -1950,7 +1950,7 @@ function on_back_clicked() {
 }
 
 function is_traffictype_current() {
-	return (radio_val('traffictype') == 'current');
+	return !SHOW_DEV_CONTROLS || (radio_val('traffictype') == 'current');
 }
 
 function is_traffictype_historical() {
