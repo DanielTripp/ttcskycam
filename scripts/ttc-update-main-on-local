@@ -97,7 +97,9 @@ echo 'Priming memcache streetlabels...'
 ./prime_memcache_streetlabels.py
 echo '... done.'
 
+echo 'Generating some reports...'
 ./reports.py --time now
+echo '... done.'
 check
 
 _END_
