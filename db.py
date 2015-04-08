@@ -38,7 +38,7 @@ SECSSINCEREPORT_BUG_WORKAROUND_CONSTANT = 12
 
 HOSTMONIKER_TO_IP = {'theorem': '72.2.4.176', 'black': '24.52.231.206', 'u': 'localhost', 'v': 'localhost'}
 
-VI_COLS = ' dir_tag, heading, vehicle_id, lat, lon, predictable, fudgeroute, route_tag, secs_since_report, time_retrieved, time, mofr, widemofr, graph_locs, graph_version '
+VI_COLS = ' dir_tag, heading, vehicle_id, lat, lon, predictable, fudgeroute, route_tag, secs_since_report, time_retrieved, time, mofr, widemofr, graph_locs, graph_version, froute_version '
 
 PREDICTION_COLS = ' fudgeroute, configroute, stoptag, time_retrieved, time_of_prediction, vehicle_id, is_departure, block, dirtag, triptag, branch, affected_by_layover, is_schedule_based, delayed'
 
@@ -142,8 +142,8 @@ def trans(f):
 def insert_vehicle_info(vi_):
 	curs = conn().cursor()
 	cols = [vi_.vehicle_id, vi_.fudgeroute, vi_.route_tag, vi_.dir_tag, vi_.lat, vi_.lng, vi_.secs_since_report, vi_.time_retrieved, \
-		vi_.predictable, vi_.heading, vi_.time, em_to_str(vi_.time), vi_.mofr, vi_.widemofr, vi_.get_graph_locs_json_str(), vi_.get_cur_graph_version()]
-	curs.execute('INSERT INTO ttc_vehicle_locations VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,default,%s,%s,%s,%s)', cols)
+		vi_.predictable, vi_.heading, vi_.time, em_to_str(vi_.time), vi_.mofr, vi_.widemofr, vi_.get_graph_locs_json_str(), vi_.get_cur_graph_version(), vi_.get_cur_froute_version()]
+	curs.execute('INSERT INTO ttc_vehicle_locations VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,default,%s,%s,%s,%s,%s)', cols)
 	curs.close()
 
 @lock
@@ -808,7 +808,7 @@ def interp_impl(r_interptime_to_vi_, interptimes_, important_vi_idxes_, vis_, gr
 			i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, i_heading, vid, i_latlon.lat, i_latlon.lng,
 									 lo_vi.predictable and hi_vi.predictable,
 									 lo_vi.fudgeroute, lo_vi.route_tag, 0, interptime, interptime, i_mofr, None, 
-									 None, None)
+									 None, None, None)
 		elif lo_vi and not hi_vi:
 			if current_conditions_:
 				if be_clever_ and ((interptime - lo_vi.time > 3*60*1000) or dirs_disagree(dir_, lo_vi.dir_tag_int)):
@@ -819,7 +819,7 @@ def interp_impl(r_interptime_to_vi_, interptimes_, important_vi_idxes_, vis_, gr
 					latlng, heading = get_latlonnheadingnmofr_from_lo_sample(lolo_vi, lo_vi, datazoom_, be_clever_, log_)[:2]
 				i_vi = vinfo.VehicleInfo(lo_vi.dir_tag, heading, vid, latlng.lat, latlng.lng,
 						lo_vi.predictable, lo_vi.fudgeroute, lo_vi.route_tag, 0, interptime, interptime, lo_vi.mofr, lo_vi.widemofr, 
-						None, None)
+						None, None, None)
 
 		if i_vi:
 			r_interptime_to_vi_[interptime] = i_vi
