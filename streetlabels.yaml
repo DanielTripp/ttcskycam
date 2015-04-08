@@ -100,4 +100,23 @@ keele:
         11884: ''
         12263: Keele St
 
+harbourfront:
+    0:
+        0: ''
+        551: Queens Quay W
+        2392: Bathurst St
+        2527: ''
+        2564: Fleet St
+        3350: ''
+        3420: Manitoba Dr
+    1:
+        0: ''
+        551: Queens Quay W
+        2392: Bathurst St
+        2527: ''
+        2564: Fleet St
+        3350: ''
+        3420: Manitoba Dr
+        3579: ''
+
 
