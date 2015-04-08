@@ -91,7 +91,18 @@ if __name__ == '__main__':
 				arrowprops=dict(arrowstyle='->'))
 
 		plt.plot(xvals, yvals, color=get_color(version), marker='+', linestyle='None')
+
+	plt.axhline(15,  color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
+	plt.axhline(30,  color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
+	plt.axhline(45,  color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
+	plt.axhline(60,  color='black',       alpha=0.5, linestyle='-')
+	plt.axhline(75,  color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
+	plt.axhline(90,  color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
+	plt.axhline(105, color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
+	plt.axhline(120, color=(0.5,0.5,0.5), alpha=0.5, linestyle='-')
+
 	fig.autofmt_xdate()
+
 	out_png_filename = timeframe
 	plt.savefig(os.path.join(output_directory, out_png_filename), bbox_inches='tight')
 
