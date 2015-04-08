@@ -2,7 +2,7 @@
 
 import sys, os, urlparse, json, pprint, time, pickle, xml.dom, xml.dom.minidom, datetime, time, getopt
 from misc import *
-import traffic, db, vinfo, routes, geom, mc, tracks, util, predictions, paths, streetlabels, vehicleimages, c
+import traffic, db, vinfo, routes, geom, mc, tracks, util, predictions, streetlabels, vehicleimages, c
 
 def get_streetlabel_filename(text_, rotation_, zoom_):
 	return 'streetlabel_%s_%d_%d.png' % (text_.replace(' ', '_'), rotation_, zoom_)
@@ -41,8 +41,14 @@ def build_vehicle_arrow_images():
 
 if __name__ == '__main__':
 
+	which = sys.argv[1]
+	if which not in ('streetlabels', 'vehiclearrows', 'all'):
+		raise Exception()
 
-	build_streetlabel_images()
-	build_vehicle_arrow_images()
+	if which in ('streetlabels', 'all'):
+		build_streetlabel_images()
+
+	if which in ('vehiclearrows', 'all'):
+		build_vehicle_arrow_images()
 
 
