@@ -81,6 +81,8 @@ echo "$revision"-"$branch" > VERSION
 check
 ./plot-report-generation-times.py week
 check
+./plot-report-generation-times.py 3day
+check
 ./plot-report-generation-times.py day
 check
 
