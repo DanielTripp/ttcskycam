@@ -36,48 +36,41 @@ echo 'Synching svn mirror...'
 svn_mirror_proj_base_url=\$(~/bin/svn-sync-mirror)
 echo '... done.'
 
-if [ "\$using_cmdline_args" != "true" ] ; then
-	revision=\$(svn info \$svn_mirror_proj_base_url/trunk | grep '^Revision:' | sed 's/[^01-9]//g')
-	branch=trunk
-fi
-
 tmpsvndir=\$(mktemp -d --tmpdir=/tmp ttc-main-svn-XXXXXX)
 
 cd ~/svn-mirror-update-main-sandbox
 check
 
 if [ "\$using_cmdline_args" != "true" ] ; then
+	revision=\$(svn info \$svn_mirror_proj_url | g '^Revision:' | sed 's/[^01-9]//g')
+	check
+	branch=trunk
+fi
+
+if [ "\$branch" == "trunk" ] ; then
 	echo 'Switching to trunk...'
 	svn switch "\$svn_mirror_proj_base_url"/trunk
 	check
-	echo 'Updating to latest revision...'
-	svn update
+	echo 'Updating to revision' \$revision '...'
+	svn update -r \$revision
 	check
 else
-	if [ "\$branch" == "trunk" ] ; then
-		echo 'Switching to trunk...'
-		svn switch "\$svn_mirror_proj_base_url"/trunk
-		check
-		echo 'Updating to revision' \$revision '...'
-		svn update -r \$revision
-		check
-	else
-		echo 'Switching to branch' \$branch '...'
-		svn switch "\$svn_mirror_proj_base_url"/branches/\$branch
-		check
-		echo 'Updating to revision' \$revision '...'
-		svn update -r \$revision
-		check
-	fi
+	echo 'Switching to branch' \$branch '...'
+	svn switch "\$svn_mirror_proj_base_url"/branches/\$branch
+	check
+	echo 'Updating to revision' \$revision '...'
+	svn update -r \$revision
+	check
 fi
-check
 echo '... done updating svn sandbox.'
+
 mkdir \$tmpsvndir/main
 check
 echo 'Copying sandbox content to tmp dir...'
 cp -r . \$tmpsvndir/main
 check
 echo '... done copying.'
+
 cd \$tmpsvndir/main
 check
 ./set-permissions.py 
