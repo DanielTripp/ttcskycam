@@ -18,12 +18,13 @@ from lru_cache import lru_cache
 # 		poll_locations.py. 
 # - Create GET_CURRENT_REPORTS_FROM_DB file in your sandbox. 
 
-FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301', '502', '503', '508'], 'king': ['504', '508', '503'], \
-'spadina': ['510'], \
-'bathurst': ['511', '310', '7'], 'dufferin': ['29', '329'], 'lansdowne': ['47'], 'ossington': ['63', '316'], 'carlton': ['506', '306'], \
-'dupont': ['26'], 'stclair': ['512', '312'], 'keele': ['41'], \
+FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301', '502', '503', '508'], 'king': ['504', '508', '503'], 
+'spadina': ['510'], 
+'bathurst': ['511', '310', '7'], 'dufferin': ['29', '329'], 'lansdowne': ['47'], 'ossington': ['63', '316'], 'carlton': ['506', '306'], 
+'dupont': ['26'], 'stclair': ['512', '312'], 'keele': ['41'], 
+'harbourfront': ['509']
 }
-# 'wellesley': ['94'], 'harbourfront': ['509']}
+# 'wellesley': ['94'] 
 
 CONFIGROUTE_TO_FUDGEROUTES = defaultdict(lambda: [])
 for fudgeroute, configroutes in FUDGEROUTE_TO_CONFIGROUTES.items():
