@@ -116,9 +116,10 @@ def to_json_file(object_, filename_, indent=None):
 
 # Find the mid-point of a loop.  
 # Pass in a completed loop i.e. last point is equal to first point. 
-def split_route_loop(filename_):
+def print_split_route_loop(filename_):
 	latlngs = file_to_latlngs(filename_)
-	assert latlngs[0].dist_m(latlngs[-1]) < 0.01
+	if latlngs[0].dist_m(latlngs[-1]) > 0.01:
+		latlngs.append(latlngs[0])
 	total_metres = sum(p1.dist_m(p2) for p1, p2 in hopscotch(latlngs))
 	cur_metres = 0.0
 	for i in range(1, len(latlngs)):
@@ -139,9 +140,15 @@ def split_route_loop(filename_):
 			path1 = latlngs[0:i] + [midpt]
 			path2 = ([midpt] + latlngs[i:])[::-1]
 			assert abs(dist(path1) - dist(path2)) < 0.001
+			print '['
+			print
 			p(path1)
 			print
+			print ','
+			print
 			p(path2)
+			print
+			print ']'
 			break
 
 if __name__ == '__main__':
