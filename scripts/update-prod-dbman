@@ -38,7 +38,7 @@ cd ~/svn-mirror-update-dbman-sandbox
 check
 
 if [ "\$using_cmdline_args" != "true" ] ; then
-	revision=\$(svn info \$svn_mirror_proj_url | g '^Revision:' | sed 's/[^01-9]//g')
+	revision=\$(svn info \$svn_mirror_proj_base_url | g '^Revision:' | sed 's/[^01-9]//g')
 	check
 	branch=trunk
 fi
