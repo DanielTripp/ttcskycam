@@ -25,7 +25,7 @@ class TimeSample(object):
 if __name__ == '__main__':
 
 	timeframe = sys.argv[1]
-	if timeframe not in ('day', 'week', 'month'):
+	if timeframe not in ('day', '3day', 'week', 'month'):
 		raise Exception('invalid timeframe')
 
 	output_directory = 'report-generation-times'
@@ -36,7 +36,7 @@ if __name__ == '__main__':
 
 	version_to_timesamples = defaultdict(list)
 
-	finishtime_cutoff_numdaysago = {'day': 1, 'week': 7, 'month': 30}[timeframe]
+	finishtime_cutoff_numdaysago = {'day': 1, '3day': 3, 'week': 7, 'month': 30}[timeframe]
 	finishtime_cutoff_em = now_em() - finishtime_cutoff_numdaysago*24*60*60*1000
 
 	for dirpath, dirnames, filenames in os.walk(logs_directory):
