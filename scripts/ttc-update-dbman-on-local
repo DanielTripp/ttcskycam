@@ -2,32 +2,106 @@
 
 cd /tmp
 
+if [ "$#" == "2" ] ; then 
+	revision=$1
+	branch=$2
+	using_cmdline_args=true
+elif [ "$#" == "0" ] ; then
+	using_cmdline_args=false
+else
+	echo 'Wrong number of arguments.  Need either a) a revision and a branch, or b) no arguments (will default to head of trunk.)'
+	exit 1
+fi
+export using_cmdline_args
+export revision
+export branch
+
 tmpsvndir=$(mktemp -d --tmpdir=/tmp ttc-dbman-svn-XXXXXX)
 chown dt $tmpsvndir
 chgrp dt $tmpsvndir
-sudo tmpsvndir=$tmpsvndir -i -u dt bash << _END_
+
+function check () {
+	if [ "$?" != "0" ] ; then echo 'Problem.  Exiting.'; exit 1; fi 
+}
+
+sudo revision=$revision branch=$branch using_cmdline_args=$using_cmdline_args tmpsvndir=$tmpsvndir -i -u dt bash << _END_
+
+function check () {
+	if [ "\$?" != "0" ] ; then echo 'Problem.  Exiting.'; exit 1; fi 
+}
+
 echo 'Synching svn mirror...'
-svn_mirror_proj_url=\$(svn-sync-mirror)
+svn_mirror_proj_base_url=\$(svn-sync-mirror)
 echo '... done.'
-revision=\$(svn info \$svn_mirror_proj_url | g '^Revision:' | sed 's/[^01-9]//g')
-echo "Exporting revision \$revision ..."
-svn --quiet export "\$svn_mirror_proj_url"/trunk@"\$revision" \$tmpsvndir/ttc-dbman
+
+cd ~/svn-mirror-update-dbman-sandbox
+check
+
+if [ "\$using_cmdline_args" != "true" ] ; then
+	revision=\$(svn info \$svn_mirror_proj_url | g '^Revision:' | sed 's/[^01-9]//g')
+	check
+	branch=trunk
+fi
+
+if [ "\$branch" == "trunk" ] ; then
+	echo 'Switching to trunk...'
+	svn switch "\$svn_mirror_proj_base_url"/trunk
+	check
+	echo 'Updating to revision' \$revision '...'
+	svn update -r \$revision
+	check
+else
+	echo 'Switching to branch' \$branch '...'
+	svn switch "\$svn_mirror_proj_base_url"/branches/\$branch
+	check
+	echo 'Updating to revision' \$revision '...'
+	svn update -r \$revision
+	check
+fi
+echo '... done updating svn sandbox.'
+
+mkdir \$tmpsvndir/ttc-dbman
+check
+echo 'Copying sandbox content to tmp dir...'
+cp -r . \$tmpsvndir/ttc-dbman
+check
+echo '... done copying.'
+
 cd \$tmpsvndir/ttc-dbman
+check
 ./set-permissions.py 
+check
 ./mc.py restart dev
+check
+echo 'Priming routeinfos...'
 ./prime_routeinfos.py
+check
+echo '... done.'
 ./prime_graphs.py
+check
 echo 'Mangling...'
 ./mangle_this_sandbox_make_it_dbman.py
+check
+echo '... done mangling.'
 echo "\$revision"-trunk > VERSION 
 _END_
 supervisorctl stop ttc-poll-locations
-sudo tmpsvndir=$tmpsvndir -i -u dt bash << _END_
+sudo revision=$revision branch=$branch using_cmdline_args=$using_cmdline_args tmpsvndir=$tmpsvndir -i -u dt bash << _END_
+
+function check () {
+	if [ "\$?" != "0" ] ; then echo 'Problem.  Exiting.'; exit 1; fi 
+}
+
 rm -rf ~/ttc-dbman
+check
 cd \$tmpsvndir
+check
 mv ttc-dbman ~
+check
 cd /
 rm -rf \$tmpsvndir
 _END_
+check
 supervisorctl start ttc-poll-locations
+check
 
