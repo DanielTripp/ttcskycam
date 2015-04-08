@@ -28,23 +28,24 @@ class VehicleInfo:
 			(True if elem_.getAttribute('predictable').lower() == 'true' else False),
 			froute, croute, 
 			int(elem_.getAttribute('secsSinceReport')),  
-			0L, 0L, None, None, None, None)
+			0L, 0L, None, None, None, None, None)
 		return r
 
 	@classmethod
 	def from_db(cls_, dir_tag_, heading_, vehicle_id_, lat_, lon_, predictable_, fudgeroute_, route_tag_, secs_since_report_, \
-			time_retrieved_, time_, mofr_, widemofr_, graph_locs_str_, graph_version_):
+			time_retrieved_, time_, mofr_, widemofr_, graph_locs_str_, graph_version_, froute_version_):
 		r = cls_(dir_tag_, heading_, vehicle_id_, lat_, lon_, predictable_, fudgeroute_, route_tag_, secs_since_report_, time_retrieved_, time_,
 				 (None if DONT_USE_WRITTEN_MOFRS else mofr_), (None if DONT_USE_WRITTEN_MOFRS else widemofr_), 
-				 graph_locs_str_, graph_version_)
+				 graph_locs_str_, graph_version_, froute_version_)
 		return r
 
 	def __init__(self, dir_tag_, heading_, vehicle_id_, lat_, lon_, predictable_, fudgeroute_, route_tag_, secs_since_report_, \
-				time_retrieved_, time_, mofr_, widemofr_, graph_locs_str_, graph_version_):
+				time_retrieved_, time_, mofr_, widemofr_, graph_locs_str_, graph_version_, froute_version_):
 		assert type(dir_tag_) == str and type(heading_) == int and type(vehicle_id_) == str \
 			and type(lat_) == float and type(lon_) == float \
 			and type(predictable_) == bool and type(route_tag_) == str \
-			and type(secs_since_report_) == int and type(time_retrieved_) == long and type(time_) == long
+			and type(secs_since_report_) == int and type(time_retrieved_) == long and type(time_) == long \
+			and (froute_version_ is None or isinstance(froute_version_, int))
 		self.dir_tag = dir_tag_
 		self.heading = heading_
 		self.vehicle_id = vehicle_id_
@@ -56,8 +57,11 @@ class VehicleInfo:
 				# A few per day according to a brief survey in march 2015. 
 		self.time_retrieved = time_retrieved_
 		self.time = time_
-		self._mofr = mofr_
-		self._widemofr = widemofr_
+		if self.fudgeroute and (froute_version_ == self.get_cur_froute_version()):
+			self._mofr = mofr_
+			self._widemofr = widemofr_
+		else:
+			self._mofr = self._widemofr = None
 		self.is_dir_tag_corrected = False
 		self.is_fudgeroute_corrected = False
 		assert (graph_locs_str_ is None) == (graph_version_ is None)
@@ -72,6 +76,9 @@ class VehicleInfo:
 			return tracks.get_snapgraph()
 		else:
 			return streets.get_snapgraph()
+
+	def get_cur_froute_version(self):
+		return (routes.routeinfo(self.fudgeroute).version if self.fudgeroute else -1)
 
 	def get_cur_graph_version(self):
 		if self.is_a_streetcar():

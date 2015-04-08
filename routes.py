@@ -283,6 +283,7 @@ class Stop:
 class RouteInfo:
 	def __init__(self, routename_):
 		self.name = routename_
+		self.init_version()
 		self.init_routepts()
 		# Note from August 2014: 
 		# I think that I was using stops when I polled predictions as an experiment and/or with old pre-graph 
@@ -290,6 +291,10 @@ class RouteInfo:
 		# I don't use them now, so I don't feel like getting these files as I add new routes. 
 		# So I'm commenting this call to init_stops() out. 
 		#self.init_stops()
+
+	def init_version(self):
+		with open('fudge_route_%s_version.txt' % self.name) as fin:
+			self.version = int(fin.read().strip())
 
 	def init_routepts(self):
 		def read_pts_file(filename_):
