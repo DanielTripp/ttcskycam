@@ -179,7 +179,7 @@ CREATE TABLE ttc_vehicle_locations (
     widemofr integer,
     graph_locs character varying(1000),
     graph_version integer,
-    froute_version integer
+    froute_version integer NOT NULL
 );
 
 
