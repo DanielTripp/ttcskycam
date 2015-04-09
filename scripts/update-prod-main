@@ -47,22 +47,15 @@ if [ "\$using_cmdline_args" != "true" ] ; then
 	branch=trunk
 fi
 
+echo 'Updating sandbox...'
 if [ "\$branch" == "trunk" ] ; then
-	echo 'Switching to trunk...'
-	svn switch "\$svn_mirror_proj_base_url"/trunk
-	check
-	echo 'Updating to revision' \$revision '...'
-	svn update -r \$revision
+	svn switch "\$svn_mirror_proj_base_url"/trunk@\$revision
 	check
 else
-	echo 'Switching to branch' \$branch '...'
-	svn switch "\$svn_mirror_proj_base_url"/branches/\$branch
-	check
-	echo 'Updating to revision' \$revision '...'
-	svn update -r \$revision
+	svn switch "\$svn_mirror_proj_base_url"/branches/\$branch@\$revision
 	check
 fi
-echo '... done updating svn sandbox.'
+echo '... done.'
 
 mkdir \$tmpsvndir/main
 check
