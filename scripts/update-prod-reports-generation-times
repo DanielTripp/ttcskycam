@@ -35,11 +35,11 @@ cd ~/svn-mirror-update-prod-report-generation-times
 check
 
 echo 'Updating sandbox...'
-if [ "\$branch" == "trunk" ] ; then
-	svn switch "\$svn_mirror_proj_base_url"/trunk@\$revision
+if [ "$branch" == "trunk" ] ; then
+	svn switch "$svn_mirror_proj_base_url"/trunk@$revision
 	check
 else
-	svn switch "\$svn_mirror_proj_base_url"/branches/\$branch@\$revision
+	svn switch "$svn_mirror_proj_base_url"/branches/$branch@$revision
 	check
 fi
 echo '... done.'
