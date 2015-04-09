@@ -1,6 +1,7 @@
 #!/usr/bin/python2.6
 
-import sys, os, urlparse, json, pprint, time, pickle, xml.dom, xml.dom.minidom, datetime, subprocess
+import sys, os, urlparse, json, pprint, time, pickle, xml.dom, xml.dom.minidom, datetime, subprocess, random
+from itertools import *
 from collections import defaultdict
 import matplotlib
 matplotlib.use('Agg')
@@ -9,10 +10,15 @@ import matplotlib.dates as mpldates
 import matplotlib.ticker as ticker
 import matplotlib.transforms
 import pylab as pl
+import numpy as np
 from misc import *
 
 def get_color(vid_):
-	colors = [(0,0,0), (0.4,0.4,0.4), (0,1,0), (0,0.4,0), (0.2,0.2,1), (0,0,0.4), (0.4,0.4,0), (0,1,1), (0,0.4,0.4), (1,0,1), (0.4,0,0.4), (1,0,0), (0,0,1)]
+	colors = [(0,0,0), (0.4,0.4,0.4), 
+			(0,1,0), (0,1,1), (1,0,1), (1,0,0), (0,0,1), (0.7,0.7,0), 
+			(0,0.4,0), (0.4,0.4,0), (0,0.4,0.4), (0.4,0,0.4), (0,0,0.4), 
+			(0.2,0.2,1), 
+			]
 	r = colors[hash(vid_) % len(colors)]
 	return r
 
@@ -23,6 +29,8 @@ class TimeSample(object):
 		self.timetaken = timetaken_
 
 if __name__ == '__main__':
+
+	random.seed(37)
 
 	timeframe = sys.argv[1]
 	if timeframe not in ('day', '3day', 'week', 'month'):
@@ -81,25 +89,51 @@ if __name__ == '__main__':
 		ys = [0.85, 0.90, 0.95]
 		return ys[versionidx_ % len(ys)]
 
+	max_yval = 120
+
 	for versionidx, version in enumerate(versions_in_time_order):
 		timesamples = version_to_timesamples[version]
-		xvals = [em_to_datetime(s.finishtime) for s in timesamples]
-		yvals = [s.timetaken for s in timesamples]
+
+		regular_xvals = []; too_high_xvals = []; regular_yvals = []
+		for timesample in timesamples:
+			if timesample.timetaken < 120:
+				regular_xvals.append(em_to_datetime(timesample.finishtime))
+				regular_yvals.append(timesample.timetaken)
+			else:
+				too_high_xvals.append(em_to_datetime(timesample.finishtime))
+
+		color = get_color(version)
+		plt.plot(regular_xvals, regular_yvals, color=color, marker='+', linestyle='None')
 
 		textx = float(versionidx+1)/(len(version_to_timesamples)+1)
-		ax.annotate(version, xy=(xvals[0], yvals[0]), textcoords='axes fraction', xytext=(textx, get_texty(versionidx)), 
-				arrowprops=dict(arrowstyle='->'))
+		arrow_target_x = average(datetime_to_em(x) for x in chain(regular_xvals, too_high_xvals))
+		all_xvals_em = [datetime_to_em(x) for x in regular_xvals + too_high_xvals]
+		min_x_em = min(all_xvals_em)
+		max_x_em = max(all_xvals_em)
+		arrow_target_x = em_to_datetime(average([min_x_em, max_x_em]))
+		if regular_yvals:
+			some_random_yvals = []
+			for i in xrange(100):
+				some_random_yvals.append(random.choice(regular_yvals))
+			arrow_target_y = average(some_random_yvals)*1.1
+		else:
+			arrow_target_y = max_yval
+		ax.annotate(version, xy=(arrow_target_x, arrow_target_y), textcoords='axes fraction', xytext=(textx, get_texty(versionidx)), 
+				arrowprops=dict(arrowstyle='->'), color=color)
 
-		plt.plot(xvals, yvals, color=get_color(version), marker='+', linestyle='None')
-
-	plt.axhline(15,  color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
+	plt.axhline(10,  color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
+	plt.axhline(20,  color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
 	plt.axhline(30,  color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
-	plt.axhline(45,  color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
+	plt.axhline(40,  color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
+	plt.axhline(50,  color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
 	plt.axhline(60,  color='black',       alpha=0.5, linestyle='-')
-	plt.axhline(75,  color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
+	plt.axhline(70,  color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
+	plt.axhline(80,  color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
 	plt.axhline(90,  color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
-	plt.axhline(105, color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
+	plt.axhline(100,  color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
+	plt.axhline(110, color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
 	plt.axhline(120, color=(0.5,0.5,0.5), alpha=0.5, linestyle='-')
+	plt.yticks(np.arange(0, max_yval, 10)) # Do this after the axhline() calls or else the min value might not be respected. 
 
 	fig.autofmt_xdate()
 
