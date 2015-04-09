@@ -22,9 +22,8 @@ FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301', '502', 
 'spadina': ['510'], 
 'bathurst': ['511', '310', '7'], 'dufferin': ['29', '329'], 'lansdowne': ['47'], 'ossington': ['63', '316'], 'carlton': ['506', '306'], 
 'dupont': ['26'], 'stclair': ['512', '312'], 'keele': ['41'], 
-'harbourfront': ['509']
+'harbourfront': ['509'], 'wellesley': ['94']
 }
-# 'wellesley': ['94'] 
 
 CONFIGROUTE_TO_FUDGEROUTES = defaultdict(lambda: [])
 for fudgeroute, configroutes in FUDGEROUTE_TO_CONFIGROUTES.items():
@@ -317,7 +316,7 @@ class RouteInfo:
 		if self.is_split_by_dir:
 			len_dir_0 = geom.dist_m_polyline(self.routepts(0)); len_dir_1 = geom.dist_m_polyline(self.routepts(1))
 			if abs(len_dir_0 - len_dir_1) > 0.1:
-				printerr('route %s: dir 0 length: %0.2f.  dir 1 length: %0.2f.' % (self.name, len_dir_0, len_dir_1))
+				printerr('route %s: lengths are unequal.  dir 0 length: %0.4f.  dir 1 length: %0.4f.' % (self.name, len_dir_0, len_dir_1))
 				assert False
 
 	def init_datazoom_to_dir_maps(self):

@@ -145,9 +145,28 @@ def prime_memcache():
 			for guizoom in GUIZOOMS_WITH_STREETLABELS:
 				get_labels_for_zoom(froute, direction, guizoom)
 
+def get_streetlabel_filename(text_, rotation_, zoom_):
+	return 'streetlabel_%s_%d_%d.png' % (text_.replace(' ', '_'), rotation_, zoom_)
+
+def build_streetlabel_images(froute_=None):
+	texts_rotations_zooms = set()
+	for zoom in GUIZOOMS_WITH_STREETLABELS:
+		for froute in ([froute_] if froute_ is not None else routes.NON_SUBWAY_FUDGEROUTES):
+			for direction in (0, 1):
+				for label in get_labels_for_zoom(froute, direction, zoom):
+					text = label['text']; rotation = label['rotation']
+					texts_rotations_zooms.add((text, rotation, zoom))
+	
+	pngfilenames_and_svgstrs = []
+	for text, rotation, zoom in texts_rotations_zooms:
+		png_filename = os.path.join('img', get_streetlabel_filename(text, rotation, zoom))
+		svgstr = get_streetlabel_svg(text, rotation, zoom)
+		pngfilenames_and_svgstrs.append((png_filename, svgstr))
+
+	svgs_to_pngs(pngfilenames_and_svgstrs)
+
 if __name__ == '__main__':
 
-	import pprint
-	pprint.pprint(get_labels_for_zoom('keele', 1, 21))
+	pass
 
 

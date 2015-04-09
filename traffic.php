@@ -148,7 +148,7 @@ var GUIZOOM_TO_METERSPERPIXEL = {10: 102.4, 11: 51.2, 12: 25.6, 13: 12.8, 14: 6.
 var GUIZOOM_TO_TRAFFIC_LINE_WIDTH = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 2, 7, 8, 8, 10, 13, 16, 22, 42, 42];
 
 function init_dev_option_values() {
-	<?php # UN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
+	<?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION
 	if(file_exists('dev-options-for-traffic-php.txt')) {
 		foreach(explode("\n", file_get_contents('dev-options-for-traffic-php.txt')) as $line) {
 			if($line != "") {
