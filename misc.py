@@ -335,27 +335,27 @@ def firstidx(iterable_, predicate_):
 	raise Exception('Predicate was false for all elements.')
 
 def round_down_by_minute(t_em_):
-	dt = datetime.datetime.utcfromtimestamp(t_em_/1000.0)
+	dt = datetime.datetime.fromtimestamp(t_em_/1000.0)
 	dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute) # Omitting second on purpose.  That's what
 			# does the rounding down.
 	r = datetime_to_em(dt)
 	return r
 
 def round_down_by_minute_step(t_em_, step_):
-	dt = datetime.datetime.utcfromtimestamp(t_em_/1000.0)
+	dt = datetime.datetime.fromtimestamp(t_em_/1000.0)
 	dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, round_down(dt.minute, step_)) # Omitting second on purpose.  That's what
 			# does the rounding down by minute.
 	r = long(calendar.timegm(dt.timetuple())*1000)
 	return r
 
 def datetime_to_em(datetime_):
-	return long(calendar.timegm(datetime_.timetuple())*1000)
+	return long(time.mktime(datetime_.timetuple())*1000) + datetime_.microsecond/1000
 
 def em_to_datetime(em_):
-	return datetime.datetime.utcfromtimestamp(em_/1000.0)
+	return datetime.datetime.fromtimestamp(em_/1000.0)
 
 def round_up_by_minute(t_em_):
-	dt = datetime.datetime.utcfromtimestamp(t_em_/1000.0)
+	dt = datetime.datetime.fromtimestamp(t_em_/1000.0)
 	dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
 	if dt.second > 0 or (0 < t_em_ - round_down_by_minute(t_em_) < 1000):
 		dt -= datetime.timedelta(seconds=dt.second)
