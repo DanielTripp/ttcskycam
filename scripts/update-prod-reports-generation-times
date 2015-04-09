@@ -34,32 +34,15 @@ tmp_sandbox_copy_dir=$(mktemp -d --tmpdir=/tmp ttc-sandbox-copy-for-report-gener
 cd ~/svn-mirror-update-prod-report-generation-times
 check
 
-if [ "$using_cmdline_args" != "true" ] ; then
-	echo 'Switching to trunk...'
-	svn switch "$svn_mirror_proj_base_url"/trunk
-	check
-	echo 'Updating to latest revision...'
-	svn update
+echo 'Updating sandbox...'
+if [ "\$branch" == "trunk" ] ; then
+	svn switch "\$svn_mirror_proj_base_url"/trunk@\$revision
 	check
 else
-	if [ "$branch" == "trunk" ] ; then
-		echo 'Switching to trunk...'
-		svn switch "$svn_mirror_proj_base_url"/trunk
-		check
-		echo 'Updating to revision' $revision '...'
-		svn update -r $revision
-		check
-	else
-		echo 'Switching to branch' $branch '...'
-		svn switch "$svn_mirror_proj_base_url"/branches/$branch
-		check
-		echo 'Updating to revision' $revision '...'
-		svn update -r $revision
-		check
-	fi
+	svn switch "\$svn_mirror_proj_base_url"/branches/\$branch@\$revision
+	check
 fi
-check
-echo '... done updating svn sandbox.'
+echo '... done.'
 
 echo 'Copying sandbox content to tmp dir...'
 cp -r . $tmp_sandbox_copy_dir
