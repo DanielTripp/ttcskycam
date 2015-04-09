@@ -119,4 +119,26 @@ harbourfront:
         3420: Manitoba Dr
         3579: ''
 
+wellesley:
+    0:
+        0: Ossington Ave
+        463: Harbord St
+        2995: Queens Park Crescent
+        3232: Wellesley St W
+        3970: Wellesley St E
+        5243: Parliament St
+        5628: ''
+        5686: Bloor St E
+        5847: ''
+    1:
+        0: Ossington Ave
+        463: Harbord St
+        2995: Queens Park Crescent
+        3456: Wellesley St W
+        3970: Wellesley St E
+        5243: Parliament St
+        5628: ''
+        5686: Bloor St E
+        5847: ''
+
 

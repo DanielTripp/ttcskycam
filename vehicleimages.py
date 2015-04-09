@@ -52,6 +52,20 @@ def build_vehicle_icon_images():
 					do_imagemagick_convert(src_filename, dest_filename, opacity, size)
 	
 
+def get_vehicle_arrow_filename(size_, heading_, static_aot_moving_):
+	return 'vehicle_arrow_%d_%d_%s.png' % (size_, heading_, ('static' if static_aot_moving_ else 'moving'))
+
+def build_vehicle_arrow_images():
+	pngfilenames_and_svgstrs = []
+	for size in get_all_vehicle_img_sizes():
+		for heading in range(0, 360, HEADING_ROUNDING):
+			for static_aot_moving in (True, False):
+				png_filename = os.path.join('img', get_vehicle_arrow_filename(size, heading, static_aot_moving))
+				svgstr = get_vehicle_arrow_svg_by_client_args(size, heading, static_aot_moving)
+				pngfilenames_and_svgstrs.append((png_filename, svgstr))
+
+	svgs_to_pngs(pngfilenames_and_svgstrs)
+	
 if __name__ == '__main__':
 
 	build_vehicle_icon_images()
