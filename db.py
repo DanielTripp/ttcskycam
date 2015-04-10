@@ -212,13 +212,38 @@ MIN_DESIRABLE_DIR_STRETCH_LEN = 6
 # if widemofrs go like this: [0, 50, 100, 101, 100, 101, 100, 101, 100, 150, 200, ...] do we throw out the whole middle part
 # [100, 101, 100, 101, 100]?  Wouldn't it be better if we tried to keep the two 101s in there?  That would give us more accurate
 # interpolations in that area.
+#
+# Note 23946278623746 
+# Here we're making an effort, in a place where the vehicle is turning around, 
+# to get one more vi than we would if we just looked at the dirtag.  Doing this 
+# because the dirtags aren't perfect and are often a little slow to change - 
+# being 1 for the first vi after a turn-around when it should be 0, and vice 
+# versa.  eg. when the vi mofrs are like this: 75, 0, 25, 500, ....  The "25" 
+# vi will probably be set to 1 during our "fix dirtags" stage (which has 
+# already happened), because the difference between 0 and 25 is less than the 
+# threshold required for that code to consider it a change in direction.  In an 
+# area where the vehicles are slow for the first couple of minutes in the new 
+# direction, this won't be much of a problem.  But if they're fast enough (for 
+# example, going from mofr 25 to 500 in a minute) then there will be a visually 
+# large stretch where that vehicle doesn't show up.  I noticed this on the 
+# wellesley on ossington.  
 @lru_cache(10)
 def get_vid_to_vis_singledir(fudge_route_, dir_, num_minutes_, end_time_em_, log_=False):
 	assert dir_ in (0, 1)
 	src = get_vid_to_vis_bothdirs(fudge_route_, num_minutes_, end_time_em_, log_=log_)
 	r = {}
 	for vid, vis in src.iteritems():
-		r[vid] = [vi for vi in vis if vi.dir_tag_int == dir_]
+		out_vis = []
+		for i, vi in enumerate(vis):
+			if vi.dir_tag_int == dir_:
+				out_vis.append(vi)
+			elif i < len(vis)-1:
+				# See note 23946278623746 
+				next_vi = vis[i+1]
+				if next_vi.dir_tag_int == dir_ and \
+						(next_vi.widemofr > vi.widemofr if dir_ == 0 else next_vi.widemofr < vi.widemofr):
+					out_vis.append(vi)
+		r[vid] = out_vis
 	return r
 
 # 'stretch' here means a list of consecutive (time-wise) vis, for a single vehicle, 
@@ -776,7 +801,9 @@ def prune_interp_patchcache(time_window_):
 		for vid in vids_to_remove:
 			del g_interp_patchcache_vid_to_infos[vid]
 
-# important_vi_idxes_ None means they're all important.   Non-None means we're patching. 
+# Note 238947623476324: here we're ignoring the direction of lo_vi for the same reason discussed at note 23946278623746. 
+# 
+# arg important_vi_idxes_: None means they're all important.   Non-None means we're patching. 
 def interp_impl(r_interptime_to_vi_, interptimes_, important_vi_idxes_, vis_, grades_, paths_, 
 		be_clever_, current_conditions_, dir_, datazoom_, log_):
 	if important_vi_idxes_ is not None:
@@ -795,7 +822,7 @@ def interp_impl(r_interptime_to_vi_, interptimes_, important_vi_idxes_, vis_, gr
 		time_ratio = 0.0
 		if lo_vi and hi_vi:
 			if be_clever_ and ((min(interptime - lo_vi.time, hi_vi.time - interptime) > 3*60*1000) or dirs_disagree(dir_, hi_vi.dir_tag_int)\
-					or dirs_disagree(lo_vi.dir_tag_int, dir_) or (lo_vi.fudgeroute != hi_vi.fudgeroute)):
+					or (lo_vi.fudgeroute != hi_vi.fudgeroute)): # see note 238947623476324 
 				continue
 			time_ratio = (interptime - lo_vi.time)/float(hi_vi.time - lo_vi.time)
 			lo_grade = grades_[lo_idx]; hi_grade = grades_[hi_idx]
