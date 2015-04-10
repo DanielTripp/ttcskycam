@@ -57,7 +57,7 @@ class VehicleInfo:
 				# A few per day according to a brief survey in march 2015. 
 		self.time_retrieved = time_retrieved_
 		self.time = time_
-		if self.fudgeroute and (froute_version_ == self.get_cur_froute_version()):
+		if self.fudgeroute and (froute_version_ is None or froute_version_ == self.get_cur_froute_version()):
 			self._mofr = mofr_
 			self._widemofr = widemofr_
 		else:
