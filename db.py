@@ -1128,7 +1128,6 @@ def nonpath_interp_single_latlonnheadingnmofr(vi1_, vi2_, time_ratio_, datazoom_
 	can_be_clever = vi1_.dir_tag and vi2_.dir_tag and (vi1_.fudgeroute == vi2_.fudgeroute)
 	being_clever = be_clever_ and can_be_clever
 	if being_clever:
-		assert (vi1_.dir_tag_int == vi2_.dir_tag_int)
 		froute = vi1_.fudgeroute
 		if vi1_.mofr!=-1 and vi2_.mofr!=-1:
 			interp_mofr = geom.avg(vi1_.mofr, vi2_.mofr, time_ratio_)
