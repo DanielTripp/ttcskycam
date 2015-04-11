@@ -977,8 +977,8 @@ def get_stops_dir_to_stoptag_to_latlng(froute_):
 			r[direction][stoptag] = (stop.latlng.lat, stop.latlng.lng)
 	return r
 
-def routepts(froute_, dir_):
-	return routeinfo(froute_).routepts(dir_)
+def routepts(froute_, dir_, datazoom_):
+	return routeinfo(froute_).routepts(dir_, datazoom_)
 
 @lru_cache(1)
 @mc.decorate
