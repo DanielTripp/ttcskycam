@@ -1479,7 +1479,8 @@ def get_latest_report_time_impl(froute_, dir_):
 		for row in curs:
 			reports_time = row[0]
 			return reports_time
-		raise Exception('Either the most current report in database is too old, or no reports for this app version exist.')
+		raise Exception('route=%s, dir=%d - either the most current report in database is too old (max age=%d minutes), '\
+				'or no reports for this app version (%s) exist.' % (froute_, dir_, c.REPORTS_MAX_AGE_MINS, c.VERSION))
 	finally:
 		curs.close()
 
