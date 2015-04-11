@@ -5,19 +5,6 @@ import vinfo, geom, mc, c, snapgraph, picklestore, util
 from misc import *
 from lru_cache import lru_cache
 
-# To add a new route: 
-# - Add to FUDGEROUTE_TO_CONFIGROUTES below. 
-# - Make a fudge_route_FROUTE.json file, or fudge_route_FROUTE_dir0.json and fudge_route_FROUTE_dir1.json files.
-# - Make stops file by running: ./get_stoplist_from_routeconfig_multiple.py NAME 
-# - Maybe add special case in get_froute_to_english() (routes.get_froute_to_english()).
-# - ./mc.py restart dev  ,  touch callpy.wsgi  
-# - Add to debug-route.html 
-# - Add street labels to streetlabels.yaml  
-# - Build street label images with python -c "import build_images; build_images.build_streetlabel_images(['NAME'])"
-# - Create DONT_USE_WRITTEN_MOFRS flag file in your sandbox, if the route is already in the 'extra routes' list of dbman's 
-# 		poll_locations.py. 
-# - Create GET_CURRENT_REPORTS_FROM_DB file in your sandbox. 
-
 FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301', '502', '503', '508'], 'king': ['504', '508', '503'], 
 'spadina': ['510'], 
 'bathurst': ['511', '310', '7'], 'dufferin': ['29', '329'], 'lansdowne': ['47'], 'ossington': ['63', '316'], 'carlton': ['506', '306'], 
@@ -341,6 +328,12 @@ class RouteInfo:
 					dir_to_routepts[direction] = self.calc_simplified_routepts(direction, datazoom)
 			self.datazoom_to_dir_to_routeptaddr_to_mofr[datazoom] = self.calc_dir_to_routeptaddr_to_mofr(datazoom)
 
+	# Modifies nothing.  Returns list of points. 
+	def calc_simplified_routepts(self, direction_, datazoom_):
+		raw_routepts = self.routepts(direction_, None)
+		epsilon = c.DATAZOOM_TO_RDP_EPSILON[datazoom_]
+		return  geom.get_simplified_polyline_via_rdp_algo(raw_routepts, epsilon)
+
 	# We could almost use snapgraph's function for doing this sort of thing, and have a snapgraph for each datazoom, but 
 	# that wouldn't work because at each higher datazoom, the route becomes shorter. 
 	def calc_dir_to_routeptaddr_to_mofr(self, datazoom_):
@@ -444,10 +437,9 @@ class RouteInfo:
 	@lru_cache(5000)
 	def latlon_to_mofrndist(self, post_, tolerance_=0):
 		assert isinstance(post_, geom.LatLng) and (tolerance_ in (0, 1, 1.5, 2))
-		# Please make sure that this continues to support something greater than the greatest possible rsdt 
-		# (route-simplifying distance tolerance), 
-		# and that the code that builds the routeptidx -> mofr map for each rsdt, and presumably calls this function, 
-		# uses a tolerance argument to this function that is higher than the greatest rsdt. 
+		# Please make sure that this continues to support something greater than the greatest possible rdp epsilon, 
+		# and that the code that builds the routeptidx -> mofr map for each epsilon, and presumably calls this function, 
+		# uses a tolerance argument to this function that is higher than the greatest epsilon. 
 		# Otherwise a lot of things will be broken. 
 		posaddr, dist = self.snapgraph.snap_with_dist(post_, {0:50, 1:300, 1.5:600, 2:2000}[tolerance_])
 		if posaddr is None:
@@ -515,80 +507,6 @@ class RouteInfo:
 	def routepts(self, dir_, datazoom_=None):
 		assert dir_ in (0, 1)
 		return self.datazoom_to_dir_to_routepts[datazoom_][dir_]
-
-	def calc_simplified_routepts(self, dir_, datazoom_):
-		assert datazoom_ is not None and datazoom_ in c.VALID_DATAZOOMS
-		mofr_incr = 20
-		r = []
-		prev_end_mofr = 0	
-		r.append(self.mofr_to_latlon(0, dir_))
-		while prev_end_mofr < self.max_mofr():
-			start_mofr = prev_end_mofr
-			for end_mofr in frange(start_mofr+mofr_incr, self.max_mofr()-1, mofr_incr):
-				if self.is_candidate_simplified_lineseg_too_long(dir_, start_mofr, end_mofr, datazoom_):
-					while True:
-						end_mofr -= 1
-						if not self.is_candidate_simplified_lineseg_too_long(dir_, start_mofr, end_mofr, datazoom_):
-							break
-					while True:
-						end_mofr += 0.05
-						if self.is_candidate_simplified_lineseg_too_long(dir_, start_mofr, end_mofr, datazoom_):
-							break
-					end_mofr -= 0.05
-					r.append(self.mofr_to_latlon(end_mofr, dir_))
-					break
-			else:
-				r.append(self.mofr_to_latlon(self.max_mofr()-1, dir_))
-				break
-			prev_end_mofr = end_mofr
-		return r
-
-	def is_candidate_simplified_lineseg_too_long(self, dir_, start_mofr_, end_mofr_, datazoom_):
-		assert end_mofr_ > start_mofr_
-		r = self.does_simplified_lineseg_deviate_too_much(dir_, start_mofr_, end_mofr_, datazoom_)
-		if not self.is_subway():
-			mofrstep = c.DATAZOOM_TO_MOFRSTEP[datazoom_]
-
-			# Using the same logic that is found throughout traffic.py, if the mofrstep is eg. 100, then traffic will be 
-			# calculated at mofrs 0, 100, 200, 300, etc., and if you want to know the traffic at mofr 149 you should consult 
-			# mofr 100, and if you want to know the traffic at mofr 151 you should consult 200.   This results in the lines being 
-			# drawn offset by half of mofrstep - eg. one line from 50 to 150, the next from 150 to 250 (more or less.  I'm not 
-			# bothering with off-by-ones here.) 
-			start_mofr_ref = roundbystep(start_mofr_, mofrstep); end_mofr_ref = roundbystep(end_mofr_, mofrstep)
-			start_and_end_are_not_in_adjacent_mofrstep_segments = (end_mofr_ref - start_mofr_ref > mofrstep)
-
-			r |= start_and_end_are_not_in_adjacent_mofrstep_segments
-		return r
-
-	def does_simplified_lineseg_deviate_too_much(self, dir_, start_mofr_, end_mofr_, datazoom_):
-		r = False
-		simplified_lineseg = geom.LineSeg(self.mofr_to_latlon(start_mofr_, dir_), self.mofr_to_latlon(end_mofr_, dir_))
-		# These routeptaddr are for datazoom == None i.e. the unsimplified route: 
-		start_routeptaddr = self.mofr_to_lorouteptaddr(start_mofr_, dir_)
-		end_routeptaddr = self.mofr_to_lorouteptaddr(end_mofr_, dir_)
-
-		# check deviation (by distance) of simplified lineseg to unsimplified route. 
-		for routeptaddr in range(start_routeptaddr+1, end_routeptaddr+1):
-			routept = self.routepts(dir_, None)[routeptaddr]
-			if routept.dist_to_lineseg(simplified_lineseg) > c.DATAZOOM_TO_RSDT[datazoom_]:
-				r = True
-				break
-
-		if not r:
-			# check heading differences: 
-			heading_tolerance = 25
-			simplified_lineseg_heading = simplified_lineseg.heading()
-			# Not checking the heading of the unsimplified route segment that start point is on b/c of the common case where it is 1 meter 
-			# or less before a sharp corner.  If we checked it then we'd never get anywhere, or would need a special case in some other way.  
-			# So we let the distance deviation check above take care of things there. 
-			for routeptaddr1, routeptaddr2 in hopscotch(range(start_routeptaddr+1, end_routeptaddr+2)):
-				routept1 = self.routepts(dir_, None)[routeptaddr1]; routept2 = self.routepts(dir_, None)[routeptaddr2]
-				unsimplified_route_seg_heading = routept1.heading(routept2)
-				if geom.diff_headings(unsimplified_route_seg_heading, simplified_lineseg_heading) > heading_tolerance:
-					r = True
-					break
-
-		return r
 
 	def dir_from_latlngs(self, latlng1_, latlng2_):
 		mofr1 = self.latlon_to_mofr(latlng1_, tolerance_=2)
@@ -1019,8 +937,10 @@ def get_subway_froute_to_datazoom_to_routepts():
 # You can see the difference in the generated pickle files yourself (if you call this function from this module as a main 
 # vs. from another module when imported as "import routes" and examine the pickled output.  You might try text mode 
 # i.e. protocol=0 to pickle.dump()).
-def prime_routeinfos():
+def prime_routeinfos(log=False):
 	for froute in sorted(FUDGEROUTES):
+		if log:
+			print 'Priming route %s...' % froute
 		routeinfo(froute)
 
 if __name__ == '__main__':
