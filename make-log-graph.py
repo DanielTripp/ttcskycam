@@ -36,7 +36,7 @@ if __name__ == '__main__':
 	if timeframe not in ('day', '3day', 'week', 'month'):
 		raise Exception('invalid timeframe')
 
-	output_directory = 'report-generation-times'
+	output_directory = 'log-graphs'
 	logs_directory = '~/ttc-logs'
 
 	output_directory = os.path.abspath(os.path.join(os.path.dirname(sys.argv[0]), output_directory))
