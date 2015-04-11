@@ -133,50 +133,63 @@ def wait_for_locations_poll_to_finish():
 			break
 
 		if (cur_wait_secs >= MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS) and (prev_wait_secs < MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS):
-			printerr('%s - reports: watched poll locations flag file for %d seconds, still hasn\'t been touched.' % (now_str(), MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS))
+			printerr('%s - reports: watched poll locations flag file for %d seconds, still hasn\'t been touched.  --poll-slow--' % (now_str(), MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS))
 			
 		time.sleep(2)
 
 	if cur_wait_secs > MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS:
-		printerr('%s - reports: watched poll locations flag file for %d seconds before it was touched.' % (now_str(), cur_wait_secs))
+		printerr('%s - reports: watched poll locations flag file for %d seconds before it was touched.  --poll-slow--' % (now_str(), cur_wait_secs))
 
 g_froute_to_times = None
 
 def make_all_reports_and_insert_into_db_once(report_time_, shardpool_):
 	global g_froute_to_times
 	if shardpool_ is not None:
-		shardpool_.map(make_reports_and_insert_into_db_single_route, [(report_time_, froute) for froute in FROUTES])
+		got_errors_by_froute = shardpool_.map(make_reports_and_insert_into_db_single_route, [(report_time_, froute) for froute in FROUTES])
+		got_errors = any(got_errors_by_froute)
 	else:
+		got_errors = False
 		for froute in FROUTES:
-			make_reports_and_insert_into_db_single_route(report_time_, froute)
+			got_errors_this_froute = make_reports_and_insert_into_db_single_route(report_time_, froute)
+			got_errors |= got_errors_this_froute
 	if LOG_INDIV_ROUTE_TIMES:
 		if g_froute_to_times is None:
 			g_froute_to_times = defaultdict(list)
 		for froute, times in g_froute_to_times.iteritems():
 			printerr(froute, average(times))
+	if got_errors:
+		sys.exit(37)
 
 @multiproc.include_entire_traceback
 def make_reports_and_insert_into_db_single_route(report_time_, froute_):
 	global g_froute_to_times
 	if LOG_INDIV_ROUTE_TIMES:
 		t0 = time.time()
+	got_errors = False
 	for direction in (0, 1):
 		reporttype_to_datazoom_to_reportdataobj = defaultdict(lambda: {})
 		for datazoom in c.VALID_DATAZOOMS:
 			try:
 				traffic_data = traffic.get_traffics_impl(froute_, direction, datazoom, report_time_)
 				reporttype_to_datazoom_to_reportdataobj['traffic'][datazoom] = traffic_data
+			except:
+				printerr('%s - error generating traffic report for %s / %s / dir=%d / datazoom=%d --generate-error--' % (now_str(), em_to_str(report_time_), froute_, direction, datazoom))
+				traceback.print_exc()
+				got_errors = True
+			try:
 				locations_data = traffic.get_recent_vehicle_locations_impl(froute_, direction, datazoom, report_time_)
 				reporttype_to_datazoom_to_reportdataobj['locations'][datazoom] = locations_data
 			except:
-				printerr('%s - problem generating reports for %s / %s / dir=%d / datazoom=%d' % (now_str(), em_to_str(report_time_), froute_, direction, datazoom))
+				printerr('%s - error generating locations report for %s / %s / dir=%d / datazoom=%d --generate-error--' % (now_str(), em_to_str(report_time_), froute_, direction, datazoom))
 				traceback.print_exc()
-				raise
+				got_errors = True
+	if not got_errors:
 		db.insert_reports(froute_, direction, report_time_, reporttype_to_datazoom_to_reportdataobj)
 	if LOG_INDIV_ROUTE_TIMES:
 		t1 = time.time()
 		if g_froute_to_times is not None:
 			g_froute_to_times[froute_].append(t1 - t0)
+	return got_errors
 
 def make_shardpool():
 	return multiproc.ShardPool(shardfunc, 8)
@@ -186,6 +199,7 @@ def shardfunc(func_, args_):
 	froute = args_[1]
 	assert froute in routes.NON_SUBWAY_FUDGEROUTES
 	froute_to_shard = {
+			# These choices were arrived at by experiments: 
 			'king': 5,
 			'queen': 0,
 			'dufferin': 1,
@@ -197,7 +211,10 @@ def shardfunc(func_, args_):
 			'dupont': 4,
 			'lansdowne': 5,
 			'ossington': 6,
-			'stclair': 7
+			'stclair': 7, 
+			# These weren't: 
+			'wellesley': 0, 
+			'harbourfront': 1, 
 		}
 	return froute_to_shard[froute]
 
@@ -211,7 +228,7 @@ def make_all_reports_and_insert_into_db_forever(shardpool_, redir_):
 		make_all_reports_and_insert_into_db_once(round_up_by_minute(now_em()), shardpool_)
 		t1 = time.time()
 		reports_took_secs = t1 - t0
-		printerr('%s,%d,%s' % (now_str(), reports_took_secs, c.VERSION))
+		printerr('%s,%d,%s,--generate-time--' % (now_str(), reports_took_secs, c.VERSION))
 		sys.stdout.flush()
 		sys.stderr.flush()
 

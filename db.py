@@ -1498,7 +1498,6 @@ def insert_reports(froute_, dir_, time_, reporttype_to_datazoom_to_reportdataobj
 	reporttype_to_datazoom_to_reportjson = defaultdict(lambda: {})
 	for reporttype, datazoom_to_reportdataobj in reporttype_to_datazoom_to_reportdataobj_.iteritems():
 		assert reporttype in ('traffic', 'locations') 
-		assert set(datazoom_to_reportdataobj.keys()) == set(c.VALID_DATAZOOMS)
 		for datazoom, reportdataobj in datazoom_to_reportdataobj.iteritems():
 			reporttype_to_datazoom_to_reportjson[reporttype][datazoom] = util.to_json_str(reportdataobj)
 	
