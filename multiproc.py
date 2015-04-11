@@ -47,14 +47,14 @@ class ShardPool(object):
 
 	def map(self, func_, argses_):
 		async_results = []
-		exc = None
+		exc_info = None
 		for args in argses_:
 			try:
 				async_results.append(self.apply_async(func_, args))
-			except e:
-				exc = e
-		if exc is not None:
-			raise exc
+			except BaseException as e:
+				exc_info = sys.exc_info()
+		if exc_info is not None:
+			raise exc_info[0], exc_info[1], exc_info[2]
 		return [async_result.get() for async_result in async_results]
 
 if __name__ == '__main__':
