@@ -1,5 +1,6 @@
 - route points 
 - version file
+- street labels 
 - shard function
 - make sure the route doesn't go anywhere tracks and streets don't.
 - run ./prime_routeinfos.py from command-line first.  (permission problem in 

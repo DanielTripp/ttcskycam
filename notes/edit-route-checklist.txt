@@ -1,0 +1,4 @@
+- version txt file 
+- street labels
+- delete routeinfo in picklestore, then run prime_routeinfos.py from command line
+
