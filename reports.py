@@ -183,8 +183,8 @@ def make_reports_and_insert_into_db_single_route(report_time_, froute_):
 				printerr('%s - error generating locations report for %s / %s / dir=%d / datazoom=%d --generate-error--' % (now_str(), em_to_str(report_time_), froute_, direction, datazoom))
 				traceback.print_exc()
 				got_errors = True
-	if not got_errors:
-		db.insert_reports(froute_, direction, report_time_, reporttype_to_datazoom_to_reportdataobj)
+		if not got_errors:
+			db.insert_reports(froute_, direction, report_time_, reporttype_to_datazoom_to_reportdataobj)
 	if LOG_INDIV_ROUTE_TIMES:
 		t1 = time.time()
 		if g_froute_to_times is not None:
