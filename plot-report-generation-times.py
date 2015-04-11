@@ -58,7 +58,7 @@ if __name__ == '__main__':
 			with open(full_filename) as fin:
 				for line in fin:
 					splits = line.strip().split(',')
-					if len(splits) == 3 and (splits[0].startswith(str(current_year())) or splits[0].startswith(str(current_year()-1))):
+					if len(splits) >= 3 and (splits[0].startswith(str(current_year())) or splits[0].startswith(str(current_year()-1))):
 						# Must be a generation time log line.
 						finishtime_em = str_to_em(splits[0])
 						if finishtime_em > finishtime_cutoff_em:
