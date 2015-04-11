@@ -6,7 +6,7 @@ from lru_cache import lru_cache
 import geom
 from misc import *
 
-DEFAULT_LATSTEP = 0.000875; DEFAULT_LNGSTEP = 0.00125
+DEFAULT_LATSTEP = 0.000875; DEFAULT_LNGSTEP = 0.00125 # implies squares about 100 meters on a side.
 
 # Grid squares are offset from a point that has no large importance, it just makes for more easily
 # readable values during debugging:
