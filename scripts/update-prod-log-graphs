@@ -29,9 +29,9 @@ if [ "$using_cmdline_args" != "true" ] ; then
 	branch=trunk
 fi
 
-tmp_sandbox_copy_dir=$(mktemp -d --tmpdir=/tmp ttc-sandbox-copy-for-report-generation-XXXXXX)
+tmp_sandbox_copy_dir=$(mktemp -d --tmpdir=/tmp ttc-sandbox-copy-for-log-graphs-XXXXXX)
 
-cd ~/svn-mirror-update-prod-report-generation-times
+cd ~/svn-mirror-update-prod-log-graphs
 check
 
 echo 'Updating sandbox...'
@@ -60,17 +60,17 @@ echo '... done mangling.'
 
 echo "$revision"-"$branch" > VERSION 
 
-./plot-report-generation-times.py month
+./make-log-graph.py month
 check
-./plot-report-generation-times.py week
+./make-log-graph.py week
 check
-./plot-report-generation-times.py 3day
+./make-log-graph.py 3day
 check
-./plot-report-generation-times.py day
+./make-log-graph.py day
 check
 
-rm -rf /var/www/report-generation-times
-mv $tmp_sandbox_copy_dir /var/www/report-generation-times
+rm -rf /var/www/log-graphs
+mv $tmp_sandbox_copy_dir /var/www/log-graphs
 cd /
 rm -rf $tmp_sandbox_copy_dir
 check
