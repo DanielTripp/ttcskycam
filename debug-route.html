@@ -65,18 +65,15 @@ function recreate_slider() {
 	on_slider_slide(0);
 }
 
-function keypress_handler(e) {
-	var pK = e? e.which : window.event.keyCode;
-	if(pK == 32) {
-		$('#add_marker_button').trigger('click');
-		return false;
-	} else {
-		return true;
-	}
+function init_button_listeners() {
+	$('#controls input:radio').each(function (index) {
+		$(this).click(refresh_fudge_route);
+	});
 }
 
 function initialize() {
 	bind_text_control_to_localstorage('routepts_json_textarea');
+	init_button_listeners();
 	init_map();
 
 	google.maps.event.addListenerOnce(g_map, 'bounds_changed', function() {
@@ -85,19 +82,6 @@ function initialize() {
 			rebuild_spatialindex();
 		});
 		init_snaptest_marker();
-
-		document.onkeypress = keypress_handler;
-		if (document.layers) {
-			document.captureEvents(Event.KEYPRESS); 
-		}
-
-		/*
-			$('#stoptag_field').keydown(function (e){
-					if(e.keyCode == 13) {
-						$('#stoptag_submit_button').trigger('click');
-					}
-				});
-		*/
 
 		google.maps.event.addListener(g_map, 'zoom_changed', on_zoom_changed);
 		on_zoom_changed();
@@ -280,7 +264,15 @@ function refresh_config_route() {
 
 function refresh_fudge_route() {
 	remove_objects_of_all_kinds();
-	set_fudge_route_routepts(radio_val('fudgeroute'), (is_selected('dir0button') ? 0 : 1));
+	var froute = radio_val('fudgeroute');
+	var direction = (is_selected('dir0button') ? 0 : 1);
+	var datazoom = radio_val('datazoom');
+	if(datazoom === 'raw') {
+		datazoom = null;
+	} else {
+		datazoom = parseInt(datazoom, 10);
+	}
+	set_fudge_route_routepts(froute, direction, datazoom);
 	//set_fudge_route_stops_bothdirs(radio_val('fudgeroute'));
 }
 
@@ -332,8 +324,8 @@ function draw_stop(latlng_, dir_, stoptag_) {
 	});
 }
 
-function set_fudge_route_routepts(route_, dir_) {
-	var route_points = callpy_sync('routes.routepts', route_, dir_);
+function set_fudge_route_routepts(route_, dir_, datazoom_) {
+	var route_points = callpy_sync('routes.routepts', route_, dir_, datazoom_);
 	var glatlons = latlonfloatarrays_to_googlemaps(route_points);
 	for(var i=0; i<glatlons.length; i++) {
 		add_route_marker(glatlons[i]);
@@ -429,10 +421,6 @@ function split_line(lo_marker_ptaddr_, new_latlng_) {
 		add_route_marker(latlng);
 	});
 	rebuild_spatialindex();
-}
-
-function radio_val(groupname_) {
-	return $('input[name='+groupname_+']:checked').val();
 }
 
 function add_route_marker(glatlon_) {
@@ -575,37 +563,7 @@ function on_add_marker_button_clicked() {
   </head>
   <body onload="initialize()">
 		<div id="map_canvas" style="width:80%; height:90%"></div>
-    <div style="position:absolute; top:0; right:0; height:100%;">
-			<form name="form2">
-      <table border="1">
-				<tr>
-					<td>
-						Config routes: 
-					</td>
-				</tr>
-				<tr>
-					<td>
-						<input type="radio" name="configroute" value="504" />504<br/>
-						<input type="radio" name="configroute" value="501" />501<br/>
-						<input type="radio" name="configroute" value="301" />301<br/>
-						<input type="radio" name="configroute" value="505" checked="checked" />505<br/>
-					</td>
-				</tr>
-				<tr>
-					<td>
-						<input type="radio" name="configdirection" id="directioninbound" value="inbound" checked="checked"  />Inbound (west)<br/>
-						<input type="radio" name="configdirection" id="directionoutbound" value="outbound"                  />Outbound (east)<br/>
-						<input type="radio" name="configdirection" id="directionboth" value="both"                          />Both<br/>
-					</td>
-				</tr>
-				<tr>
-					<td>
-						<input type="button" onclick="refresh_config_route()" value="Submit" />
-					</td>
-				</tr>
-      </table>
-			</form>
-			<br/>
+    <div style="position:absolute; top:0; right:0; height:100%;" id="controls">
 			<form name="form3">
       <table border="1">
 				<tr>
@@ -620,7 +578,7 @@ function on_add_marker_button_clicked() {
 						<input id="dufferinradiobutton" type="radio" name="fudgeroute" value="dufferin" /><label for="dufferinradiobutton">Dufferin</label><br/>
 						<input id="dundasradiobutton" type="radio" name="fudgeroute" value="dundas" checked="checked" /><label for="dundasradiobutton">Dundas</label><br/>
 						<input id="dupontradiobutton" type="radio" name="fudgeroute" value="dupont" /><label for="dupontradiobutton">Dupont</label><br/>
-						<label><input type="radio" name="fudgeroute" value="harbourfront" />Harbourfront</label><br/>
+						<label><input id="harbourfrontradiobutton" type="radio" name="fudgeroute" value="harbourfront" />Harbourfront</label><br/>
 						<input id="keeleradiobutton" type="radio" name="fudgeroute" value="keele" /><label for="keeleradiobutton">Keele</label><br/>
 						<input id="kingradiobutton" type="radio" name="fudgeroute" value="king" checked="checked" /><label for="kingradiobutton">King</label><br/>
 						<input id="lansdowneradiobutton" type="radio" name="fudgeroute" value="lansdowne" /><label for="lansdowneradiobutton">Lansdowne</label><br/>
@@ -628,49 +586,34 @@ function on_add_marker_button_clicked() {
 						<input id="queenradiobutton" type="radio" name="fudgeroute" value="queen" /><label for="queenradiobutton">Queen</label><br/>
 						<input id="spadinaradiobutton" type="radio" name="fudgeroute" value="spadina" /><label for="spadinaradiobutton">Spadina</label><br/>
 						<input id="stclairradiobutton" type="radio" name="fudgeroute" value="stclair" /><label for="stclairradiobutton">St. Clair</label><br/>
-						<label><input type="radio" name="fudgeroute" value="wellesley" />Wellesley</label><br/>
+						<label><input id="wellesleyradiobutton" type="radio" name="fudgeroute" value="wellesley" />Wellesley</label><br/>
 						<input id="bloordanforthradiobutton" type="radio" name="fudgeroute" value="bloor_danforth" /><label for="bloordanforthradiobutton">Bloor Danforth</label><br/>
 						<input id="yongeuniversityspadinaradiobutton" type="radio" name="fudgeroute" value="yonge_university_spadina" /><label for="yongeuniversityspadinaradiobutton">Yonge University Spadina</label><br/>
 					</td>
 				</tr>
+				<tr>
 					<td>
 						<input id="dir0button" type="radio" name="dir" value="dir0button" checked="checked" /><label for="dir0button">dir 0</label><br/>
 						<input id="dir1button" type="radio" name="dir" value="dir1button" /><label for="dir1button">dir 1</label><br/>
 					</td>
+				</tr>
 				<tr>
 					<td>
-						<input type="button" onclick="refresh_fudge_route()" value="Submit" />
+						<label><input id="rawbutton" type="radio" name="datazoom" value="raw" checked="checked" />raw</label><br/>
+						<label><input id="datazoom0button" type="radio" name="datazoom" value="0" />datazoom 0</label><br/>
+						<label><input id="datazoom1button" type="radio" name="datazoom" value="1" />datazoom 1</label><br/>
+						<label><input id="datazoom2button" type="radio" name="datazoom" value="2" />datazoom 2</label><br/>
+						<label><input id="datazoom3button" type="radio" name="datazoom" value="3" />datazoom 3</label><br/>
 					</td>
 				</tr>
       </table>
 			</form>
 			<br/>
-			<form name="form3">
-      <table border="1">
-				<tr>
-					<td>
-						Build fudge route:  <input id="add_marker_button" type="button" onclick="on_add_marker_button_clicked()" value="Add marker" /><br/>
-						(Or press the spacebar.)
-					</td>
-				</tr>
-				<tr>
-					<td>
-						<label for="useclientsidesnap_checkbox">Use client-side snap:</label>
-						<input type="checkbox" id="useclientsidesnap_checkbox" name="useclientsidesnap_checkbox" />
-					</td>
-				</tr>
-      </table>
-			</form>
     </div>
 		<div>
 			<b>--> CLICK TO ADD POINT <-- </b>
 			<p id="p_zoom">zoom...</p>
 			<form name="form1">
-				<!--
-				stoptag:<input type="text" size="15" name="stoptag_field" id="stoptag_field" /> 
-				<input type="button" onclick="show_stoptag(this.form.stoptag_field.value)" value="Submit" id="stoptag_submit_button" />
-				///
-				-->
 				<label><input id="map_sync_checkbox" type="checkbox"/>Map Sync</label><br>
 			</form>
 			<p id="dist">...</p>
