@@ -54,7 +54,7 @@ check
 ./set-permissions.py 
 check
 echo 'Mangling...'
-./mangle_this_sandbox_make_it_production.py --yes
+./mangle_this_sandbox_make_it_log_graphs.py
 check
 echo '... done mangling.'
 
