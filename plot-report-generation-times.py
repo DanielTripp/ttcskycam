@@ -47,6 +47,8 @@ if __name__ == '__main__':
 	finishtime_cutoff_numdaysago = {'day': 1, '3day': 3, 'week': 7, 'month': 30}[timeframe]
 	finishtime_cutoff_em = now_em() - finishtime_cutoff_numdaysago*24*60*60*1000
 
+	error_times = []
+
 	for dirpath, dirnames, filenames in os.walk(logs_directory):
 		dirnames[:] = []
 		for filename in (f for f in filenames if f.startswith('reports_generation_')):
@@ -57,12 +59,19 @@ if __name__ == '__main__':
 				for line in fin:
 					splits = line.strip().split(',')
 					if len(splits) == 3 and (splits[0].startswith(str(current_year())) or splits[0].startswith(str(current_year()-1))):
+						# Must be a generation time log line.
 						finishtime_em = str_to_em(splits[0])
 						if finishtime_em > finishtime_cutoff_em:
 							timetaken = int(splits[1])
 							timesample = TimeSample(finishtime_em, timetaken)
 							version = splits[2]
 							version_to_timesamples[version].append(timesample)
+					else:
+						# If it starts with a timestamp, we assume it's an error line.
+						try:
+							error_times.append(str_to_em(line[:16]))
+						except ValueError:
+							pass
 
 	if not version_to_timesamples:
 		# An empty plot produces an error message in our date formatting function.  Here we're preventing that. 
@@ -102,6 +111,9 @@ if __name__ == '__main__':
 		return r
 
 	max_yval = 120
+
+	for error_time in error_times:
+		plt.axvline(em_to_datetime(error_time), color='red', alpha=0.5)
 
 	for versionidx, version in enumerate(versions_in_time_order):
 		all_timesamples = version_to_timesamples[version]
