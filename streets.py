@@ -34,51 +34,7 @@ def get_polylines_from_supplemental_json_file():
 def simplify_polylines_via_rdp_algo(name_to_polyline_):
 	epsilon = RDP_SIMPLIFY_EPSILON_METERS
 	for pline in name_to_polyline_.itervalues():
-		pline[:] = get_simplified_polyline_via_rdp_algo(pline, epsilon)
-
-# Thanks to http://en.wikipedia.org/wiki/Ramer%E2%80%93Douglas%E2%80%93Peucker_algorithm 
-def get_simplified_polyline_via_rdp_algo(pline_, epsilon_):
-	log = False
-	if len(pline_) <= 2:
-		return pline_
-	dmax = 0
-	index = 0
-	if log:
-		printerr('---')
-		printerr('pline:', pline_)
-	if pline_[0].is_close(pline_[-1]):
-		# so pline_ is a loop, and the dist_to_lineseg() call below will fail if we try it.  
-		# let's go straight to the recurse.  
-		dmax = epsilon_*2
-		index = len(pline_)/2
-		if log: printerr('loop')
-	else:
-		for i in range(1, len(pline_)-1):
-			d = pline_[i].dist_to_lineseg(geom.LineSeg(pline_[0], pline_[-1]))
-			if d > dmax:
-				index = i
-				dmax = d
-
-	# If max distance is greater than epsilon, recursively simplify
-	if dmax > epsilon_:
-		recResults1 = get_simplified_polyline_via_rdp_algo(pline_[0:index+1], epsilon_)
-		recResults2 = get_simplified_polyline_via_rdp_algo(pline_[index:], epsilon_)
-		r = recResults1[:-1] + recResults2
-		if log:
-			printerr('pline again:', pline_)
-			printerr('epsilon was exceeded by pt %d (%s).  recursed.' % (index, pline_[index]))
-			printerr('recursive results:')
-			printerr(recResults1)
-			printerr(recResults2)
-			printerr('combining into:')
-			printerr(r)
-			printerr('---')
-		return r
-	else:
-		if log: 
-			printerr('epsilon not exceeded.')
-			printerr('---')
-		return [pline_[0], pline_[-1]]
+		pline[:] = geom.get_simplified_polyline_via_rdp_algo(pline, epsilon)
 
 # return dict.  keys are street names as strings, values are polylines i.e. lists of geom.LatLng. 
 #			If there's a streetname that has more than one polyline, we will add numbers to it in order to make 
