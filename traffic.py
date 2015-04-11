@@ -99,10 +99,9 @@ def get_traffics_visuals(mofr_to_avgspeedandweight_, froute_, dir_, datazoom_):
 			routept2 = ri.mofr_to_latlon(routept2_mofr, dir_, datazoom_)
 			seg_start_latlng = routept1.add(routept2.subtract(routept1).scale((seg_start_mofr-routept1_mofr)/float(route_seg_len)))
 			seg_end_latlng   = routept1.add(routept2.subtract(routept1).scale((seg_end_mofr  -routept1_mofr)/float(route_seg_len)))
-			if seg_start_latlng.dist_m(seg_end_latlng) > max(2, c.DATAZOOM_TO_RSDT[datazoom_]): 
+			if seg_start_latlng.dist_m(seg_end_latlng) > c.DATAZOOM_TO_RDP_EPSILON[datazoom_]: 
 				# Any smaller and they'll be too small to see. 
-				# Using the rsdt there for most cases because 2*rsdt is quite visible when zoomed out.  
-				# Using the 2 because the way we generate those route pts results in a lot of ~1 meter segments. 
+				# Using the rdp epsilon b/c for most cases because 2*epsilon will be visible when zoomed out.  
 				r.append({'start_latlon': seg_start_latlng, 'end_latlon': seg_end_latlng, 'mofr': mofr_ref, 
 						'start_mofr': routept1_mofr, 'end_mofr': routept2_mofr})
 	return r

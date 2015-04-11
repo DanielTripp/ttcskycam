@@ -127,7 +127,7 @@ print \'MIN_DATAZOOM = %s;\' % c.MIN_DATAZOOM
 print \'MAX_DATAZOOM = %s;\' % c.MAX_DATAZOOM
 print \'FROUTE_TO_INTDIR_TO_ENGLISHDESC = %s;\' % routes.get_fudgeroute_to_intdir_to_englishdesc()
 print \'FROUTE_TO_ENGLISH = %s;\' % routes.get_froute_to_english()
-print \'MAX_RSDT = %s;\' % max(c.DATAZOOM_TO_RSDT.values())
+print \'MAX_RDP_EPSILON = %s;\' % max(c.DATAZOOM_TO_RDP_EPSILON.values())
 print \'SUBWAY_FROUTE_TO_DATAZOOM_TO_ROUTEPTS = %s;\' % routes.get_subway_froute_to_datazoom_to_routepts()
 print \'GUIZOOM_TO_DATAZOOM = %s;\' % c.GUIZOOM_TO_DATAZOOM
 print \'FROUTE_TO_ROUTEPTS = %s;\' % routes.get_froute_to_routepts_min_datazoom_json_str()
@@ -1256,17 +1256,17 @@ function get_map_click_route_search_radius_for_cur_guizoom() {
 	var pixels = 30; // Seems like a clickable area. 
 	var r = Math.round(meters_per_pixel*pixels);
 
-	// Doing this because we are using route pts at min datazoom (which will have max rsdt) for the invisble clickable grid, 
-	// so when the user is at a high zoom, that invisible route polyline could be quite far (in pixels) from 
-	// where the street is on the map.  By our definition of what an RSDT is, the farthest distance from a real route to 
-	// a simplified version is the RSDT.  (For the purposes of this comment, assume that the street as it appears on the 
-	// google map coincides exactly with the real route AKA the unsimplified route AKA the route at RSDT of 0.)  
-	// So eg. our east-west route could, in a certain area, be such that the the max-rsdt simplified version of it 
-	// runs MAX_RSDT meters below or above it.  So that means that our search radius should always be at least RSDT, 
+	// Doing this because we are using route pts at min datazoom (which will have max RDP epsilon) for the invisble clickable 
+	// grid, so when the user is at a high zoom, that invisible route polyline could be quite far (in pixels) from 
+	// where the street is on the map.  By our definition of what an epsilon is, the farthest distance from a real route to 
+	// a simplified version is the epsilon.  (For the purposes of this comment, assume that the street as it appears on the 
+	// google map coincides exactly with the real route AKA the unsimplified route AKA the route at epsilon of 0.)  
+	// So eg. our east-west route could, in a certain area, be such that the the max-epsilon simplified version of it 
+	// runs MAX_epsilon meters below or above it.  So that means that our search radius should always be at least epsilon, 
 	// or else the user could click right on the street and we would not count that as a hit.  Going further - in that case 
 	// it would not be very useful if we made the clickable area end eg. one pixel north of the street on the map. 
-	// So that is why we use MAX_RSDT*2. 
-	r = Math.max(r, MAX_RSDT*2);
+	// So that is why we use MAX_RDP_EPSILON*2. 
+	r = Math.max(r, MAX_RDP_EPSILON*2);
 
 	return r;
 }
