@@ -4,5 +4,6 @@
 - make sure the route doesn't go anywhere tracks and streets don't.
 - run ./prime_routeinfos.py from command-line first.  (permission problem in 
 	sandbox might happen if route is generated under apache.)
+- add to debug-route.html 
 
 
