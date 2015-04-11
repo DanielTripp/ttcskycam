@@ -240,6 +240,7 @@ function get_latlngs_from_file() {
 	var filename = get_value('filename_field');
 	localStorage.setItem('show-points-filename', filename);
 	var contents_str = get_sync(filename, {cache: false});
+	set_value('contents_textarea', contents_str);
 	get_latlngs_from_string(contents_str);
 }
 
