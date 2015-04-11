@@ -545,6 +545,7 @@ function redraw_buildfudgeroute_path() {
 }
 
 function on_submit_routepts_json_textarea() {
+	remove_objects_of_all_kinds();
 	var route_points = $.parseJSON(get_value('routepts_json_textarea'));
 	var glatlons = latlonfloatarrays_to_googlemaps(route_points);
 	for(var i=0; i<glatlons.length; i++) {
