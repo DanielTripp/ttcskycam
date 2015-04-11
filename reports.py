@@ -133,12 +133,12 @@ def wait_for_locations_poll_to_finish():
 			break
 
 		if (cur_wait_secs >= MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS) and (prev_wait_secs < MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS):
-			printerr('%s: reports: watched poll locations flag file for %d seconds, still hasn\'t been touched.' % (now_str(), MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS))
+			printerr('%s - reports: watched poll locations flag file for %d seconds, still hasn\'t been touched.' % (now_str(), MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS))
 			
 		time.sleep(2)
 
 	if cur_wait_secs > MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS:
-		printerr('%s: reports: watched poll locations flag file for %d seconds before it was touched.' % (now_str(), cur_wait_secs))
+		printerr('%s - reports: watched poll locations flag file for %d seconds before it was touched.' % (now_str(), cur_wait_secs))
 
 g_froute_to_times = None
 
@@ -169,7 +169,7 @@ def make_reports_and_insert_into_db_single_route(report_time_, froute_):
 				locations_data = traffic.get_recent_vehicle_locations_impl(froute_, direction, datazoom, report_time_)
 				reporttype_to_datazoom_to_reportdataobj['locations'][datazoom] = locations_data
 			except:
-				printerr('%s: Problem during %s / %s / dir=%d / datazoom=%d' % (now_str(), em_to_str(report_time_), froute_, direction, datazoom))
+				printerr('%s - problem generating reports for %s / %s / dir=%d / datazoom=%d' % (now_str(), em_to_str(report_time_), froute_, direction, datazoom))
 				traceback.print_exc()
 				raise
 		db.insert_reports(froute_, direction, report_time_, reporttype_to_datazoom_to_reportdataobj)
