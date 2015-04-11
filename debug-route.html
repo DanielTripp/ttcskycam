@@ -76,6 +76,7 @@ function keypress_handler(e) {
 }
 
 function initialize() {
+	bind_text_control_to_localstorage('routepts_json_textarea');
 	init_map();
 
 	google.maps.event.addListenerOnce(g_map, 'bounds_changed', function() {
