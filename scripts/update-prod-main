@@ -107,8 +107,3 @@ _END_
 apachectl start
 supervisorctl start ttc-make-reports-main
 
-echo 'Sleeping for two minutes, to wait for new reports to appear in database...'
-sleep 120
-echo '... done.'
-
-
