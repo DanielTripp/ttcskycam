@@ -419,6 +419,11 @@ class BoundingBox:
 		return (self.southwest.lat < latlng_.lat < self.northeast.lat) and \
 				(self.southwest.lng < latlng_.lng < self.northeast.lng)
 
+	def rand_latlng(self):
+		lat = avg(self.minlat, self.maxlat, random.random())
+		lng = avg(self.minlng, self.maxlng, random.random())
+		return LatLng(lat, lng)
+
 class LineSeg(object):
 
 	def __init__(self, start_, end_):
@@ -524,11 +529,6 @@ def latlng_avg(latlngs_):
 	avg_lng = lng_tally/len(latlngs_)
 	return LatLng(avg_lat, avg_lng)
 
-def rand_latlng():
-	minlat=43.65744025; minlng=-79.51286316
-	maxlat=43.75621697; maxlng=-79.33776855
-	return LatLng(avg(minlat, maxlat, random.random()), avg(minlng, maxlng, random.random()))
-
 # Does not modify argument. 
 # Thanks to http://en.wikipedia.org/wiki/Ramer%E2%80%93Douglas%E2%80%93Peucker_algorithm 
 def get_simplified_polyline_via_rdp_algo(pline_, epsilon_):
@@ -574,6 +574,15 @@ def get_simplified_polyline_via_rdp_algo(pline_, epsilon_):
 			printerr('---')
 		return [pline_[0], pline_[-1]]
 
+def get_split_pline(pt1_, pt2_, n_):
+	assert isinstance(pt1_, LatLng) and isinstance(pt2_, LatLng) and isinstance(n_, int)
+	r = [pt1_]
+	step = 1.0/n_
+	for ratio in frange(step, 1.0, step):
+		r.append(LatLng(avg(pt1_.lat, pt2_.lat, ratio), avg(pt1_.lng, pt2_.lng, ratio)))
+	r.append(pt2_)
+	return r
+		
 if __name__ == '__main__':
 
 
