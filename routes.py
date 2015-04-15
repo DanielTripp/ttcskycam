@@ -296,15 +296,16 @@ class RouteInfo:
 			routepts = [read_pts_file(routepts_both_dirs_filename)]
 			self.is_split_by_dir = False
 		else:
-			routepts = [read_pts_file('fudge_route_%s_dir0.json' % (self.name)), read_pts_file('fudge_route_%s_dir1.json' % (self.name))]
+			routepts = [read_pts_file('fudge_route_%s_dir%d.json' % (self.name, direction)) for direction in (0, 1)]
+			stretch_splits_if_necessary(routepts[0], routepts[1])
 			self.is_split_by_dir = True
+
 		self.snapgraph = snapgraph.SnapGraph(routepts, forpaths=False)
 		self.init_datazoom_to_dir_maps()
 		if self.is_split_by_dir:
 			len_dir_0 = geom.dist_m_polyline(self.routepts(0)); len_dir_1 = geom.dist_m_polyline(self.routepts(1))
 			if abs(len_dir_0 - len_dir_1) > 0.1:
-				printerr('route %s: lengths are unequal.  dir 0 length: %0.4f.  dir 1 length: %0.4f.' % (self.name, len_dir_0, len_dir_1))
-				assert False
+				raise Exception('route %s: lengths are unequal.  dir 0 length: %0.4f.  dir 1 length: %0.4f.' % (self.name, len_dir_0, len_dir_1))
 
 	def init_datazoom_to_dir_maps(self):
 		# The key sets for both of these will be [None] + c.VALID_DATAZOOMS.  None is for the source routepts, unsimplified. 
@@ -354,7 +355,7 @@ class RouteInfo:
 				else:
 					for routept in routepts:
 						routeptaddr_to_mofr.append(self.latlon_to_mofr(routept, tolerance_=2))
-				assert all(mofr1 < mofr2 for mofr1, mofr2 in hopscotch(routeptaddr_to_mofr))
+				assert all(mofr1 <= mofr2 for mofr1, mofr2 in hopscotch(routeptaddr_to_mofr))
 			assert len(routeptaddr_to_mofr) == len(routepts)
 		return dir_to_routeptaddr_to_mofr
 
@@ -942,6 +943,110 @@ def prime_routeinfos(log=False):
 		if log:
 			print 'Priming route %s...' % froute
 		routeinfo(froute)
+
+# Will modify arguments. 
+def stretch_splits_if_necessary(dir0pts_, dir1pts_):
+	dir0_stretch_idxes = get_maximal_sublists3(dir0pts_, lambda pt: pt in dir1pts_, returnidxes=True)
+	dir1_stretch_idxes = get_maximal_sublists3(dir1pts_, lambda pt: pt in dir0pts_, returnidxes=True)
+	if len(dir0_stretch_idxes) != len(dir1_stretch_idxes):
+		raise Exception('faulty logic?')
+	stretch_is_a_split = dir0pts_[dir0_stretch_idxes[0][0]] not in dir1pts_
+	for dir0stretch_idxes, dir1stretch_idxes in zip(dir0_stretch_idxes, dir1_stretch_idxes):
+		if stretch_is_a_split:
+			dir0stretch = [dir0pts_[i] for i in [dir0stretch_idxes[0]-1] + dir0stretch_idxes + [dir0stretch_idxes[-1]+1]]
+			dir1stretch = [dir1pts_[i] for i in [dir1stretch_idxes[0]-1] + dir1stretch_idxes + [dir1stretch_idxes[-1]+1]]
+			dir0stretch_len = geom.dist_m_polyline(dir0stretch)
+			dir1stretch_len = geom.dist_m_polyline(dir1stretch)
+			if dir0stretch_len < dir1stretch_len:
+				stretched_pline = get_pline_stretched_with_triangle_waves(dir0stretch, dir1stretch_len)
+				dir0pts_[dir0stretch_idxes[0]:dir0stretch_idxes[-1]+1] = stretched_pline
+			else:
+				stretched_pline = get_pline_stretched_with_triangle_waves(dir1stretch, dir0stretch_len)
+				dir1pts_[dir1stretch_idxes[1]:dir1stretch_idxes[-1]+1] = stretched_pline
+
+		stretch_is_a_split = not stretch_is_a_split
+
+def get_pline_stretched_with_triangle_waves(pline_, goal_len_):
+	initial_wave_height = c.DATAZOOM_TO_RDP_EPSILON[c.MAX_DATAZOOM]*0.75
+
+	def get_wave_pline_len_by_wave_period(wave_period__):
+		wave_pline = get_triangle_wave_pline(pline_, wave_period__, initial_wave_height)
+		return geom.dist_m_polyline(wave_pline)
+
+	epsilon_x = 0.001
+	epsilon_y = 0.001
+	period, found_period_is_exact = binary_search(get_wave_pline_len_by_wave_period, 0.1, 999999, 
+			goal_len_, epsilon_x, epsilon_y)
+	if not found_period_is_exact:
+		while get_wave_pline_len_by_wave_period(period) < goal_len_:
+			period -= epsilon_x
+		def get_wave_pline_len_by_wave_height(wave_height__):
+			wave_pline = get_triangle_wave_pline(pline_, period, wave_height__)
+			return geom.dist_m_polyline(wave_pline)
+		height, found_height_is_exact = binary_search(get_wave_pline_len_by_wave_height, 0.0, initial_wave_height, 
+				goal_len_, epsilon_x/1000, epsilon_y)
+		return get_triangle_wave_pline(pline_, period, height)
+	else:
+		return get_triangle_wave_pline(pline_, period, initial_wave_height)
+
+def get_split_lineseg(pt1_, pt2_, min_piece_len_):
+	assert isinstance(pt1_, geom.LatLng) and isinstance(pt2_, geom.LatLng)
+	lineseg_len = pt1_.dist_m(pt2_)
+	num_pieces = int(math.floor(lineseg_len/min_piece_len_))
+	if num_pieces <= 1:
+		return [pt1_, pt2_]
+	else:
+		r = [pt1_]
+		for step in xrange(1, num_pieces):
+			ratio = float(step)/num_pieces
+			r.append(geom.LatLng(avg(pt1_.lat, pt2_.lat, ratio), avg(pt1_.lng, pt2_.lng, ratio)))
+		r.append(pt2_)
+		return r
+
+def get_triangle_wave_lineseg(pt1_, pt2_, wave_period_meters_, wave_height_meters_):
+	assert isinstance(pt1_, geom.LatLng) and isinstance(pt2_, geom.LatLng)
+
+	split_orig_lineseg = get_split_lineseg(pt1_, pt2_, wave_period_meters_/2.0)
+	perpendicular_heading = geom.normalize_heading(pt1_.heading(pt2_) + 90)
+	r = []
+	for i, pt, isfirst, islast in enumerate2(split_orig_lineseg):
+		if (i % 2 == 0) or (len(split_orig_lineseg) % 2 == 0 and islast):
+			r.append(pt)
+		else:
+			r.append(pt.offset(perpendicular_heading, wave_height_meters_))
+	return r
+			
+def get_triangle_wave_pline(pline_, wave_period_meters_, wave_height_meters_):
+	r = []
+	for i, (pt1, pt2), isfirst, islast in enumerate2(hopscotch(pline_)):
+		r += get_triangle_wave_lineseg(pt1, pt2, wave_period_meters_, wave_height_meters_)
+		if not islast:
+			del r[-1]
+	return r
+
+def binary_search(f, init_x1, init_x2, goal_y, epsilon_x, epsilon_y):
+	init_y1 = f(init_x1)
+	init_y2 = f(init_x2)
+	if init_y1 <= goal_y <= init_y2:
+		lo_x = init_x1
+		hi_x = init_x2
+	elif init_y1 >= goal_y >= init_y2:
+		lo_x = init_x2
+		hi_x = init_x1
+	while True:
+		cur_x = (lo_x + hi_x)/2.0
+		cur_y = f(cur_x)
+		if abs(cur_y - goal_y) < epsilon_y:
+			return (cur_x, True)
+		elif abs(cur_x - lo_x) < epsilon_x:
+			return (cur_x, False)
+		#elif last_y is not None and abs(last_y - cur_y) < epsilon_y:
+		#	return (cur_x, False)
+		elif cur_y > goal_y:
+			hi_x = cur_x
+		else:
+			assert cur_y < goal_y
+			lo_x = cur_x
 
 if __name__ == '__main__':
 
