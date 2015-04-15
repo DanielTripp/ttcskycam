@@ -78,6 +78,8 @@ check
 echo '... done mangling.'
 echo "\$revision"-trunk > VERSION 
 _END_
+check
+
 supervisorctl stop ttc-poll-locations
 sudo revision=$revision branch=$branch using_cmdline_args=$using_cmdline_args tmpsvndir=$tmpsvndir -i -u dt bash << _END_
 
