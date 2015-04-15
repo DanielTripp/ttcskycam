@@ -62,7 +62,7 @@ class LatLng:
 		return LatLng(self.lat - other_.lat, self.lng - other_.lng)
 
 	def scale(self, factor_):
-		assert isinstance(factor_, float)
+		assert isinstance(factor_, float) or isinstance(factor_, int)
 		return LatLng(self.lat*factor_, self.lng*factor_)
 
 	# Returns 'absolute angle' between two points (measured counter-clockwise from the positive X axis)
@@ -202,6 +202,16 @@ class LatLng:
 
 	def tuple(self):
 		return (self.lat, self.lng)
+
+	# Thanks to http://www.movable-type.co.uk/scripts/latlong.html 
+	def offset(self, heading_, dist_):
+		lat1 = math.radians(self.lat); lon1 = math.radians(self.lng)
+		R = RADIUS_OF_EARTH_KM*1000
+		d = dist_
+		brng = math.radians(heading_)
+		lat2 = math.asin(math.sin(lat1)*math.cos(d/R) + math.cos(lat1)*math.sin(d/R)*math.cos(brng))
+		lon2 = lon1 + math.atan2(math.sin(brng)*math.sin(d/R)*math.cos(lat1), math.cos(d/R)-math.sin(lat1)*math.sin(lat2))
+		return LatLng(math.degrees(lat2), math.degrees(lon2))
 
 def angle(arm1_, origin_, arm2_):
 	assert isinstance(arm1_, LatLng) and isinstance(origin_, LatLng) and isinstance(arm2_, LatLng)
@@ -577,8 +587,8 @@ def get_simplified_polyline_via_rdp_algo(pline_, epsilon_):
 def get_split_pline(pt1_, pt2_, n_):
 	assert isinstance(pt1_, LatLng) and isinstance(pt2_, LatLng) and isinstance(n_, int)
 	r = [pt1_]
-	step = 1.0/n_
-	for ratio in frange(step, 1.0, step):
+	for step in xrange(1, n_):
+		ratio = float(step)/n_
 		r.append(LatLng(avg(pt1_.lat, pt2_.lat, ratio), avg(pt1_.lng, pt2_.lng, ratio)))
 	r.append(pt2_)
 	return r
