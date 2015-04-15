@@ -443,7 +443,7 @@ function redraw_all_plines_maybe() {
 			}
 			var line_latlngs = g_polyline_latlngs[plineidx];
 			var color = get_polyline_color(plineidx);
-			draw_polyline(line_latlngs, color, plineidx);
+			draw_polyline(plineidx, color);
 		}
 	}
 }
@@ -461,21 +461,49 @@ function is_plineidx_visible_according_to_gui(plineidx_) {
 	return is_selected(get_pline_visible_checkbox_id(plineidx_));
 }
 
-function draw_polyline(latlngs_, color_, plineidx_) {
-	var polylineOptions = {path: latlngs_, strokeWeight: POLYLINE_STROKEWEIGHT, 
+function draw_polyline(plineidx_, color_) {
+	var latlngs = g_polyline_latlngs[plineidx_];
+	var polylineOptions = {path: latlngs, strokeWeight: POLYLINE_STROKEWEIGHT, 
 			strokeColor: color_, 
 			strokeOpacity: g_opacity, 
 			icons: (is_selected('arrows_checkbox') 
-					? make_polyline_arrow_icons(g_map.getZoom(), is_selected('lots_of_arrows_checkbox'), latlngs_) 
+					? make_polyline_arrow_icons(g_map.getZoom(), is_selected('lots_of_arrows_checkbox'), latlngs) 
 					: null), 
 			zIndex: plineidx_, map: g_map};
 	var polyline = new google.maps.Polyline(polylineOptions);
 	add_hover_listener(polyline, function(pos__) {
-		var infowin = new google.maps.InfoWindow({disableAutoPan: true, content: sprintf('line #%d', plineidx_), position: pos__});
+		var map_height_lat= g_map.getBounds().getNorthEast().lat() - g_map.getBounds().getSouthWest().lat(); 
+		var infowin_pos = new google.maps.LatLng(pos__.lat() + map_height_lat*0.03, pos__.lng());
+		var infowin = new google.maps.InfoWindow({disableAutoPan: true, content: sprintf('line #%d', plineidx_), 
+				position: infowin_pos});
 		infowin.open(g_map);
 		return infowin;
 	}, 250, 750);
+	google.maps.event.addListener(polyline, 'click', function(e__) {
+		var ptidx = get_lo_ptidx_of_click(latlngs, e__.latLng);
+		if(ptidx != null) {
+			split_line(plineidx_, ptidx+1, e__.latLng);
+		}
+	});
 	g_polylines.push(polyline);
+}
+
+function get_lo_ptidx_of_click(pline_latlngs_, click_pt_) {
+	for(var i=0; i<pline_latlngs_.length-1; i++) {
+		var cur_pt = pline_latlngs_[i], next_pt = pline_latlngs_[i+1];
+		if(betweenii(cur_pt.lat(), click_pt_.lat(), next_pt.lat()) && 
+				betweenii(cur_pt.lng(), click_pt_.lng(), next_pt.lng())) {
+			return i;
+		}
+	}
+	return null;
+}
+
+function split_line(plineidx_, ptidx_, new_latlng_) {
+	array_insert(g_polyline_latlngs[plineidx_], ptidx_, new_latlng_);
+	refresh_pline_controls(); // will blow away solo / pline selections.  oh well. 
+	redraw_objects();
+	refresh_plines_paragraph();
 }
 
 function refresh_pline_controls() {
@@ -558,9 +586,19 @@ function make_marker(latlng_, color_, label_, plineidx_, ptidx_) {
 			draggable: true});
 	google.maps.event.addListener(marker, 'drag', function() { 
 			g_polyline_latlngs[plineidx_][ptidx_] = marker.getPosition();
-			refresh_pline_controls(); // blow away solo / pline selections.  oh well. 
+			refresh_pline_controls(); // will blow away solo / pline selections.  oh well. 
 			redraw_all_plines_maybe(); 
 			refresh_plines_paragraph();
+		});
+	google.maps.event.addListener(marker, 'dblclick', function() { 
+			array_remove(g_polyline_latlngs[plineidx_], ptidx_);
+			refresh_pline_controls(); // will blow away solo / pline selections.  oh well. 
+			redraw_objects(); 
+			refresh_plines_paragraph();
+			if(g_mouseovered_object_infowindow != null) {
+				g_mouseovered_object_infowindow.close();
+				g_mouseovered_object_infowindow = null;
+			}
 		});
 	g_markers.push(marker);
 	add_marker_mouseover_listener_for_infowin(marker, label_);
@@ -672,7 +710,6 @@ function scroll_to_visible() {
 	if(g_polyline_latlngs.length > 0) {
 		var middle_plineidx = Math.round((g_polyline_latlngs.length-1)/2);
 		var middle_pline = g_polyline_latlngs[middle_plineidx];
-		console.log('', Math.round(g_polyline_latlngs.length/2)); // tdr 
 		var middle_pt_idx = Math.round(middle_pline.length/2);
 		var middle_pt = middle_pline[Math.round((middle_pline.length-1)/2)];
 		g_map.panTo(middle_pt);

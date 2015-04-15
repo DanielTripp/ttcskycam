@@ -713,6 +713,10 @@ function inie(lower_, x_, upper_) {
 	return (lower_ <= x_ && x_ < upper_);
 }
 
+function betweenii(a_, b_, c_) {
+	return (a_ <= b_ && b_ <= c_) || (c_ <= b_ && b_ <= a_);
+}
+
 // Returns a list like python's 'range' except this will return something regardless of the order the arguments are in. 
 function intervalii(a_, b_) {
 	var r = [];
