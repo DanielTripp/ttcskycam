@@ -234,6 +234,7 @@ function refresh_from_file() {
 	get_latlngs_from_file();
 	refresh_pline_controls();
 	draw_objects();
+	refresh_plines_paragraph();
 }
 
 function get_latlngs_from_file() {
@@ -249,6 +250,23 @@ function refresh_from_textarea() {
 	get_latlngs_from_textarea();
 	refresh_pline_controls();
 	draw_objects();
+	refresh_plines_paragraph();
+}
+
+function refresh_plines_paragraph() {
+	var text = '';
+	text += sprintf('[<br>');
+	for(var plineidx=0; plineidx<g_polyline_latlngs.length; plineidx++) {
+		var pline = g_polyline_latlngs[plineidx];
+		text += sprintf('[<br>');
+		for(var ptidx=0; ptidx<pline.length; ptidx++) {
+			var pt = g_polyline_latlngs[plineidx][ptidx];
+			text += sprintf('[%.8f, %.8f]%s<br>', pt.lat(), pt.lng(), (ptidx<pline.length-1 ? ',' : ''));
+		}
+		text += sprintf(']%s<br>', (plineidx<g_polyline_latlngs.length-1 ? ',' : ''));
+	}
+	text += sprintf(']<br>');
+	set_contents('p_plines', text);
 }
 
 function get_latlngs_from_textarea() {
@@ -542,6 +560,7 @@ function make_marker(latlng_, color_, label_, plineidx_, ptidx_) {
 			g_polyline_latlngs[plineidx_][ptidx_] = marker.getPosition();
 			refresh_pline_controls(); // blow away solo / pline selections.  oh well. 
 			redraw_all_plines_maybe(); 
+			refresh_plines_paragraph();
 		});
 	g_markers.push(marker);
 	add_marker_mouseover_listener_for_infowin(marker, label_);
@@ -705,5 +724,6 @@ function scroll_to_visible() {
 		<p id="p_clicked_pt"/>
 		<p id="p_zoom"/>
 		<p id="p_dists"/>
+		<p id="p_plines"/>
   </body>
 </html>
