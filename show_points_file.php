@@ -364,6 +364,9 @@ function forget_drawn_objects() {
 		g_bounding_rect = null;
 	}
 
+}
+
+function forget_plines() {
 	g_polylines.forEach(function(polyline) {
 		polyline.setMap(null);
 	});
@@ -374,7 +377,6 @@ function draw_objects() {
 	var minlat=90, maxlat=0, minlng=0, maxlng=-180;
 
 	var draw_dots = is_selected('dots_checkbox');
-	var draw_lines = is_selected('polyline_checkbox');
 
 	var solo_plineidx = get_solo_plineidx_according_to_gui();
 	for(var plineidx=0; plineidx<g_polyline_latlngs.length; plineidx++) {
@@ -391,7 +393,7 @@ function draw_objects() {
 			var latlng = line_latlngs[ptidx];
 			if(draw_dots) {
 				var label = sprintf('%d/%d -&nbsp;&nbsp;&nbsp;&nbsp;(%.8f,%.8f)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;', plineidx, ptidx, latlng.lat(), latlng.lng());
-				make_marker(latlng, color, label, ptidx);
+				make_marker(latlng, color, label, plineidx, ptidx);
 			}
 
 			minlat = Math.min(minlat, latlng.lat());
@@ -399,16 +401,33 @@ function draw_objects() {
 			minlng = Math.min(minlng, latlng.lng());
 			maxlng = Math.max(maxlng, latlng.lng());
 		}
-		if(draw_lines) {
-			draw_polyline(line_latlngs, color, plineidx);
-		}
 	}
+	redraw_all_plines_maybe();
 
 	var rect_bounds = new google.maps.LatLngBounds(
 			new google.maps.LatLng(minlat, minlng), new google.maps.LatLng(maxlat, maxlng));
 	g_bounding_rect = new google.maps.Rectangle({bounds: rect_bounds, map: g_map, strokeColor: 'rgb(0,0,0)', 
 			strokeOpacity: 0.5, strokeWeight: 1, fillOpacity: 0, zIndex: -10, clickable: false});
 
+}
+
+function redraw_all_plines_maybe() {
+	forget_plines();
+	if(is_selected('polyline_checkbox')) {
+		var solo_plineidx = get_solo_plineidx_according_to_gui();
+		for(var plineidx=0; plineidx<g_polyline_latlngs.length; plineidx++) {
+			if(solo_plineidx!=-1) {
+				if(solo_plineidx!=plineidx) {
+					continue;
+				}
+			} else if(!is_plineidx_visible_according_to_gui(plineidx)) {
+				continue;
+			}
+			var line_latlngs = g_polyline_latlngs[plineidx];
+			var color = get_polyline_color(plineidx);
+			draw_polyline(line_latlngs, color, plineidx);
+		}
+	}
 }
 
 function get_solo_plineidx_according_to_gui() {
@@ -424,17 +443,17 @@ function is_plineidx_visible_according_to_gui(plineidx_) {
 	return is_selected(get_pline_visible_checkbox_id(plineidx_));
 }
 
-function draw_polyline(latlngs_, color_, i_) {
+function draw_polyline(latlngs_, color_, plineidx_) {
 	var polylineOptions = {path: latlngs_, strokeWeight: POLYLINE_STROKEWEIGHT, 
 			strokeColor: color_, 
 			strokeOpacity: g_opacity, 
 			icons: (is_selected('arrows_checkbox') 
 					? make_polyline_arrow_icons(g_map.getZoom(), is_selected('lots_of_arrows_checkbox'), latlngs_) 
 					: null), 
-			zIndex: i_, map: g_map};
+			zIndex: plineidx_, map: g_map};
 	var polyline = new google.maps.Polyline(polylineOptions);
 	add_hover_listener(polyline, function(pos__) {
-		var infowin = new google.maps.InfoWindow({disableAutoPan: true, content: sprintf('line #%d', i_), position: pos__});
+		var infowin = new google.maps.InfoWindow({disableAutoPan: true, content: sprintf('line #%d', plineidx_), position: pos__});
 		infowin.open(g_map);
 		return infowin;
 	}, 250, 750);
@@ -516,8 +535,14 @@ function make_marker_icon(color_) {
 			fillColor: (color_ === undefined ? 'black' : color_)};
 }
 
-function make_marker(latlng_, color_, label_, i_) {
-	var marker = new google.maps.Marker({position: latlng_, map: g_map, icon: make_marker_icon(color_), zIndex: i_});
+function make_marker(latlng_, color_, label_, plineidx_, ptidx_) {
+	var marker = new google.maps.Marker({position: latlng_, map: g_map, icon: make_marker_icon(color_), zIndex: ptidx_, 
+			draggable: true});
+	google.maps.event.addListener(marker, 'drag', function() { 
+			g_polyline_latlngs[plineidx_][ptidx_] = marker.getPosition();
+			refresh_pline_controls(); // blow away solo / pline selections.  oh well. 
+			redraw_all_plines_maybe(); 
+		});
 	g_markers.push(marker);
 	add_marker_mouseover_listener_for_infowin(marker, label_);
 	g_spiderfier.addMarker(marker);
