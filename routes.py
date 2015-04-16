@@ -22,6 +22,8 @@ NON_SUBWAY_FUDGEROUTES = sorted(FUDGEROUTE_TO_CONFIGROUTES.keys())
 FUDGEROUTES = NON_SUBWAY_FUDGEROUTES + SUBWAY_FUDGEROUTES
 CONFIGROUTES = set(reduce(lambda x, y: x + y, FUDGEROUTE_TO_CONFIGROUTES.values(), []))
 
+SPLIT_ROUTE_LEN_DIFF_TOLERANCE = 0.1
+
 # In some places we use a 3-character prefix of fudgeroutes and assume that it will identify them uniqiuely. 
 # That code is for testing only but it's still important. 
 # So here let's assert that no two fudgeroutes have the same 3-character prefix.
@@ -297,15 +299,17 @@ class RouteInfo:
 			self.is_split_by_dir = False
 		else:
 			routepts = [read_pts_file('fudge_route_%s_dir%d.json' % (self.name, direction)) for direction in (0, 1)]
-			stretch_splits_if_necessary(routepts[0], routepts[1])
+			if (routepts[0][0] != routepts[1][0]) or (routepts[0][-1] != routepts[1][-1]):
+				raise Exception('one or both split route endpoints are not equal')
+			stretch_splits_if_necessary(routepts[0], routepts[1], self.name)
 			self.is_split_by_dir = True
 
 		self.snapgraph = snapgraph.SnapGraph(routepts, forpaths=False)
 		self.init_datazoom_to_dir_maps()
 		if self.is_split_by_dir:
 			len_dir_0 = geom.dist_m_polyline(self.routepts(0)); len_dir_1 = geom.dist_m_polyline(self.routepts(1))
-			if abs(len_dir_0 - len_dir_1) > 0.1:
-				raise Exception('route %s: lengths are unequal.  dir 0 length: %0.4f.  dir 1 length: %0.4f.' % (self.name, len_dir_0, len_dir_1))
+			if abs(len_dir_0 - len_dir_1) > SPLIT_ROUTE_LEN_DIFF_TOLERANCE:
+				raise Exception('route %s: lengths are too different.  dir 0 length: %0.4f.  dir 1 length: %0.4f.' % (self.name, len_dir_0, len_dir_1))
 
 	def init_datazoom_to_dir_maps(self):
 		# The key sets for both of these will be [None] + c.VALID_DATAZOOMS.  None is for the source routepts, unsimplified. 
@@ -945,24 +949,28 @@ def prime_routeinfos(log=False):
 		routeinfo(froute)
 
 # Will modify arguments. 
-def stretch_splits_if_necessary(dir0pts_, dir1pts_):
+def stretch_splits_if_necessary(dir0pts_, dir1pts_, log_froute_):
 	dir0_stretch_idxes = get_maximal_sublists3(dir0pts_, lambda pt: pt in dir1pts_, returnidxes=True)
 	dir1_stretch_idxes = get_maximal_sublists3(dir1pts_, lambda pt: pt in dir0pts_, returnidxes=True)
 	if len(dir0_stretch_idxes) != len(dir1_stretch_idxes):
 		raise Exception('faulty logic?')
 	stretch_is_a_split = dir0pts_[dir0_stretch_idxes[0][0]] not in dir1pts_
-	for dir0stretch_idxes, dir1stretch_idxes in zip(dir0_stretch_idxes, dir1_stretch_idxes):
+	for dir0stretch_idxes, dir1stretch_idxes in zip(dir0_stretch_idxes, dir1_stretch_idxes)[::-1]:
 		if stretch_is_a_split:
 			dir0stretch = [dir0pts_[i] for i in [dir0stretch_idxes[0]-1] + dir0stretch_idxes + [dir0stretch_idxes[-1]+1]]
 			dir1stretch = [dir1pts_[i] for i in [dir1stretch_idxes[0]-1] + dir1stretch_idxes + [dir1stretch_idxes[-1]+1]]
 			dir0stretch_len = geom.dist_m_polyline(dir0stretch)
 			dir1stretch_len = geom.dist_m_polyline(dir1stretch)
-			if dir0stretch_len < dir1stretch_len:
+			if not (0.5 < dir0stretch_len/dir1stretch_len < 2.0):
+				raise Exception('won\'t stretch - lengths are too different - %f and %f' % (dir0stretch_len, dir1stretch_len))
+			if abs(dir0stretch_len - dir1stretch_len) < SPLIT_ROUTE_LEN_DIFF_TOLERANCE/100:
+				pass
+			elif dir0stretch_len < dir1stretch_len:
 				stretched_pline = get_pline_stretched_with_triangle_waves(dir0stretch, dir1stretch_len)
-				dir0pts_[dir0stretch_idxes[0]:dir0stretch_idxes[-1]+1] = stretched_pline
+				dir0pts_[dir0stretch_idxes[0]-1:dir0stretch_idxes[-1]+2] = stretched_pline
 			else:
 				stretched_pline = get_pline_stretched_with_triangle_waves(dir1stretch, dir0stretch_len)
-				dir1pts_[dir1stretch_idxes[1]:dir1stretch_idxes[-1]+1] = stretched_pline
+				dir1pts_[dir1stretch_idxes[0]-1:dir1stretch_idxes[-1]+2] = stretched_pline
 
 		stretch_is_a_split = not stretch_is_a_split
 
@@ -974,7 +982,7 @@ def get_pline_stretched_with_triangle_waves(pline_, goal_len_):
 		return geom.dist_m_polyline(wave_pline)
 
 	epsilon_x = 0.001
-	epsilon_y = 0.001
+	epsilon_y = SPLIT_ROUTE_LEN_DIFF_TOLERANCE/100
 	period, found_period_is_exact = binary_search(get_wave_pline_len_by_wave_period, 0.1, 999999, 
 			goal_len_, epsilon_x, epsilon_y)
 	if not found_period_is_exact:
