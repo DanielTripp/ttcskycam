@@ -547,6 +547,8 @@ class SnapGraph(object):
 					for e in value:
 						assert isinstance(e, geom.LatLng) or is_seq_like(e, (0.0, 0.0))
 			self.plinename2pts = {plinename: to_latlngs(pts) for plinename, pts in plines_.iteritems()}
+		if len(self.plinename2pts) == 0 or any(len(pts) < 2 for pts in self.plinename2pts.itervalues()):
+			raise Exception('Not enough pline / points.')
 	
 	def __str__(self):
 		return 'SnapGraph(%s)' % (self.name if self.name is not None else id(self))
@@ -1176,33 +1178,38 @@ class SnapGraph(object):
 		self.plinename2pts = {k: v for k, v in self.plinename2pts.iteritems() if k not in island_plinenames}
 		
 	def get_island_plinenames(self):
-		# Any plines w/ no vertexes are islands, so first get those: 
-		r = set([plinename for plinename, ptidx_to_vertidx in self.plinename_to_ptidx_to_vertidx.iteritems() if len(ptidx_to_vertidx) == 0])
-		# Also check all vertexes connectivity to each other in a graph theory type of way. 
-		# Thanks to http://stackoverflow.com/questions/15394254/graph-algorithm-finding-if-graph-is-connected-bipartite-has-cycle-and-is-a-tre 
-		visited = dict((vert, False) for vert in self.verts)
-		components = []
-		for vert in self.verts:
-			if not visited[vert]:
-				cur_component = set()
-				to_traverse = [vert]
-				while len(to_traverse) > 0:
-					vert2 = to_traverse.pop()
-					to_traverse += [vert3 for vert3 in self.get_connected_vertexes(vert2.name) if not visited[vert3]]
-					visited[vert2] = True
-					cur_component.add(vert2)
-				components.append(cur_component)
+		r = set()
+		if len(self.plinename2pts) == 1:
+			# If there's only one pline, there will be no vertexes, and so the 
+			# algorithm below won't work.  It's not what we consider an island 
+			# anyway.
+			pass 
+		else:
+			# Also check all vertexes connectivity to each other in a graph theory type of way. 
+			# Thanks to http://stackoverflow.com/questions/15394254/graph-algorithm-finding-if-graph-is-connected-bipartite-has-cycle-and-is-a-tre 
+			visited = dict((vert, False) for vert in self.verts)
+			components = []
+			for vert in self.verts:
+				if not visited[vert]:
+					cur_component = set()
+					to_traverse = [vert]
+					while len(to_traverse) > 0:
+						vert2 = to_traverse.pop()
+						to_traverse += [vert3 for vert3 in self.get_connected_vertexes(vert2.name) if not visited[vert3]]
+						visited[vert2] = True
+						cur_component.add(vert2)
+					components.append(cur_component)
 
-		largest_component = max(components, key=len)
-		for non_largest_component in [c for c in components if c is not largest_component]:
-			for vert in non_largest_component:
-				for plinename in [ptaddr.plinename for ptaddr in vert.ptaddrs]:
-					r.add(plinename)
+			largest_component = max(components, key=len)
+			for non_largest_component in [c for c in components if c is not largest_component]:
+				for vert in non_largest_component:
+					for plinename in [ptaddr.plinename for ptaddr in vert.ptaddrs]:
+						r.add(plinename)
 
-		if len(r) > len(largest_component)/200:
-			# This is meant to handle rare cases.  If it's handling common cases, then that's probably a bug. 
-			raise Exception('Something is probably wrong.  %d island plines, %d vertexes in largest component.' \
-					% (len(r), len(largest_component)))
+			if len(r) > len(largest_component)/200:
+				# This is meant to handle rare cases.  If it's handling common cases, then that's probably a bug. 
+				raise Exception('Something is probably wrong.  %d island plines, %d vertexes in largest component.' \
+						% (len(r), len(largest_component)))
 
 		return r
 
