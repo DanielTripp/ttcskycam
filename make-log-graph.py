@@ -115,16 +115,21 @@ if __name__ == '__main__':
 	for error_time in error_times:
 		plt.axvline(em_to_datetime(error_time), color='red', alpha=0.5)
 
+	TOO_HIGH_Y_CUTOFF = 120
+
 	for versionidx, version in enumerate(versions_in_time_order):
 		all_timesamples = version_to_timesamples[version]
 		for timesamples in split_timesamples_into_stretches(all_timesamples):
-			regular_xvals = []; too_high_xvals = []; regular_yvals = []
+			regular_finishtimes = []; too_high_finishtimes = []
+			regular_yvals = []
 			for timesample in timesamples:
-				if timesample.timetaken < 120:
-					regular_xvals.append(em_to_datetime(timesample.finishtime))
+				if timesample.timetaken < TOO_HIGH_Y_CUTOFF:
+					regular_finishtimes.append(timesample.finishtime)
 					regular_yvals.append(timesample.timetaken)
 				else:
-					too_high_xvals.append(em_to_datetime(timesample.finishtime))
+					too_high_finishtimes.append(timesample.finishtime)
+			regular_xvals = [em_to_datetime(x) for x in regular_finishtimes]
+			too_high_xvals = [em_to_datetime(x) for x in too_high_finishtimes]
 			too_high_yvals = [max_yval]*len(too_high_xvals)
 
 			color = get_color(version)
@@ -133,7 +138,7 @@ if __name__ == '__main__':
 
 			textx = float(versionidx+1)/(len(version_to_timesamples)+1)
 
-			all_xvals_em = [datetime_to_em(x) for x in regular_xvals + too_high_xvals]
+			all_xvals_em = [timesample.finishtime for timesample in timesamples]
 			min_x_em = min(all_xvals_em)
 			max_x_em = max(all_xvals_em)
 			arrow_target_x = em_to_datetime(average([min_x_em, max_x_em]))
@@ -146,6 +151,14 @@ if __name__ == '__main__':
 				arrow_target_y = max_yval
 			ax.annotate(version, xy=(arrow_target_x, arrow_target_y), textcoords='axes fraction', xytext=(textx, get_texty(versionidx)), 
 					arrowprops=dict(arrowstyle='->', linestyle='dotted', color=color), color=color)
+
+			start_yval = min(max(regular_yvals[:30])*1.2, TOO_HIGH_Y_CUTOFF)
+			plt.vlines([em_to_datetime(timesamples[0].finishtime)], 0.1, start_yval, color=color, alpha=0.5)
+			end_yval = min(max(regular_yvals[-30:])*1.2, TOO_HIGH_Y_CUTOFF)
+			plt.vlines([em_to_datetime(timesamples[-1].finishtime)], 0.1, end_yval, color=color, alpha=0.5)
+
+			#for timesample in [timesamples[0], timesamples[-1]]:
+			#	plt.vlines([em_to_datetime(timesample.finishtime)], 0, 30, color=color)
 
 	plt.axhline(10,  color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
 	plt.axhline(20,  color=(0.5,0.5,0.5), alpha=0.5, linestyle='--')
