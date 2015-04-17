@@ -49,7 +49,23 @@ function initialize() {
 	init_map();
 
 	google.maps.event.addListenerOnce(g_map, 'bounds_changed', init_everything_that_depends_on_map);
+	google.maps.event.addListener(g_map, 'dblclick', on_map_doubleclick);
 
+}
+
+function on_map_doubleclick(mouseevent_) {
+	var pt = mouseevent_.latLng;
+	if(g_polyline_latlngs.length == 0) {
+		g_polyline_latlngs.push([pt]);
+	} else {
+		if(dist_m(pt, g_polyline_latlngs[0][0]) < dist_m(pt, last_elem(g_polyline_latlngs[0]))) {
+			array_insert(g_polyline_latlngs[0], 0, pt);
+		} else {
+			g_polyline_latlngs[0].push(pt);
+		}
+	}
+	forget_drawn_objects();
+	refresh_everything_from_latlngs();
 }
 
 function init_everything_that_depends_on_map() {
@@ -232,9 +248,7 @@ function on_zoom_changed() {
 function refresh_from_file() {
 	forget_drawn_objects();
 	get_latlngs_from_file();
-	refresh_pline_controls();
-	draw_objects();
-	refresh_plines_paragraph();
+	refresh_everything_from_latlngs();
 }
 
 function get_latlngs_from_file() {
@@ -248,6 +262,10 @@ function get_latlngs_from_file() {
 function refresh_from_textarea() {
 	forget_drawn_objects();
 	get_latlngs_from_textarea();
+	refresh_everything_from_latlngs();
+}
+
+function refresh_everything_from_latlngs() {
 	refresh_pline_controls();
 	draw_objects();
 	refresh_plines_paragraph();
@@ -377,11 +395,14 @@ function forget_drawn_objects() {
 	});
 	g_markers = [];
 
+	forget_bounding_rect();
+}
+
+function forget_bounding_rect() {
 	if(g_bounding_rect != null) {
 		g_bounding_rect.setMap(null);
 		g_bounding_rect = null;
 	}
-
 }
 
 function forget_plines() {
@@ -392,8 +413,6 @@ function forget_plines() {
 }
 
 function draw_objects() {
-	var minlat=90, maxlat=0, minlng=0, maxlng=-180;
-
 	var draw_dots = is_selected('dots_checkbox');
 
 	var solo_plineidx = get_solo_plineidx_according_to_gui();
@@ -414,19 +433,39 @@ function draw_objects() {
 				make_marker(latlng, color, label, plineidx, ptidx);
 			}
 
+		}
+	}
+	redraw_all_plines_maybe();
+
+	draw_bounding_rect();
+
+}
+
+function draw_bounding_rect() {
+	var minlat=90, maxlat=0, minlng=0, maxlng=-180;
+
+	var solo_plineidx = get_solo_plineidx_according_to_gui();
+	for(var plineidx=0; plineidx<g_polyline_latlngs.length; plineidx++) {
+		if(solo_plineidx!=-1) {
+			if(solo_plineidx!=plineidx) {
+				continue;
+			}
+		} else if(!is_plineidx_visible_according_to_gui(plineidx)) {
+			continue;
+		}
+		var line_latlngs = g_polyline_latlngs[plineidx];
+		for(var ptidx=0; ptidx<line_latlngs.length; ptidx++) {
+			var latlng = line_latlngs[ptidx];
 			minlat = Math.min(minlat, latlng.lat());
 			maxlat = Math.max(maxlat, latlng.lat());
 			minlng = Math.min(minlng, latlng.lng());
 			maxlng = Math.max(maxlng, latlng.lng());
 		}
 	}
-	redraw_all_plines_maybe();
-
 	var rect_bounds = new google.maps.LatLngBounds(
 			new google.maps.LatLng(minlat, minlng), new google.maps.LatLng(maxlat, maxlng));
 	g_bounding_rect = new google.maps.Rectangle({bounds: rect_bounds, map: g_map, strokeColor: 'rgb(0,0,0)', 
 			strokeOpacity: 0.5, strokeWeight: 1, fillOpacity: 0, zIndex: -10, clickable: false});
-
 }
 
 function redraw_all_plines_maybe() {
@@ -586,9 +625,12 @@ function make_marker(latlng_, color_, label_, plineidx_, ptidx_) {
 			draggable: true});
 	google.maps.event.addListener(marker, 'drag', function() { 
 			g_polyline_latlngs[plineidx_][ptidx_] = marker.getPosition();
-			refresh_pline_controls(); // will blow away solo / pline selections.  oh well. 
+			// will blow away solo / pline selections.  oh well. 
+			refresh_pline_controls(); 
 			redraw_all_plines_maybe(); 
 			refresh_plines_paragraph();
+			forget_bounding_rect();
+			draw_bounding_rect();
 		});
 	google.maps.event.addListener(marker, 'dblclick', function() { 
 			array_remove(g_polyline_latlngs[plineidx_], ptidx_);
@@ -716,6 +758,11 @@ function scroll_to_visible() {
 	}
 }
 
+function on_clear_button_clicked() {
+	forget_drawn_objects();
+	g_polyline_latlngs = [];
+	refresh_everything_from_latlngs();
+}
 
     </script>
   </head>
