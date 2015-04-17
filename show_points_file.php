@@ -223,7 +223,7 @@ function erase_grid() {
 
 
 function on_zoom_changed() {
-	set_contents('p_zoom', sprintf('zoom: %d', g_map.getZoom()));
+	set_contents('p_zoom', sprintf('Zoom: %d', g_map.getZoom()));
 	if(is_selected('arrows_checkbox')) {
 		redraw_objects();
 	}
@@ -723,44 +723,55 @@ function scroll_to_visible() {
 		<div id="map_canvas" style="width:80%; height:90%; float:left"></div>
 		<div id="pline_controls" style="width:20%; height:90%; float:right; overflow:scroll"></div>
 		<br>
-		Filename: <input type="text" size="80" name="filename_field" id="filename_field" /> 
-		<input type="button" onclick="refresh_from_file()" value="Submit (file)" /> 
-		Note: <input type="text" size="40" /> <br>
-		<textarea id="contents_textarea" cols="160" rows="10" wrap="off"></textarea>
-		<input type="button" onclick="refresh_from_textarea()" value="Submit (text area)" />
-		<input type="button" onclick="scroll_to_visible()" value="Pan To" />
-		<br>
-		<input checked type="checkbox" id="dots_checkbox" name="dots_checkbox" onclick="redraw_objects()"/>
-		<label for="dots_checkbox">Dots</label>
 
-		<input type="checkbox" id="polyline_checkbox" name="polyline_checkbox" checked onclick="redraw_objects()"/>
-		<label for="polyline_checkbox">Polylines</label>
+		<div style="width:100%; float:left">
+			<input checked type="checkbox" id="dots_checkbox" name="dots_checkbox" onclick="redraw_objects()"/>
+			<label for="dots_checkbox">Dots</label>
 
-		<input type="checkbox" id="arrows_checkbox" name="arrows_checkbox" checked onclick="redraw_objects()"/>
-		<label for="arrows_checkbox">Arrows</label>
+			<input type="checkbox" id="polyline_checkbox" name="polyline_checkbox" checked onclick="redraw_objects()"/>
+			<label for="polyline_checkbox">Polylines</label>
 
-		<label>
-		<input type="checkbox" id="lots_of_arrows_checkbox" name="lots_of_arrows_checkbox" onclick="redraw_objects()"/>
-		Lots of Arrows
-		</label>
+			<input type="checkbox" id="arrows_checkbox" name="arrows_checkbox" checked onclick="redraw_objects()"/>
+			<label for="arrows_checkbox">Arrows</label>
 
-		<input type="checkbox" id="colors_checkbox" name="colors_checkbox" checked onclick="redraw_objects()"/>
-		<label for="colors_checkbox">Colors</label>
-///
-		<input type="checkbox" id="grid_checkbox" name="grid_checkbox" onclick="on_grid_checkbox_clicked()"/>
-		<label for="grid_checkbox">Grid</label>
-///
-		<label><input id="map_sync_checkbox" type="checkbox"/>Map Sync</label>
-///
-		Opacity: 
-		<input type="button" onclick="on_opacity_button_clicked(-0.1)" value="-0.1" />
-		<input type="button" onclick="on_opacity_button_clicked(-0.01)" value="-0.01" />
-		<input type="button" onclick="on_opacity_button_clicked(0.01)" value="+0.01" />
-		<input type="button" onclick="on_opacity_button_clicked(0.1)" value="+0.1" />
+			<label>
+			<input type="checkbox" id="lots_of_arrows_checkbox" name="lots_of_arrows_checkbox" onclick="redraw_objects()"/>
+			Lots of Arrows
+			</label>
 
-		<p id="p_clicked_pt"/>
-		<p id="p_zoom"/>
-		<p id="p_dists"/>
-		<p id="p_plines"/>
+			<input type="checkbox" id="colors_checkbox" name="colors_checkbox" checked onclick="redraw_objects()"/>
+			<label for="colors_checkbox">Colors</label> ///
+			<input type="checkbox" id="grid_checkbox" name="grid_checkbox" onclick="on_grid_checkbox_clicked()"/>
+			<label for="grid_checkbox">Grid</label> ///
+			<label><input id="map_sync_checkbox" type="checkbox"/>Map Sync</label> ///
+			Opacity: 
+			<input type="button" onclick="on_opacity_button_clicked(-0.1)" value="-0.1" />
+			<input type="button" onclick="on_opacity_button_clicked(-0.01)" value="-0.01" />
+			<input type="button" onclick="on_opacity_button_clicked(0.01)" value="+0.01" />
+			<input type="button" onclick="on_opacity_button_clicked(0.1)" value="+0.1" />
+			&nbsp;&nbsp;&nbsp;<p style="display:inline" id="p_zoom"/>
+		</div>
+
+		<div style="width:100%; float:left">
+			Filename: <input type="text" size="80" name="filename_field" id="filename_field" /> 
+			<input type="button" onclick="refresh_from_file()" value="Submit (file)" /> 
+			Note: <input type="text" size="40" /> <br>
+		</div>
+
+		<div style="width:80%; float:left">
+			<textarea id="contents_textarea" cols="150" rows="10" wrap="off"></textarea>
+		</div>
+
+		<div style="width:20%; float:right">
+			<input type="button" onclick="refresh_from_textarea()" value="Submit (text area)" /><br>
+			<input type="button" onclick="scroll_to_visible()" value="Pan To" /><br>
+			<input type="button" onclick="on_clear_button_clicked()" value="Clear" /><br>
+		</div>
+
+		<div style="width:100%; float:left">
+			<p id="p_clicked_pt"/>
+			<p id="p_dists"/>
+			<p id="p_plines"/>
+		</div>
   </body>
 </html>
