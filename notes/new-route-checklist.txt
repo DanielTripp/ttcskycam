@@ -12,4 +12,5 @@
 	permission problem might happen in sandbox might happen if route is generated 
 	under apache.)
 - ./build-streetlabels.py FROUTE 
+- rebuild system graph
 
