@@ -12,7 +12,7 @@
 - Maybe add special case in routes.get_froute_to_english().
 - streetlabels.yaml 
 - ./build-streetlabels.py FROUTE 
-- cd img; svn-add-all-unknown-files
+- cd img; svn-add-all-unknown-files; cd ..
 - reports.shardfunc()
 - rebuild system graph
 - add to about.html - "News"
