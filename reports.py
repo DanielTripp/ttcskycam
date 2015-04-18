@@ -215,6 +215,7 @@ def shardfunc(func_, args_):
 			# These weren't: 
 			'wellesley': 0, 
 			'harbourfront': 1, 
+			'sherbourne': 2, 
 		}
 	return froute_to_shard[froute]
 
