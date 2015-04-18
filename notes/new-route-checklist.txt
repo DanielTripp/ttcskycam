@@ -13,4 +13,6 @@
 	under apache.)
 - ./build-streetlabels.py FROUTE 
 - rebuild system graph
+- add to about.html - "News"
+
 
