@@ -966,6 +966,10 @@ function select_line(textarea_id_, linenum_) {
 	return false;
 }
 
+function last_elem(array_) {
+	return array_[array_.length-1];
+}
+
 eval(get_sync("js/json2.js"));
 
 
