@@ -165,4 +165,19 @@ sherbourne:
         5197: The Esplanade
         5490: Lower Jarvis St
 
+parliament:
+    0:
+        0: ''
+        126: Bloor St E
+        308: Parliament St
+        2651: Front St E
+        2986: Princess St
+    1:
+        0: ''
+        126: Bloor St E
+        308: Parliament St
+        2651: Front St E
+        2765: Berkeley St
+        2903: The Esplanade
+
 
