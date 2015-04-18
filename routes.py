@@ -9,7 +9,7 @@ FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301', '502', 
 'spadina': ['510'], 
 'bathurst': ['511', '310', '7'], 'dufferin': ['29', '329'], 'lansdowne': ['47'], 'ossington': ['63', '316'], 'carlton': ['506', '306'], 
 'dupont': ['26'], 'stclair': ['512', '312'], 'keele': ['41'], 
-'harbourfront': ['509'], 'wellesley': ['94']
+'harbourfront': ['509'], 'wellesley': ['94'], 'sherbourne': ['75'], 
 }
 
 CONFIGROUTE_TO_FUDGEROUTES = defaultdict(lambda: [])
@@ -974,12 +974,21 @@ def stretch_splits_if_necessary(dir0pts_, dir1pts_, log_froute_):
 
 		stretch_is_a_split = not stretch_is_a_split
 
+LOG_SPLIT_STRETCHING = False
+
 def get_pline_stretched_with_triangle_waves(pline_, goal_len_):
+	if LOG_SPLIT_STRETCHING:
+		len1 = geom.dist_m_polyline(pline_); len2 = goal_len_
+		printerr('stretching %.2f to %.2f (factor of %.2f)' % (len1, len2, len2/len1))
+
 	initial_wave_height = c.DATAZOOM_TO_RDP_EPSILON[c.MAX_DATAZOOM]*0.75
 
 	def get_wave_pline_len_by_wave_period(wave_period__):
 		wave_pline = get_triangle_wave_pline(pline_, wave_period__, initial_wave_height)
-		return geom.dist_m_polyline(wave_pline)
+		r = geom.dist_m_polyline(wave_pline)
+		if LOG_SPLIT_STRETCHING:
+			printerr('period (binary) %.2f = %.2f' % (wave_period__, r))
+		return r
 
 	epsilon_x = 0.001
 	epsilon_y = SPLIT_ROUTE_LEN_DIFF_TOLERANCE/100
@@ -987,15 +996,27 @@ def get_pline_stretched_with_triangle_waves(pline_, goal_len_):
 			goal_len_, epsilon_x, epsilon_y)
 	if not found_period_is_exact:
 		while get_wave_pline_len_by_wave_period(period) < goal_len_:
+			if LOG_SPLIT_STRETCHING:
+				printerr('period (linear) %.2f...' % period)
 			period -= epsilon_x
 		def get_wave_pline_len_by_wave_height(wave_height__):
 			wave_pline = get_triangle_wave_pline(pline_, period, wave_height__)
-			return geom.dist_m_polyline(wave_pline)
+			r = geom.dist_m_polyline(wave_pline)
+			if LOG_SPLIT_STRETCHING:
+				printerr('height (binary) %.6f = %.2f' % (wave_height__, r))
+			return r
 		height, found_height_is_exact = binary_search(get_wave_pline_len_by_wave_height, 0.0, initial_wave_height, 
 				goal_len_, epsilon_x/1000, epsilon_y)
-		return get_triangle_wave_pline(pline_, period, height)
+		r = get_triangle_wave_pline(pline_, period, height)
 	else:
-		return get_triangle_wave_pline(pline_, period, initial_wave_height)
+		r = get_triangle_wave_pline(pline_, period, initial_wave_height)
+	if LOG_SPLIT_STRETCHING:
+		printerr('stretching done.  original: %d pts, stretched: %d pts.' % (len(pline_), len(r)))
+		printerr('original:')
+		printerr(pline_)
+		printerr('stretched:')
+		printerr(r)
+	return r
 
 def get_split_lineseg(pt1_, pt2_, min_piece_len_):
 	assert isinstance(pt1_, geom.LatLng) and isinstance(pt2_, geom.LatLng)

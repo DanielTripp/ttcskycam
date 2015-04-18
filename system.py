@@ -525,7 +525,7 @@ def get_stop_to_orig_pline_plinename(orig_vert_, plinename_):
 @lru_cache(1)
 @picklestore.decorate
 def get_snapgraph():
-	froute_to_pline = {froute: routes.routeinfo(froute).snapgraph.plinename2pts['0'] for froute in routes.FUDGEROUTES}
+	froute_to_pline = {froute: routes.routeinfo(froute).routepts(0, c.MAX_DATAZOOM) for froute in routes.FUDGEROUTES}
 	for subway_froute in routes.SUBWAY_FUDGEROUTES:
 		pline = froute_to_pline.pop(subway_froute)
 		subway_froute_weighted_name = snapgraph.set_plinename_weight(subway_froute, 0.6)
