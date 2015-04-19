@@ -9,7 +9,8 @@ FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301', '502', 
 'spadina': ['510'], 
 'bathurst': ['511', '310', '7'], 'dufferin': ['29', '329'], 'lansdowne': ['47'], 'ossington': ['63', '316'], 'carlton': ['506', '306'], 
 'dupont': ['26'], 'stclair': ['512', '312'], 'keele': ['41'], 
-'harbourfront': ['509'], 'wellesley': ['94'], 'sherbourne': ['75'], 'parliament': ['65'], 
+'harbourfront': ['509'], 'wellesley': ['94'], 'sherbourne': ['75'], 'parliament': ['65'], 'symington': ['168'], 
+'davenport': ['127'], 'junction': ['40']
 }
 
 CONFIGROUTE_TO_FUDGEROUTES = defaultdict(lambda: [])

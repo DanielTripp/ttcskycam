@@ -217,6 +217,9 @@ def shardfunc(func_, args_):
 			'harbourfront': 1, 
 			'sherbourne': 2, 
 			'parliament': 3, 
+			'symington': 4, 
+			'davenport': 5, 
+			'junction': 6, 
 		}
 	return froute_to_shard[froute]
 
