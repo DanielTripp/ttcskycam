@@ -180,4 +180,34 @@ parliament:
         2765: Berkeley St
         2903: The Esplanade
 
+symington:
+    0: ''
+    81: Rogers Rd
+    810: Old Weston Rd
+    2091: Davenport Rd
+    2841: Symington Ave
+    4396: Bloor St W
+    4793: Dundas St W
+    4850: ''
+
+davenport:
+    0:
+        0: ''
+        57: Old Weston Rd
+        390: Davenport Rd
+        4670: Kendal Ave
+        4856: Macpherson Ave
+        5065: Spadina Rd
+        6047: ''
+    1:
+        0: ''
+        57: Old Weston Rd
+        390: Davenport Rd
+        4875: Spadina Rd
+        6047: ''
+
+junction:
+    0: ''
+    62: Dundas St W
+    2949: ''
 
