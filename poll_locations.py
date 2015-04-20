@@ -7,7 +7,7 @@ import db, vinfo, routes, tracks, streets, multiproc
 from misc import *
 
 def get_data_from_web_as_str(route_, time_es_):
-	wget_args = ['wget', '--tries=5', '--timeout=10', '-O', '-', 'http://webservices.nextbus.com/service/publicXMLFeed?command=vehicleLocations&a=ttc&r=%s&t=%d' \
+	wget_args = ['wget', '--tries=5', '--timeout=25', '-O', '-', 'http://webservices.nextbus.com/service/publicXMLFeed?command=vehicleLocations&a=ttc&r=%s&t=%d' \
 		% (route_, time_es_)]
 	stdout, stderr = subprocess.Popen(wget_args, stdout=subprocess.PIPE, stderr=subprocess.PIPE).communicate()
 	if not stdout:
