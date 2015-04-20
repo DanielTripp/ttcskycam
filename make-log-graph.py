@@ -15,7 +15,7 @@ from misc import *
 
 def get_color(vid_):
 	colors = [(0,0,0), (0.4,0.4,0.4), 
-			(0,1,0), (0,1,1), (1,0,1), (1,0,0), (0,0,1), (0.7,0.7,0), 
+			(0,1,0), (0,1,1), (1,0,1), (0,0,1), (0.7,0.7,0), 
 			(0,0.4,0), (0.4,0.4,0), (0,0.4,0.4), (0.4,0,0.4), (0,0,0.4), 
 			(0.2,0.2,1), 
 			]
@@ -48,6 +48,7 @@ if __name__ == '__main__':
 	finishtime_cutoff_em = now_em() - finishtime_cutoff_numdaysago*24*60*60*1000
 
 	error_times = []
+	poll_slow_times = []
 
 	for dirpath, dirnames, filenames in os.walk(logs_directory):
 		dirnames[:] = []
@@ -58,20 +59,21 @@ if __name__ == '__main__':
 			with open(full_filename) as fin:
 				for line in fin:
 					splits = line.strip().split(',')
-					if len(splits) >= 3 and (splits[0].startswith(str(current_year())) or splits[0].startswith(str(current_year()-1))):
-						# Must be a generation time log line.
+					if splits[-1] == '--generate-time--':
 						finishtime_em = str_to_em(splits[0])
 						if finishtime_em > finishtime_cutoff_em:
 							timetaken = int(splits[1])
 							timesample = TimeSample(finishtime_em, timetaken)
 							version = splits[2]
 							version_to_timesamples[version].append(timesample)
-					else:
-						# If it starts with a timestamp, we assume it's an error line.
-						try:
-							error_times.append(str_to_em(line[:16]))
-						except ValueError:
-							pass
+					elif line.rstrip().endswith('--poll-slow--'):
+						t = str_to_em(line[:16])
+						if t > finishtime_cutoff_em:
+							poll_slow_times.append(t)
+					elif line.rstrip().endswith('--generate-error--'):
+						t = str_to_em(line[:16])
+						if t > finishtime_cutoff_em:
+							error_times.append(t)
 
 	if not version_to_timesamples:
 		# An empty plot produces an error message in our date formatting function.  Here we're preventing that. 
@@ -112,8 +114,11 @@ if __name__ == '__main__':
 
 	max_yval = 120
 
+	for poll_slow_time in poll_slow_times:
+		plt.axvline(em_to_datetime(poll_slow_time), color='grey', alpha=0.5, linestyle='dashed')
+
 	for error_time in error_times:
-		plt.axvline(em_to_datetime(error_time), color='red', alpha=0.5)
+		plt.axvline(em_to_datetime(error_time), color='red')
 
 	TOO_HIGH_Y_CUTOFF = 120
 
