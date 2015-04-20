@@ -25,18 +25,18 @@ def get_data_from_web_as_xml(route_, time_es_, xml_filename_, xml_headers_):
 	return parse_xml(data_str)
 
 def parse_xml(xml_str_):
-	def print_data_str(msg__):
-		print >> sys.stderr, '--- %s - %s:' % (now_str(), msg__)
-		print >> sys.stderr, '---'
-		print >> sys.stderr, data_str,
-		print >> sys.stderr, '---'
+	def print_error(msg__):
+		printerr('%s,%s,--poll-error--' % (now_str(), msg__))
+		printerr('---')
+		printerr(xml_str_)
+		printerr('---')
 	try:
 		r = xml.dom.minidom.parseString(xml_str_)
 	except ExpatError:
-		print_data_str('Failed to parse output from NextBus.')
+		print_error('Failed to parse output from NextBus')
 		raise
 	if [e for e in r.documentElement.childNodes if e.nodeName.lower() == 'error']:
-		print_data_str('Detected error(s) in output from NextBus.  (Will try to get data from this document regardless.)')
+		print_error('Detected error(s) in output from NextBus (Will try to get data from this document regardless)')
 	return r
 
 def dump_xml(fout_, route_, time_es_, xml_headers_, data_str_):
@@ -74,7 +74,7 @@ def deal_with_xml(xmldoc_, insert_into_db_, vis_filename_):
 	if vis_filename_:
 		if vis_filename_ == 'stdout':
 			for vi in vehicles:
-				print >> sys.stdout, vi.str_long()
+				print vi.str_long()
 		else:
 			with open(vis_filename_, 'a') as fout:
 				for vi in vehicles:
@@ -148,14 +148,14 @@ def poll_once(routelist_, insert_into_db_, pollstate_filename_, xml_filename_, x
 					route_to_times[route] = get_data_from_web_and_deal_with_it(
 							route, nextbus_lasttime, insert_into_db_, xml_filename_, xml_headers_, vis_filename_)
 			except Exception, e:
-				print 'At %s: error getting route %s' % (em_to_str(now_em()), route)
+				printerr('%s,error getting route %s,--poll-error--' % (now_str(), route))
 				traceback.print_exc(e)
 		if multiproc_:
 			for route, poolresult in route_to_poolresult.iteritems():
 				try:
 					route_to_times[route] = poolresult.get()
 				except Exception, e:
-					print 'At %s: error getting route %s' % (em_to_str(now_em()), route)
+					printerr('%s,error getting route %s,--poll-error--' % (now_str(), route))
 					traceback.print_exc(e)
 		with open(pollstate_filename_, 'w') as fout:
 			json.dump(route_to_times, fout, indent=0)
