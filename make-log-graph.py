@@ -75,6 +75,22 @@ if __name__ == '__main__':
 						if t > finishtime_cutoff_em:
 							error_times.append(t)
 
+	poll_error_times = []
+
+	for dirpath, dirnames, filenames in os.walk(logs_directory):
+		dirnames[:] = []
+		for filename in (f for f in filenames if f.startswith('poll_locations_')):
+			full_filename = os.path.join(dirpath, filename)
+			if os.stat(full_filename).st_mtime*1000 < finishtime_cutoff_em:
+				continue
+			with open(full_filename) as fin:
+				for line in fin:
+					splits = line.strip().split(',')
+					if splits[-1] == '--poll-error--':
+						t = str_to_em(splits[0])
+						if t > finishtime_cutoff_em:
+							poll_error_times.append(t)
+
 	if not version_to_timesamples:
 		# An empty plot produces an error message in our date formatting function.  Here we're preventing that. 
 		version_to_timesamples['x'].append(TimeSample(now_em(), 0))
@@ -116,6 +132,9 @@ if __name__ == '__main__':
 
 	for poll_slow_time in poll_slow_times:
 		plt.axvline(em_to_datetime(poll_slow_time), color='grey', alpha=0.5, linestyle='dashed')
+
+	for poll_error_time in poll_error_times:
+		plt.axvline(em_to_datetime(poll_error_time), color='black', linestyle='dashed')
 
 	for error_time in error_times:
 		plt.axvline(em_to_datetime(error_time), color='red')
