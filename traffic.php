@@ -2334,7 +2334,7 @@ $(document).ready(initialize);
 			</div>
 		<div style="clear: both">
 			<hr style="border-top:1px solid #ccc" />
-			<p><a href="about.html">About this website.</a></p>
+			<p><a href="/about.html">About this website.</a></p>
 			<p></p>
 		</div>
 		<div id="route-options-dialog"><div>
