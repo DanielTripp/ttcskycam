@@ -87,9 +87,12 @@ if __name__ == '__main__':
 				for line in fin:
 					splits = line.strip().split(',')
 					if splits[-1] == '--poll-error--':
-						t = str_to_em(splits[0])
-						if t > finishtime_cutoff_em:
-							poll_error_times.append(t)
+						try:
+							t = str_to_em(splits[0])
+							if t > finishtime_cutoff_em:
+								poll_error_times.append(t)
+						except ValueError: # this is to skip lines jumbled by multiprocessing.  multiproc in poll_locations won't 
+							pass # be around for long.  so remove this after it's gone.
 
 	if not version_to_timesamples:
 		# An empty plot produces an error message in our date formatting function.  Here we're preventing that. 
