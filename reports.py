@@ -1,8 +1,8 @@
 #!/usr/bin/python2.6
 
 from collections import *
-import sys, os, os.path, json, argparse, traceback, time
-import vinfo, db, routes, geom, mc, yards, traffic, c, util, multiproc
+import sys, os, os.path, json, argparse, traceback, time, pprint
+import vinfo, db, routes, geom, mc, yards, traffic, c, util, multiproc, streets, tracks
 from misc import *
 
 GET_CURRENT_REPORTS_FROM_DB = os.path.exists('GET_CURRENT_REPORTS_FROM_DB')
@@ -111,57 +111,53 @@ def get_reports_finished_flag_file_mtime():
 	else:
 		return 0
 
-def get_poll_finished_flag_file_mtime():
-	filename = '/tmp/ttc-poll-locations-finished-flag'
+def get_poll_finished_flag_file_mtime(froute_):
+	filename = '/tmp/ttc-poll-locations-finished-flag-%s' % froute_
 	if os.path.exists(filename):
-		return os.path.getmtime(filename)
+		return int(os.path.getmtime(filename)*1000)
 	else:
 		return 0
 
-def wait_for_locations_poll_to_finish():
-	MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS = 60*2
-	t0 = time.time()
-	mtime0 = get_poll_finished_flag_file_mtime()
-	mtime1 = mtime0
-	prev_wait_secs = 0; cur_wait_secs = 0
+# arg froute_to_poll_file_mtime_ we modify this. 
+# arg stale_froutes_ we modify this. 
+def wait_for_a_location_poll_to_finish(froute_to_poll_file_mtime_, stale_froutes_, poll_file_watching_start_time_):
+	assert set(froute_to_poll_file_mtime_.keys()) == set(routes.NON_SUBWAY_FUDGEROUTES)
+	MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS = 90
 	while True:
-		prev_wait_secs = cur_wait_secs
-		cur_wait_secs = int(time.time() - t0)
+		r = None
+		
+		changed_froutes_n_mtimes = []
+		for froute in routes.NON_SUBWAY_FUDGEROUTES:
+			mtime = get_poll_finished_flag_file_mtime(froute)
+			if mtime != froute_to_poll_file_mtime_[froute]:
+				changed_froutes_n_mtimes.append((froute, mtime))
 
-		mtime1 = get_poll_finished_flag_file_mtime()
-		if mtime1 != mtime0:
-			break
+		if changed_froutes_n_mtimes:
+			changed_froutes_n_mtimes.sort(key=lambda x: x[1])
+			r, mtime = changed_froutes_n_mtimes[0]
+			if r in stale_froutes_:
+				wait_time_secs = (now_em() - max(froute_to_poll_file_mtime_[r], poll_file_watching_start_time_))/1000
+				printerr('%s,reports: watched %s poll locations flag file for %d seconds before it was touched,--poll-slow--' % \
+						(now_str(), r, wait_time_secs))
+				stale_froutes_.remove(r)
+			froute_to_poll_file_mtime_[r] = mtime
 
-		if (cur_wait_secs >= MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS) and (prev_wait_secs < MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS):
-			printerr('%s,reports: watched poll locations flag file for %d seconds, still hasn\'t been touched,--poll-slow--' % (now_str(), MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS))
-			
-		time.sleep(2)
+		for froute in routes.NON_SUBWAY_FUDGEROUTES:
+			wait_time_secs = (now_em() - max(froute_to_poll_file_mtime_[froute], poll_file_watching_start_time_))/1000
+			if wait_time_secs > MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS and froute not in stale_froutes_:
+				stale_froutes_.add(froute)
+				printerr('%s,reports: watched %s poll locations flag file for %d seconds, still hasn\'t been touched,--poll-slow--' % \
+						(now_str(), froute, wait_time_secs))
 
-	if cur_wait_secs > MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS:
-		printerr('%s,reports: watched poll locations flag file for %d seconds before it was touched,--poll-slow--' % (now_str(), cur_wait_secs))
+		if r is not None:
+			return r
+
+		time.sleep(0.5)
 
 g_froute_to_times = None
 
-def make_all_reports_and_insert_into_db_once(report_time_, shardpool_):
-	global g_froute_to_times
-	if shardpool_ is not None:
-		got_errors_by_froute = shardpool_.map(make_reports_and_insert_into_db_single_route, [(report_time_, froute) for froute in FROUTES])
-		got_errors = any(got_errors_by_froute)
-	else:
-		got_errors = False
-		for froute in FROUTES:
-			got_errors_this_froute = make_reports_and_insert_into_db_single_route(report_time_, froute)
-			got_errors |= got_errors_this_froute
-	if LOG_INDIV_ROUTE_TIMES:
-		if g_froute_to_times is None:
-			g_froute_to_times = defaultdict(list)
-		for froute, times in g_froute_to_times.iteritems():
-			printerr(froute, average(times))
-	if got_errors:
-		sys.exit(37)
-
 @multiproc.include_entire_traceback
-def make_reports_and_insert_into_db_single_route(report_time_, froute_):
+def make_reports_single_route(report_time_, froute_, insert_into_db_):
 	global g_froute_to_times
 	if LOG_INDIV_ROUTE_TIMES:
 		t0 = time.time()
@@ -183,7 +179,7 @@ def make_reports_and_insert_into_db_single_route(report_time_, froute_):
 				printerr('%s,error generating locations report for %s / %s / dir=%d / datazoom=%d,--generate-error--' % (now_str(), em_to_str(report_time_), froute_, direction, datazoom))
 				traceback.print_exc()
 				got_errors = True
-		if not got_errors:
+		if not got_errors and insert_into_db_:
 			db.insert_reports(froute_, direction, report_time_, reporttype_to_datazoom_to_reportdataobj)
 	if LOG_INDIV_ROUTE_TIMES:
 		t1 = time.time()
@@ -194,8 +190,9 @@ def make_reports_and_insert_into_db_single_route(report_time_, froute_):
 def make_shardpool():
 	return multiproc.ShardPool(shardfunc, 8)
 
+# Dead code? 
 def shardfunc(func_, args_):
-	assert func_ == make_reports_and_insert_into_db_single_route
+	assert func_ == make_reports_single_route
 	froute = args_[1]
 	assert froute in routes.NON_SUBWAY_FUDGEROUTES
 	froute_to_shard = {
@@ -223,24 +220,48 @@ def shardfunc(func_, args_):
 		}
 	return froute_to_shard[froute]
 
-def make_all_reports_and_insert_into_db_forever(shardpool_, redir_):
+def get_init_froute_to_poll_file_mtime():
+	froute_to_poll_file_mtime = {}
+	for froute in routes.NON_SUBWAY_FUDGEROUTES:
+		froute_to_poll_file_mtime[froute] = get_poll_finished_flag_file_mtime(froute)
+	return froute_to_poll_file_mtime
+
+def make_all_reports_forever(redir_, insert_into_db_):
 	routes.prime_routeinfos()
+	prime_graphs()
+	froute_to_poll_file_mtime = get_init_froute_to_poll_file_mtime()
+	stale_froutes = set()
+	poll_file_watching_start_time = now_em()
+	froutes_left_in_round = set(routes.NON_SUBWAY_FUDGEROUTES)
+	all_reports_in_round_generate_time_secs = 0.0
 	while True:
-		wait_for_locations_poll_to_finish()
+		froute = wait_for_a_location_poll_to_finish(froute_to_poll_file_mtime, stale_froutes, poll_file_watching_start_time)
 		if redir_:
 			redirect_stdstreams_to_file('reports_generation_')
 		t0 = time.time()
-		make_all_reports_and_insert_into_db_once(round_up_by_minute(now_em()), shardpool_)
+		got_errors = make_reports_single_route(round_up_by_minute(now_em()), froute, insert_into_db_)
 		t1 = time.time()
-		reports_took_secs = t1 - t0
-		printerr('%s,%d,%s,--generate-time--' % (now_str(), reports_took_secs, c.VERSION))
+		report_generate_time_secs = t1 - t0
+		if froute in froutes_left_in_round: # else: not all froutes flag files touched?  probably a bad sign, but what can we do about it.
+			froutes_left_in_round.remove(froute)
+			all_reports_in_round_generate_time_secs += report_generate_time_secs
+			if not froutes_left_in_round:
+				froutes_left_in_round = set(routes.NON_SUBWAY_FUDGEROUTES)
+				printerr('%s,%d,%s,--generate-time--' % (now_str(), all_reports_in_round_generate_time_secs, c.VERSION))
+				all_reports_in_round_generate_time_secs = 0.0
+		if got_errors:
+			sys.exit(37)
 		sys.stdout.flush()
 		sys.stderr.flush()
+
+def prime_graphs():
+	tracks.get_snapgraph()
+	streets.get_snapgraph()
 
 if __name__ == '__main__':
 
 	arg_parser = argparse.ArgumentParser()
-	arg_parser.add_argument('--multiproc', choices=('y', 'n'), default='n')
+	arg_parser.add_argument('--dont-insert-into-db', action='store_true')
 	arg_parser.add_argument('--time')
 	arg_parser.add_argument('--redir', action='store_true')
 	args = arg_parser.parse_args()
@@ -249,11 +270,11 @@ if __name__ == '__main__':
 	if LOG_INDIV_ROUTE_TIMES and args.multiproc == 'y':
 		raise Exception('Don\'t know how to log individual route times when multiproc is on.')
 
-	shardpool = (make_shardpool() if args.multiproc == 'y' else None)
+	insert_into_db = not args.dont_insert_into_db
 	if args.time is not None:
 		report_time = (round_down_by_minute(now_em()) if args.time == 'now' else str_to_em(args.time))
-		make_all_reports_and_insert_into_db_once(report_time, shardpool)
+		make_all_reports_once(report_time, insert_into_db)
 	else:
-		make_all_reports_and_insert_into_db_forever(shardpool, args.redir)
+		make_all_reports_forever(args.redir, insert_into_db)
 
 

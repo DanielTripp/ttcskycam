@@ -3,7 +3,7 @@
 import sys, os, subprocess, re, time, xml.dom, xml.dom.minidom, traceback, json, getopt
 from collections import *
 from xml.parsers.expat import ExpatError
-import db, vinfo, routes, tracks, streets, multiproc
+import db, vinfo, routes, tracks, streets
 from misc import *
 
 def get_data_from_web_as_str(route_, time_es_):
@@ -80,93 +80,36 @@ def deal_with_xml(xmldoc_, insert_into_db_, vis_filename_):
 				for vi in vehicles:
 					print >> fout, vi.str_long()
 
-	return {'nextbus_lasttime': nextbus_lasttime, 'our_system_time_on_poll_finish': now_em()}
+	return nextbus_lasttime
 
-# We maintain, in the pollstate file, two times for each route - 
-# nextbus_lasttime and our_system_time_on_poll_finish.
-# nextbus_lasttime is the time that we get from the <lastTime> element of the 
-# last NextBus poll, and passed as part of the URL of the next one.
-# our_system_time_on_poll_finish is our local machine's time after that NextBus 
-# poll finishes.  It's probably pretty close to nextbus_lasttime most of the 
-# time.  The important point of this one is not that it's our local system 
-# time, but that it's going to tend to increase after each NextBus poll /across 
-# routes/ - unlike nextbus_lasttime which is only (I think) guaranteed to 
-# increase after each poll in the same route.  One example where 
-# 
-#	I noticed a big difference between these two
-# two times is during the day when certain late-night routes aren't in service 
-# and return no vehicles.  NextBus seems not to care much about the lastTime on 
-# these so I saw it returning a time some 5 minutes in the past.  If we are in 
-# a state where this program is being frequently restarted for some reason, and 
-# its exiting in the middle of a poll_once() call (i.e. some routes are polled 
-# but not others) then we make an effort for gracefully degrade and spread the 
-# polling of the entire route list across several runs of this program.  That 
-# is why we maintain our_system_time_on_poll_finish: because we need to take 
-# care to loop through the routes sensibly so we
-# don't poll routes X, Y, and Z repeatedly while polling the others not at all.  
-# So we need to sort by something to ensure
-#	that we cycle through the routes.  nextbus_lasttime is inappropriate because 
-#	in the scenario mentioned above, NextBus will
-# return a lastTime several minutes in the past for NextBus - so if, when 
-# deciding which routes to poll first, we sorted
-#	by nextbus_lasttime, this would bias towards those night routes being polled 
-#	first and possibly, would result in no other routes being polled
-#	at all.  
-# 
-# This might seem like excessive fussing for a presumably rare scenario of this 
-# program crashing frequently.  And it probably is excessive.  I didn't write 
-# this behaviour to deal with this scenario - I wrote it back when this was a 
-# cron job (rather than a long-running process) and sometimes something would 
-# run slowly and the cron minute would run out before we polled all routes.  So 
-# back then we would a) detect that the minute had run out and exit so that 
-# there wouldn't be two instances of the cron job running at the same time, and 
-# b) maintain these times so that the next cron run would start polling the 
-# routes starting with the ones that we didn't get to poll last time.  (a) 
-# doesn't exist any more.  (b) does. 
-def poll_once(routelist_, insert_into_db_, pollstate_filename_, xml_filename_, xml_headers_, vis_filename_, multiproc_, 
-		touch_flag_file_on_finish_):
-	if multiproc_:
-		pool = multiprocessing.Pool(8, multiproc.initializer)
+# Some configroutes are polled more than once per cycle - if they belong to more than one fudgeroute.  Oh well. 
+def poll_once(froutes_, insert_into_db_, pollstate_filename_, xml_filename_, xml_headers_, vis_filename_, forever_, 
+		touch_flag_files_on_finish_):
+	allroutes_start_wallclock_time = now_em()
 	try:
-		try:
-			with open(pollstate_filename_) as fin:
-				route_to_times = json.load(fin)
-		except:
-			route_to_times = {}
-		# Sorting like this will make sure that any routes that were left unpolled on the last run (due to poll period 
-		# running out) will be polled first on this run: 
-		sortkey = lambda route: route_to_times[route]['our_system_time_on_poll_finish'] if route in route_to_times else 0
-		routelist_in_priority_order = sorted(routelist_, key=sortkey)
-		route_to_poolresult = {}
-		for routei, route in enumerate(routelist_in_priority_order):
+		with open(pollstate_filename_) as fin:
+			croute_to_time = json.load(fin)
+	except:
+		croute_to_time = {}
+	for froutei, froute in enumerate(froutes_):
+		if forever_:
+			next_route_ideal_wallclock_time = allroutes_start_wallclock_time + (froutei+1)*60*1000/len(froutes_)
+		for croute in routes.FUDGEROUTE_TO_CONFIGROUTES[froute]:
 			try:
-				nextbus_lasttime = route_to_times[route]['nextbus_lasttime'] if route in route_to_times else 0
-				if multiproc_:
-					route_to_poolresult[route] = pool.apply_async(get_data_from_web_and_deal_with_it, \
-							(route, nextbus_lasttime, insert_into_db_, xml_filename_, xml_headers_, vis_filename_))
-				else:
-					route_to_times[route] = get_data_from_web_and_deal_with_it(
-							route, nextbus_lasttime, insert_into_db_, xml_filename_, xml_headers_, vis_filename_)
+				nextbus_lasttime = croute_to_time[croute] if croute in croute_to_time else 0
+				croute_to_time[croute] = get_data_from_web_and_deal_with_it(
+						croute, nextbus_lasttime, insert_into_db_, xml_filename_, xml_headers_, vis_filename_)
 			except Exception, e:
-				printerr('%s,error getting route %s,--poll-error--' % (now_str(), route))
+				printerr('%s,error getting configroute %s,--poll-error--' % (now_str_millis(), croute))
 				traceback.print_exc(e)
-		if multiproc_:
-			for route, poolresult in route_to_poolresult.iteritems():
-				try:
-					route_to_times[route] = poolresult.get()
-				except Exception, e:
-					printerr('%s,error getting route %s,--poll-error--' % (now_str(), route))
-					traceback.print_exc(e)
+		if touch_flag_files_on_finish_:
+			touch('/tmp/ttc-poll-locations-finished-flag-%s' % froute)
+		if forever_:
+			if froutei < len(froutes_)-1 and next_route_ideal_wallclock_time > now_em():
+				time.sleep((next_route_ideal_wallclock_time - now_em())/1000.0)
 		with open(pollstate_filename_, 'w') as fout:
-			json.dump(route_to_times, fout, indent=0)
-		if touch_flag_file_on_finish_:
-			touch('/tmp/ttc-poll-locations-finished-flag')
-	finally:
-		if multiproc_:
-			pool.close()
-			pool.join()
+			json.dump(croute_to_time, fout, indent=0)
 
-@multiproc.include_entire_traceback
 def get_data_from_web_and_deal_with_it(route_, nextbus_lasttime_, insert_into_db_, xml_filename_, xml_headers_, vis_filename_):
 	data_xmldoc = get_data_from_web_as_xml(route_, nextbus_lasttime_, xml_filename_, xml_headers_)
 	r = deal_with_xml(data_xmldoc, insert_into_db_, vis_filename_)
@@ -177,17 +120,14 @@ def get_graphs_into_ram():
 	# NextBus because it's slightly smarter.  If we don't - i.e. poll NextBus 
 	# THEN read these large snapgraphs into memory (which takes 20 seconds or 
 	# more) on first use, then the data for those first routes polled will 
-	# be eg. 20 seconds more out of date than it needs to be.  Also, I think that 
-	# with our multiprocessing way of doing things, that if we don't do this in 
-	# the parent process before starting the children, then each child will have 
-	# to do it themselves, which is even worse. 
+	# be eg. 20 seconds more out of date than it needs to be.  
 	tracks.get_snapgraph()
 	streets.get_snapgraph()
 
-def wait_until_start_of_next_minute():
+def wait_until_start_of_next_minute(max_secs_to_sleep_=61):
 	now = now_em()
 	target_time = round_up_by_minute(now)
-	secs_to_sleep = (target_time - now)/1000
+	secs_to_sleep = min((target_time - now)/1000.0, max_secs_to_sleep_)
 	time.sleep(secs_to_sleep)
 
 if __name__ == '__main__':
@@ -196,7 +136,7 @@ if __name__ == '__main__':
 		test_parse_xml_file(sys.argv[2])
 	else:
 		opts, args = getopt.getopt(sys.argv[1:], '', ['routes=', 'pollstatefile=', 'redirect-stdstreams-to-file', 
-				'dont-insert-into-db', 'touch-flag-file-on-finish', 'dump-xml=', 'dump-vis=', 'xml-headers', 'forever'])
+				'dont-insert-into-db', 'touch-flag-files-on-finish', 'dump-xml=', 'dump-vis=', 'xml-headers', 'forever'])
 		if args:
 			sys.exit('No arguments allowed.  Only options.')
 
@@ -208,7 +148,7 @@ if __name__ == '__main__':
 		if get_opt(opts, 'routes'):
 			routelist = get_opt(opts, 'routes').split(',')
 		else:
-			routelist = list(routes.CONFIGROUTES)
+			routelist = list(routes.NON_SUBWAY_FUDGEROUTES)
 
 		xml_filename = get_opt(opts, 'dump-xml')
 		if xml_filename:
@@ -223,25 +163,20 @@ if __name__ == '__main__':
 				vis_filename = os.path.join(vis_filename, time.strftime('vehicle_locations_vis_%Y-%m-%d--%H-%M.txt', time.localtime(time.time())))
 
 		insert_into_db = not get_opt(opts, 'dont-insert-into-db')
+		xml_headers = get_opt(opts, 'xml-headers')
+		touch_flag_files_on_finish = get_opt(opts, 'touch-flag-files-on-finish')
+		forever = get_opt(opts, 'forever')
 
-		if insert_into_db or vis_filename:
+		if forever:
 			get_graphs_into_ram()
 
-		do_multiproc = insert_into_db or vis_filename
-		xml_headers = get_opt(opts, 'xml-headers')
-		touch_flag_file_on_finish = get_opt(opts, 'touch-flag-file-on-finish')
-		forever = get_opt(opts, 'forever')
 		def call_poll_once():
-			poll_once(routelist, insert_into_db, pollstate_filename, xml_filename, xml_headers, vis_filename, do_multiproc, 
-					touch_flag_file_on_finish)
+			poll_once(routelist, insert_into_db, pollstate_filename, xml_filename, xml_headers, vis_filename, forever, touch_flag_files_on_finish)
 		if forever:
 			wait_until_start_of_next_minute()
 			while True:
-				poll_start_time = time.time()
 				call_poll_once()
-				poll_end_time = time.time()
-				if poll_end_time - poll_start_time < 60:
-					wait_until_start_of_next_minute()
+				wait_until_start_of_next_minute(20)
 		else:
 			call_poll_once()
 		
