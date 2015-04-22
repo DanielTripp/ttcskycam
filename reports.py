@@ -254,6 +254,13 @@ def make_all_reports_forever(redir_, insert_into_db_):
 		sys.stdout.flush()
 		sys.stderr.flush()
 
+def make_all_reports_once(report_time_, insert_into_db_):
+	got_errors = False
+	for froute in routes.NON_SUBWAY_FUDGEROUTES:
+		got_errors |= make_reports_single_route(report_time_, froute, insert_into_db_)
+	if got_errors:
+		sys.exit(37)
+
 def prime_graphs():
 	tracks.get_snapgraph()
 	streets.get_snapgraph()
