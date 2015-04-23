@@ -976,7 +976,10 @@ class SnapGraph(object):
 		assert self.isloc(startloc_) and self.isloc(destloc_) and is_yen_k_simple(k)
 
 		if startloc_ == destloc_:
-			return (0.0, [startloc_, destloc_])
+			r = (0.0, [startloc_, destloc_])
+			if k not in (1, None):
+				r = [r]
+			return r
 		else:
 			def heuristic(loc1__, loc2__):
 				return self.a_star_heuristic(loc1__, loc2__)
