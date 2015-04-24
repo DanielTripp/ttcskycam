@@ -77,9 +77,9 @@ def write_to_db(model_json_str_):
 		if db.SECSSINCEREPORT_BUG_WORKAROUND_ENABLED:
 			time_em += db.SECSSINCEREPORT_BUG_WORKAROUND_CONSTANT*1000
 		vi = vinfo.VehicleInfo('', 0, vid, model_vi['latlng'][0], model_vi['latlng'][1], True, 
-				froute, croute, 0, time_em, time_em, None, None, None, None)
+				froute, croute, 0, time_em, time_em, None, None, None, None, None)
 		db.insert_vehicle_info(vi)
-	reports.make_reports_and_insert_into_db_single_route(SANDBOX_REPORT_TIME_EM, froute)
+	reports.make_reports_single_route(SANDBOX_REPORT_TIME_EM, froute, True)
 
 def restart_memcache_and_wsgi():
 	mc.restart()
