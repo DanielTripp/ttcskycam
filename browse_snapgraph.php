@@ -51,9 +51,6 @@ function initialize() {
 	google.maps.event.addListenerOnce(g_map, 'bounds_changed', function() {
 		g_map.setZoom(17);
 
-		add_path_marker(new google.maps.LatLng(43.6540022, -79.4124381));
-		add_path_marker(new google.maps.LatLng(43.6545922, -79.4086401));
-
 		google.maps.event.addListener(g_map, 'click', function(mouseevent_) { 
 				g_map_click_mouseevent = mouseevent_;
 				g_map_doubleclicked = false;
@@ -95,8 +92,21 @@ function initialize() {
 
 		init_map_sync('map_sync_checkbox', true);
 
+		init_path_markers();
+
 		init_nearby_objects_dialog();
 	});
+}
+
+function init_path_markers() {
+	var bounds = g_map.getBounds();
+	var toplat = bounds.getNorthEast().lat(), bottomlat = bounds.getSouthWest().lat();
+	var middlelat = avg(toplat, bottomlat);
+	var leftlng = bounds.getSouthWest().lng(), rightlng = bounds.getNorthEast().lng();
+	var centerlng = g_map.getCenter().lng();
+	var left_of_center_lng = avg(leftlng, centerlng), right_of_center_lng = avg(rightlng, centerlng);
+	add_path_marker(new google.maps.LatLng(middlelat, left_of_center_lng));
+	add_path_marker(new google.maps.LatLng(middlelat, right_of_center_lng));
 }
 
 function init_nearby_objects_dialog() {

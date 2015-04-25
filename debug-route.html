@@ -81,12 +81,11 @@ function initialize() {
 			add_route_marker(e.latLng);
 			rebuild_spatialindex();
 		});
-		init_snaptest_marker();
-
 		google.maps.event.addListener(g_map, 'zoom_changed', on_zoom_changed);
 		on_zoom_changed();
 
-		init_map_sync('map_sync_checkbox', true);
+  	init_map_sync('map_sync_checkbox', true);
+		init_snaptest_marker();
 	});
 
 }
@@ -113,7 +112,7 @@ function show_stoptag(stoptag_) {
 
 function init_snaptest_marker() {
 	var marker = new google.maps.Marker({
-		position: new google.maps.LatLng(43.655, -79.44), 
+		position: g_map.getCenter(), 
 		map: g_map,
 		title:'MOFR',
 		draggable: true 
@@ -396,7 +395,7 @@ function add_line(i_) {
 		clickable: true, 
 		map: g_map, 
 		path: [latlng1, latlng2], 
-		strokeColor: 'rgb(255,0,0)', strokeWeight: 5
+		strokeColor: 'rgb(255,0,0)', strokeWeight: 5, strokeOpacity: 0.3
 	});
 	google.maps.event.addListener(line, 'click', function(e__) {
 		split_line(i_, e__.latLng);
@@ -573,27 +572,33 @@ function on_add_marker_button_clicked() {
 				</tr>
 				<tr>
 					<td>
-						<input id="bathurstradiobutton" type="radio" name="fudgeroute" value="bathurst" /><label for="bathurstradiobutton">bathurst</label><br/>
-						<input id="carltonradiobutton" type="radio" name="fudgeroute" value="carlton" /><label for="carltonradiobutton">carlton</label><br/>
-						<label><input id="davenportradiobutton" type="radio" name="fudgeroute" value="davenport" />davenport</label><br/>
-						<input id="dufferinradiobutton" type="radio" name="fudgeroute" value="dufferin" /><label for="dufferinradiobutton">dufferin</label><br/>
-						<input id="dundasradiobutton" type="radio" name="fudgeroute" value="dundas" checked="checked" /><label for="dundasradiobutton">dundas</label><br/>
-						<input id="dupontradiobutton" type="radio" name="fudgeroute" value="dupont" /><label for="dupontradiobutton">dupont</label><br/>
-						<label><input id="harbourfrontradiobutton" type="radio" name="fudgeroute" value="harbourfront" />harbourfront</label><br/>
-						<label><input id="junctionradiobutton" type="radio" name="fudgeroute" value="junction" />junction</label><br/>
-						<input id="keeleradiobutton" type="radio" name="fudgeroute" value="keele" /><label for="keeleradiobutton">keele</label><br/>
-						<input id="kingradiobutton" type="radio" name="fudgeroute" value="king" checked="checked" /><label for="kingradiobutton">king</label><br/>
-						<input id="lansdowneradiobutton" type="radio" name="fudgeroute" value="lansdowne" /><label for="lansdowneradiobutton">lansdowne</label><br/>
-						<input id="ossingtonradiobutton" type="radio" name="fudgeroute" value="ossington" /><label for="ossingtonradiobutton">ossington</label><br/>
-						<label><input id="parliamentradiobutton" type="radio" name="fudgeroute" value="parliament" />parliament</label><br/>
-						<input id="queenradiobutton" type="radio" name="fudgeroute" value="queen" /><label for="queenradiobutton">queen</label><br/>
-						<input id="spadinaradiobutton" type="radio" name="fudgeroute" value="spadina" /><label for="spadinaradiobutton">spadina</label><br/>
-						<label><input id="sherbourneradiobutton" type="radio" name="fudgeroute" value="sherbourne" />sherbourne</label><br/>
-						<input id="stclairradiobutton" type="radio" name="fudgeroute" value="stclair" /><label for="stclairradiobutton">stclair</label><br/>
-						<label><input id="symingtonradiobutton" type="radio" name="fudgeroute" value="symington" />symington</label><br/>
-						<label><input id="wellesleyradiobutton" type="radio" name="fudgeroute" value="wellesley" />wellesley</label><br/>
-						<input id="bloordanforthradiobutton" type="radio" name="fudgeroute" value="bloor_danforth" /><label for="bloordanforthradiobutton">Bloor Danforth</label><br/>
-						<input id="yongeuniversityspadinaradiobutton" type="radio" name="fudgeroute" value="yonge_university_spadina" /><label for="yongeuniversityspadinaradiobutton">Yonge University Spadina</label><br/>
+						<input type="radio" name="fudgeroute" value="bathurst" /><label for="bathurstradiobutton">bathurst</label><br/>
+						<input type="radio" name="fudgeroute" value="carlton" /><label for="carltonradiobutton">carlton</label><br/>
+						<label><input type="radio" name="fudgeroute" value="coxwell" />coxwell</label><br/>
+						<label><input type="radio" name="fudgeroute" value="davenport" />davenport</label><br/>
+						<input type="radio" name="fudgeroute" value="dufferin" /><label for="dufferinradiobutton">dufferin</label><br/>
+						<input type="radio" name="fudgeroute" value="dundas" checked="checked" /><label for="dundasradiobutton">dundas</label><br/>
+						<input type="radio" name="fudgeroute" value="dupont" /><label for="dupontradiobutton">dupont</label><br/>
+						<label><input type="radio" name="fudgeroute" value="greenwood" />greenwood</label><br/>
+						<label><input type="radio" name="fudgeroute" value="harbourfront" />harbourfront</label><br/>
+						<label><input type="radio" name="fudgeroute" value="jones" />jones</label><br/>
+						<label><input type="radio" name="fudgeroute" value="junction" />junction</label><br/>
+						<input type="radio" name="fudgeroute" value="keele" /><label for="keeleradiobutton">keele</label><br/>
+						<input type="radio" name="fudgeroute" value="king" checked="checked" /><label for="kingradiobutton">king</label><br/>
+						<input type="radio" name="fudgeroute" value="lansdowne" /><label for="lansdowneradiobutton">lansdowne</label><br/>
+						<label><input type="radio" name="fudgeroute" value="main" />main</label><br/>
+						<input type="radio" name="fudgeroute" value="ossington" /><label for="ossingtonradiobutton">ossington</label><br/>
+						<label><input type="radio" name="fudgeroute" value="pape" />pape</label><br/>
+						<label><input type="radio" name="fudgeroute" value="parliament" />parliament</label><br/>
+						<input type="radio" name="fudgeroute" value="queen" /><label for="queenradiobutton">queen</label><br/>
+						<input type="radio" name="fudgeroute" value="spadina" /><label for="spadinaradiobutton">spadina</label><br/>
+						<label><input type="radio" name="fudgeroute" value="sherbourne" />sherbourne</label><br/>
+						<input type="radio" name="fudgeroute" value="stclair" /><label for="stclairradiobutton">stclair</label><br/>
+						<label><input type="radio" name="fudgeroute" value="symington" />symington</label><br/>
+						<label><input type="radio" name="fudgeroute" value="wellesley" />wellesley</label><br/>
+						<label><input type="radio" name="fudgeroute" value="woodbinesouth" />woodbinesouth</label><br/>
+						<input type="radio" name="fudgeroute" value="bloor_danforth" /><label for="bloordanforthradiobutton">Bloor Danforth</label><br/>
+						<input type="radio" name="fudgeroute" value="yonge_university_spadina" /><label for="yongeuniversityspadinaradiobutton">Yonge University Spadina</label><br/>
 					</td>
 				</tr>
 				<tr>
