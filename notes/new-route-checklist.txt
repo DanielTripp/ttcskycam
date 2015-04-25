@@ -1,5 +1,6 @@
 - create fudge_route_FROUTE_version.txt file with a 0 in it.
 - make route points file(s) - fudge_route_FROUTE.json file, or fudge_route_FROUTE_dir0.json and fudge_route_FROUTE_dir1.json
+- svn add fudge_route_FROUTE_*
 - check if route intersects subway (or any other routes - on a bridge for 
 	example) but doesn't connect.  if so, add to systemsnapgraph-vertex-limit-zones.yaml.
 - add to routes.FUDGEROUTE_TO_CONFIGROUTES
