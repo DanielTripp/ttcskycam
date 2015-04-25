@@ -741,7 +741,7 @@ class SnapGraph(object):
 				self.multipath_patchcache_vid_to_argses_n_results[vid].append(
 						(MultipathArgs(timekey, latlngs_), MultipathResult(path_store, r_pieces)))
 				self.prune_multipath_patchcache(timekey)
-			assert (len(r_pieces) == 0) or (len(r_pieces) == len(latlngs_)-1)
+			assert (not r_pieces) or (len(r_pieces) == len(latlngs_)-1)
 			r_pieces = self.fix_gps_artifact_path_doublebacks(r_pieces, c.GRAPH_SNAP_RADIUS, vid, log_)
 			return (Path(r_pieces, self) if r_pieces else None)
 
@@ -791,6 +791,12 @@ class SnapGraph(object):
 			cur_dists_n_pieces = []
 			for i, (loc1, loc2) in enumerate(hopscotch(loc_combo, 2)):
 				locs = tuple(e.idx() if isinstance(e, Vertex) else e for e in (loc1, loc2))
+				if locs not in relative_i_startnendloc_to_distnpiece_[i]:
+					if log_:
+						printerr('Multipath combo is not possible.  (snapgraph: "%s").  idx_a=[%d] %s %s' \
+								% (self.name, log_idx_a_, combo_args_, locs))
+					return None # No path possible for a certain combination of locations.  We could continue 
+							# but this is a bad sign, because we assume that the graph is completely connected. 
 				dist_n_path = relative_i_startnendloc_to_distnpiece_[i][locs]
 				cur_dists_n_pieces.append(dist_n_path)
 			combined_dists_n_pieces.append(cur_dists_n_pieces)
@@ -798,7 +804,7 @@ class SnapGraph(object):
 			if log_:
 				printerr('Multipath is not possible.  (snapgraph: "%s").  idx_a=[%d] %s' \
 						% (self.name, log_idx_a_, combo_args_))
-			return None # No path possible for this part.  No path is possible at all. 
+			return None # No path possible for this part ==> no path is possible at all. 
 		combined_dists_n_pieces.sort(key=lambda e: self.get_combined_cost(e, c.GRAPH_SNAP_RADIUS))
 		if log_:
 			printerr('find_multipath: combined dists/pieces for idx_a=%d, sorted:' % (log_idx_a_))
@@ -1180,14 +1186,19 @@ class SnapGraph(object):
 		island_plinenames = self.get_island_plinenames()
 		self.plinename2pts = {k: v for k, v in self.plinename2pts.iteritems() if k not in island_plinenames}
 		
+	def all_plinenames(self):
+		return self.plinename2pts.iterkeys()
+
 	def get_island_plinenames(self):
 		r = set()
 		if len(self.plinename2pts) == 1:
-			# If there's only one pline, there will be no vertexes, and so the 
-			# algorithm below won't work.  It's not what we consider an island 
-			# anyway.
+			# If there's only one pline, there will be no vertexes, and so the algorithm below won't work.  It's not 
+			# what we consider an island anyway.  This is probably a test graph, so it probably doesn't matter much.
 			pass 
 		else:
+			# Any plines w/ no vertexes are islands, so first get those:
+			r = set([plinename for plinename in self.all_plinenames() if not self.get_vertidxes_on_pline(plinename)])
+
 			# Also check all vertexes connectivity to each other in a graph theory type of way. 
 			# Thanks to http://stackoverflow.com/questions/15394254/graph-algorithm-finding-if-graph-is-connected-bipartite-has-cycle-and-is-a-tre 
 			visited = dict((vert, False) for vert in self.verts)
@@ -1905,6 +1916,9 @@ class SnapGraph(object):
 		return {'vertname_to_info': dict((vert.name, vert.to_json_dict()) for vert in vertexes), 
 				'plinename_to_ptidx_to_pt': plinename_to_ptidx_to_pt, 
 				'plinename_to_ptidx_to_hasvertex': plinename_to_ptidx_to_hasvertex}
+
+	def get_vertidxes_on_pline(self, plinename_):
+		return self.plinename_to_ptidx_to_vertidx[plinename_].values()
 
 	def get_linesegaddrs_for_box(self, sw_, ne_):
 		assert all(isinstance(x, geom.LatLng) for x in [sw_, ne_])
