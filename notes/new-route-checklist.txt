@@ -1,22 +1,22 @@
 - create fudge_route_FROUTE_version.txt file with a 0 in it.
 - make route points file(s) - fudge_route_FROUTE.json file, or fudge_route_FROUTE_dir0.json and fudge_route_FROUTE_dir1.json
 - check if route intersects subway (or any other routes - on a bridge for 
-	example) but doesn't connect.  if so, add to 
-	systemsnapgraph-vertex-limit-zones.yaml.
+	example) but doesn't connect.  if so, add to systemsnapgraph-vertex-limit-zones.yaml.
 - add to routes.FUDGEROUTE_TO_CONFIGROUTES
 - ./r; ./prime_routeinfos.py
 	(If you don't run ./prime_routeinfos.py from command-line first then a 
 	permission problem might happen in sandbox might happen if route is generated 
 	under apache.)
-
 - add to debug-route.html 
 - make sure the route doesn't go anywhere tracks and streets don't.
 - NOT ANY MORE: Make stops file by running: ./get_stoplist_from_routeconfig_multiple.py NAME 
 - Maybe add special case in routes.get_froute_to_english().
 - streetlabels.yaml 
-- ./build-streetlabels.py FROUTE 
-- cd img; svn-add-all-unknown-files; cd ..
-- reports.shardfunc()
+- ./build-streetlabels.py FROUTE ; cd img; svn-add-all-unknown-files; cd ..
+- NOT ANY MORE: reports.shardfunc()
 - rebuild system graph
+- commit 
+- update dbman
+- update main
 - add to about.html - "News"
 
