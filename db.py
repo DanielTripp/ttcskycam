@@ -1069,7 +1069,8 @@ def get_grade_stretch_info_impl(vis_, time_window_, t1_, t2_, be_clever_, vid_, 
 				for i, (latlng, locs) in enumerate(zip(latlngs, locses)): 
 					printerr('[%3d] %s, %s' % (i, latlng, locs))
 			path = sg.find_multipath(latlngs, path_vis, locses, log_)
-			assert path is not None
+			if path is None:
+				raise Exception('No multipath for:\n%s' % '\n'.join(['%s / %s' % x for x in zip(latlngs, locses)]))
 			if log_:
 				first_vi = vis_[stretch[0]]; last_vi = vis_[stretch[-1]]
 				printerr('vid %s - path for stretch %d (%s to %s):' % (vid_, stretchi, first_vi.timestr, last_vi.timestr))
