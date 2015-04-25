@@ -1247,14 +1247,23 @@ class SnapGraph(object):
 				r.append(min(vertexes, key=lambda vert: vert.pos().dist_m(limitzone.ideal_vert_latlng)))
 		return set(r)
 
-	@staticmethod
-	def remove_crowded_vertexes(vertexes_):
+	def remove_crowded_vertexes(self, vertexes_):
 		assert isinstance(vertexes_, set)
 		plinenameset_to_verts = defaultdict(lambda: [])
 		for vert in vertexes_:
 			plinenameset = frozenset(ptaddr.plinename for ptaddr in vert.ptaddrs)
 			plinenameset_to_verts[plinenameset].append(vert)
 		r = []
+		# We can't use self.get_pline_len() to get pline length here because the data structures it uses don't exist yet. 
+		# So we have to figure it out ourselves: 
+		plinename2len = {plinename: geom.dist_m_polyline(pts) for plinename, pts in self.plinename2pts.iteritems()}
+		# Likewise with self.get_mapl(): 
+		def get_mapl(ptaddr__):
+			return geom.dist_m_polyline(self.plinename2pts[ptaddr__.plinename][:ptaddr__.ptidx+1])
+		def dist_between_verts_along(vert1__, vert2__, plinename__):
+			mapl1 = get_mapl(vert1__.get_ptaddr(plinename__))
+			mapl2 = get_mapl(vert2__.get_ptaddr(plinename__))
+			return abs(mapl1 - mapl2)
 		for plinenameset, verts in plinenameset_to_verts.iteritems():
 			if len(verts) == 1:
 				r.append(verts[0])
@@ -1266,8 +1275,17 @@ class SnapGraph(object):
 					return verts_sorted[vertidx__].pos()
 				def vert(vertidx__):
 					return verts_sorted[vertidx__]
-				if vertpos(0).dist_m(vertpos(-1)) < 100:
-					r.append(vert(0))
+				first_to_last_vert_dist = vertpos(0).dist_m(vertpos(-1))
+				pline_lens = [plinename2len[plinename] for plinename in plinenameset]
+				if first_to_last_vert_dist < 100:
+					# This tries to check if one of these plines is a short loop off of a longer pline, like often happens with 
+					# tracks (st. clair & lansdowne, dufferin and springhurst) but also sometimes with streets 
+					# (commissioners st. and our supplemental street for the TTC garage there.)   It does this by asking: 
+					# does the distance between the first and last vert along any given pline take up most of that pline?  
+					if any(dist_between_verts_along(vert(0), vert(-1), plinename) > plinename2len[plinename]*0.8 for plinename in plinenameset):
+						r += [vert(0), vert(-1)]
+					else:
+						r.append(vert(0))
 				else:
 					r += [vert(0), vert(-1)]
 					vert1idx = 0; vert2idx = 1
@@ -1417,6 +1435,7 @@ class SnapGraph(object):
 
 	# This function might modify self.plinename2pts. 
 	# This function exists because we don't handle polylines that are loops at all.  
+	# By loops here we mean: start and end point are very close. 
 	# (I forget why.  But such polylines are removed when the graph is built.  Currently this happens in 
 	# get_addr_to_vertex - "if len(vertex.get_looping_plinenames()) > 0: del ptaddr_to_vertex[ptaddr]".)  
 	# But if we split a looping polyline into two, then we handle that fine.  So here we try to split them.
@@ -1427,7 +1446,7 @@ class SnapGraph(object):
 				midpt_idx = len(pline)/2
 				midpt = pline[midpt_idx]
 				assert pline[0].dist_m(midpt) > self.paths_disttolerance and pline[-1].dist_m(midpt) > self.paths_disttolerance
-					# ^^ I don't know what to do with a polyline like that.  Sounds useless anyway. 
+				# I don't know what to do with a polyline that violates the above assert.  Sounds useless anyway. 
 				new_pline = [pt.copy() for pt in pline[midpt_idx:]] # copying latlngs b/c of the things we do w/ latlng object ids. 
 				pline[:] = pline[:midpt_idx+1]
 				new_plinename = 'loop part 2 '+plinename # putting new part of name BEFORE, so any suffixes are preserved. 
@@ -1531,7 +1550,6 @@ class SnapGraph(object):
 		for ptaddr, linesegaddr in self.get_addr_combos_near_each_other(False, True, self.paths_disttolerance):
 			pt = self.get_point(ptaddr)
 			lineseg = self.get_lineseg(linesegaddr)
-			t0 = time.time()
 
 			#print '-------- testing pt/line  ', ptaddr, linesegaddr
 			snapped_pt, dist_to_lineseg = pt.snap_to_lineseg_opt(lineseg, self.paths_disttolerance)

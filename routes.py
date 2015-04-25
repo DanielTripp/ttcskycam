@@ -10,7 +10,8 @@ FUDGEROUTE_TO_CONFIGROUTES = {'dundas': ['505'], 'queen': ['501', '301', '502', 
 'bathurst': ['511', '310', '7'], 'dufferin': ['29', '329'], 'lansdowne': ['47'], 'ossington': ['63', '316'], 'carlton': ['506', '306'], 
 'dupont': ['26'], 'stclair': ['512', '312'], 'keele': ['41'], 
 'harbourfront': ['509'], 'wellesley': ['94'], 'sherbourne': ['75'], 'parliament': ['65'], 'symington': ['168'], 
-'davenport': ['127'], 'junction': ['40']
+'davenport': ['127'], 'junction': ['40'], 'pape': ['72'], 'jones': ['83'], 'greenwood': ['31'], 'coxwell': ['22', '322'], 
+'woodbinesouth': ['92'], 'main': ['64'], 
 }
 
 CONFIGROUTE_TO_FUDGEROUTES = defaultdict(lambda: [])
@@ -765,6 +766,8 @@ def get_froute_to_english():
 	for froute in NON_SUBWAY_FUDGEROUTES:
 		if froute == 'stclair':
 			english = 'St. Clair'
+		elif froute == 'woodbinesouth':
+			english = 'Woodbine South'
 		else:
 			english = froute[0].upper() + froute[1:]
 		r[froute] = english

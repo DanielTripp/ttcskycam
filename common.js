@@ -410,6 +410,9 @@ function vi_to_str(vi_) {
 }
 
 function avg(lo_, hi_, ratio_) {
+	if(ratio_ == undefined) {
+		ratio_ = 0.5;
+	}
   return (lo_ + (hi_ - lo_)*ratio_);
 }
 

@@ -211,3 +211,94 @@ junction:
     62: Dundas St W
     2949: ''
 
+pape:
+    0:
+        0: ''
+        45: Pape Ave
+        1054: Riverdale Ave
+        1248: Carlaw Ave
+        3377: Commissioners St
+        4962: Cherry St
+    1:
+        0: ''
+        45: Pape Ave
+        1054: Riverdale Ave
+        1248: Carlaw Ave
+        3377: Commissioners St
+        4749: Munition St
+        4944: Villiers St
+
+jones:
+    0: ''
+    40: Donlands Ave
+    109: Danforth Ave
+    346: Jones Ave
+    2342: Queen St E
+    2561: Leslie St
+    3372: Commissioners St
+    3649: ''
+
+greenwood:
+    0:
+        0: ''
+        30: Linnsmore Cr
+        102: Danforth Ave
+        317: Greenwood Ave
+        2302: Queen St E
+        2719: Leslie St
+        2915: Eastern Ave
+    1:
+        0: ''
+        30: Linnsmore Cr
+        102: Danforth Ave
+        317: Greenwood Ave
+        2302: Queen St E
+        2767: Woodward Ave
+        2931: Eastern Ave
+
+coxwell:
+    0:
+        0: ''
+        50: Strathmore Blvd
+        119: Coxwell Ave
+        2191: Queen St E
+        2524: Kingston Rd
+        5510: Victoria Park Ave
+    1:
+        0: ''
+        50: Strathmore Blvd
+        119: Coxwell Ave
+        2191: Queen St E
+        2524: Kingston Rd
+        5428: Bingham Ave
+
+woodbinesouth:
+    0:
+        0: ''
+        68: Woodbine Ave
+        2348: Lake Shore Blvd E
+        2951: ''
+    1:
+        0: ''
+        68: Woodbine Ave
+        2348: Lake Shore Blvd E
+        2867: ''
+
+main:
+    0:
+        0: Lumsden Ave
+        298: Main St
+        2176: Southwood Dr
+        2709: Williamson Rd
+        2782: Wineva Ave
+        3143: Queen St E
+    1:
+        0: Eastdale Ave
+        286: Secord Ave
+        479: Barrington Ave
+        560: Doncaster Ave
+        678: Main St
+        2176: Southwood Dr
+        2709: Williamson Rd
+        2871: Hambly Ave
+
