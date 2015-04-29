@@ -1,4 +1,4 @@
-#!/usr/bin/python2.6 -O
+#!/usr/bin/env python -O
 
 import sys
 import tracks, streets, system, testgraph

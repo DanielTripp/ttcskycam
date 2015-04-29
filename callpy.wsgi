@@ -1,4 +1,4 @@
-#!/usr/bin/python2.6
+#!/usr/bin/env python
 
 import sys, os, os.path, urlparse, json, time, re, cgi
 from collections import Sequence

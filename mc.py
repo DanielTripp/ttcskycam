@@ -1,4 +1,4 @@
-#!/usr/bin/python2.6
+#!/usr/bin/python
 
 # Memcache connections (i.e. memcache.Client objects) behave in some unique ways that are different from 
 # eg. a typical database connection. 

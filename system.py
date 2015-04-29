@@ -1,4 +1,4 @@
-#!/usr/bin/python2.6
+#!/usr/bin/env python
 
 # Abbreviations / vocabulary:
 # pcp = pre-calculated paths.

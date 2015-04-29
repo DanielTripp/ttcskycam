@@ -1,4 +1,4 @@
-#!/usr/bin/python2.6
+#!/usr/bin/env python
 
 import sys, os, urlparse, json, pprint, time, pickle, xml.dom, xml.dom.minidom, datetime, time, getopt, threading, copy, random
 from backport_OrderedDict import *
@@ -17,7 +17,7 @@ if __name__ == '__main__':
 
 		def __hash__(self):
 			print 'in hash %d' % self.i
-			return hash(i)
+			return hash(self.i)
 
 	c1 = C(1)
 	c2 = C(2)

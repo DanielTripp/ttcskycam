@@ -1,4 +1,4 @@
-#!/usr/bin/python2.6
+#!/usr/bin/env python
 
 from jsonrpclib.SimpleJSONRPCServer import SimpleJSONRPCServer
 import socket

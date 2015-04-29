@@ -1,4 +1,4 @@
-#!/usr/bin/python2.6
+#!/usr/bin/env python
 
 import sys, json, os.path, bisect, xml.dom, xml.dom.minidom
 import vinfo, geom, mc, c, snapgraph, picklestore, util

@@ -1,4 +1,4 @@
-#!/usr/bin/python2.6
+#!/usr/bin/env python
 
 import os, json
 import geom, snapgraph, mc, picklestore

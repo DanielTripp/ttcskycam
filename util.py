@@ -1,4 +1,4 @@
-#!/usr/bin/python2.6
+#!/usr/bin/env python
 
 import json
 import vinfo, db, routes, mc, geom, snapgraph

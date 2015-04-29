@@ -1,4 +1,4 @@
-#!/usr/bin/python2.6
+#!/usr/bin/env python
 
 import sys, json, os.path, bisect, xml.dom, xml.dom.minidom, yaml
 from lru_cache import lru_cache

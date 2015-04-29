@@ -1,4 +1,4 @@
-#!/usr/bin/python2.6
+#!/usr/bin/env python
 
 POLL_PERIOD_SECS = 2*60
 
