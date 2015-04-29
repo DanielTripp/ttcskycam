@@ -19,7 +19,9 @@ along with ttcskycam.  If not, see <http://www.gnu.org/licenses/>.
 
 import os
 
-with open('VERSION') as fin:
+VERSION_FILENAME = 'VERSION'
+
+with open(VERSION_FILENAME) as fin:
 	VERSION = fin.read().strip()
 
 with open('MIN_GUIZOOM') as fin:
