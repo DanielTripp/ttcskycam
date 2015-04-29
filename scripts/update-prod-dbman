@@ -38,6 +38,8 @@ hg up \$revision
 check
 echo '... done.'
 
+VERSION=\$(./get-version.py)
+
 mkdir \$tmpsandboxdir/ttc-dbman
 check
 echo 'Copying sandbox content to tmp dir...'
@@ -57,12 +59,11 @@ check
 echo '... done.'
 ./prime_graphs.py
 check
-./write-version-file.py
-check
 echo 'Mangling...'
 ./mangle_this_sandbox_make_it_dbman.py
 check
 echo '... done mangling.'
+echo \$VERSION > VERSION
 _END_
 check
 

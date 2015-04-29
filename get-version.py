@@ -23,6 +23,6 @@ from misc import *
 
 if __name__ == '__main__':
 
-	version = subprocess.check_output('hg parent --template {branch}__{date|shortdate}__{node}\n'.split(' '))
-	string_to_file(c.VERSION_FILENAME, version)
+	subprocess.check_call('hg parent --template {branch}__{date|shortdate}__{node}\n'.split(' '))
+
 
