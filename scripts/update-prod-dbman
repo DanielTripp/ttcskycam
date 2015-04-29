@@ -57,12 +57,12 @@ check
 echo '... done.'
 ./prime_graphs.py
 check
+./write-version-file.py
+check
 echo 'Mangling...'
 ./mangle_this_sandbox_make_it_dbman.py
 check
 echo '... done mangling.'
-./write-version-file.py
-check
 _END_
 check
 
