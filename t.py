@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+#!/usr/bin/env PYTHONOPTIMIZE=on python
 
 '''
 This file is part of ttcskycam.

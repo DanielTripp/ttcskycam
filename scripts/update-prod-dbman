@@ -2,65 +2,50 @@
 
 cd /tmp
 
-if [ "$#" == "2" ] ; then 
+if [ "$#" == "1" ] ; then 
 	revision=$1
-	branch=$2
-	using_cmdline_args=true
 elif [ "$#" == "0" ] ; then
-	using_cmdline_args=false
+	revision=default
 else
-	echo 'Wrong number of arguments.  Need either a) a revision and a branch, or b) no arguments (will default to head of trunk.)'
+	echo 'Wrong number of arguments.  Need either a changeset/revision/branch/tag, or no argument.  (Will default to head of default branch.)'
 	exit 1
 fi
-export using_cmdline_args
 export revision
-export branch
 
-tmpsvndir=$(mktemp -d --tmpdir=/tmp ttc-dbman-svn-XXXXXX)
-chown dt $tmpsvndir
-chgrp dt $tmpsvndir
+tmpsandboxdir=$(mktemp -d --tmpdir=/tmp ttc-dbman-sandbox-XXXXXX)
+chown dt $tmpsandboxdir
+chgrp dt $tmpsandboxdir
 
 function check () {
 	if [ "$?" != "0" ] ; then echo 'Problem.  Exiting.'; exit 1; fi 
 }
 
-sudo revision=$revision branch=$branch using_cmdline_args=$using_cmdline_args tmpsvndir=$tmpsvndir -i -u dt bash << _END_
+sudo revision=$revision tmpsandboxdir=$tmpsandboxdir -i -u dt bash << _END_
 
 function check () {
 	if [ "\$?" != "0" ] ; then echo 'Problem.  Exiting.'; exit 1; fi 
 }
 
-echo 'Synching svn mirror...'
-svn_mirror_proj_base_url=\$(svn-sync-mirror)
-echo '... done.'
-
-cd ~/svn-mirror-update-dbman-sandbox
+echo 'Doing pull on mirror...'
+cd ~/ttcskycam-bitbucket-mirror
 check
-
-if [ "\$using_cmdline_args" != "true" ] ; then
-	revision=\$(svn info \$svn_mirror_proj_base_url | g '^Revision:' | sed 's/[^01-9]//g')
-	check
-	branch=trunk
-fi
-
-echo 'Updating sandbox...'
-if [ "\$branch" == "trunk" ] ; then
-	svn switch "\$svn_mirror_proj_base_url"/trunk@\$revision
-	check
-else
-	svn switch "\$svn_mirror_proj_base_url"/branches/\$branch@\$revision
-	check
-fi
+hg pull
+check
 echo '... done.'
 
-mkdir \$tmpsvndir/ttc-dbman
+echo 'Updating mirror...'
+hg up \$revision
+check
+echo '... done.'
+
+mkdir \$tmpsandboxdir/ttc-dbman
 check
 echo 'Copying sandbox content to tmp dir...'
-cp -r . \$tmpsvndir/ttc-dbman
+rsync -a --exclude .hg ~/ttcskycam-bitbucket-mirror/ \$tmpsandboxdir/ttc-dbman
 check
 echo '... done copying.'
 
-cd \$tmpsvndir/ttc-dbman
+cd \$tmpsandboxdir/ttc-dbman
 check
 ./set-permissions.py 
 check
@@ -76,25 +61,29 @@ echo 'Mangling...'
 ./mangle_this_sandbox_make_it_dbman.py
 check
 echo '... done mangling.'
-echo "\$revision"-trunk > VERSION 
+./write-version-file.py
+check
 _END_
 check
 
 supervisorctl stop ttc-poll-locations
-sudo revision=$revision branch=$branch using_cmdline_args=$using_cmdline_args tmpsvndir=$tmpsvndir -i -u dt bash << _END_
+sudo tmpsandboxdir=$tmpsandboxdir -i -u dt bash << _END_
 
 function check () {
 	if [ "\$?" != "0" ] ; then echo 'Problem.  Exiting.'; exit 1; fi 
 }
 
-rm -rf ~/ttc-dbman
+if [ -e ~/ttc-dbman ] ; then 
+	rm -rf ~/ttc-dbman
+	check
+fi
 check
-cd \$tmpsvndir
+cd \$tmpsandboxdir
 check
 mv ttc-dbman ~
 check
 cd /
-rm -rf \$tmpsvndir
+rm -rf \$tmpsandboxdir
 _END_
 check
 supervisorctl start ttc-poll-locations

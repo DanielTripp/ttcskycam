@@ -1,4 +1,4 @@
-#!/usr/bin/env python -O
+#!/usr/bin/env python
 
 '''
 This file is part of ttcskycam.
