@@ -1,4 +1,4 @@
-#!/usr/bin/python2.6
+#!/usr/bin/env python
 
 import sys, subprocess, re, time, xml.dom, xml.dom.minidom
 from collections import defaultdict

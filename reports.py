@@ -1,4 +1,4 @@
-#!/usr/bin/python2.6
+#!/usr/bin/env python
 
 from collections import *
 import sys, os, os.path, json, argparse, traceback, time, pprint

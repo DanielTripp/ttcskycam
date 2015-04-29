@@ -1,4 +1,4 @@
-#!/usr/bin/python2.6
+#!/usr/bin/env python
 
 import re, copy
 import geom, routes, snapgraph, tracks, streets, c
