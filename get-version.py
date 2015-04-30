@@ -23,6 +23,6 @@ from misc import *
 
 if __name__ == '__main__':
 
-	subprocess.check_call('hg parent --template {branch}__{date|shortdate}__{node}\n'.split(' '))
+	subprocess.check_call('hg parent --template {date|shortdate}__{branch}__{node}\n'.split(' '))
 
 
