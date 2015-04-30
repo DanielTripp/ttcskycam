@@ -19,16 +19,22 @@ along with ttcskycam.  If not, see <http://www.gnu.org/licenses/>.
 
 import os, os.path, stat
 
-DIRS_TO_OMIT = ['.svn', '.idea']
+DIRS_TO_OMIT = ['.hg', '.idea']
+EXECUTABLE_EXTENSIONS = ['py', 'wsgi', 'cgi', 'bash', 'sh']
 
-os.chmod('.', stat.S_IRUSR ^ stat.S_IWUSR ^ stat.S_IXUSR ^ stat.S_IROTH ^ stat.S_IXOTH)
+mode_for_dirs = stat.S_IRUSR ^ stat.S_IWUSR ^ stat.S_IXUSR ^ stat.S_IROTH ^ stat.S_IXOTH
+os.chmod('.', mode_for_dirs)
 
 for root, dirs, files in os.walk('.'):
 	for dir_to_omit in DIRS_TO_OMIT:
 		if dir_to_omit in dirs:
 			dirs.remove(dir_to_omit)
 	for directory in dirs:
-		os.chmod(os.path.join(root, directory), stat.S_IRUSR ^ stat.S_IWUSR ^ stat.S_IXUSR ^ stat.S_IROTH ^ stat.S_IXOTH)
-	for file in files:
-		os.chmod(os.path.join(root, file), stat.S_IRUSR ^ stat.S_IWUSR ^ stat.S_IXUSR ^ stat.S_IROTH ^ stat.S_IXOTH)
+		os.chmod(os.path.join(root, directory), mode_for_dirs)
+	for f in (os.path.join(root, f) for f in files):
+		mode = stat.S_IRUSR ^ stat.S_IWUSR ^ stat.S_IROTH
+		if any(f.endswith('.'+ext) for ext in EXECUTABLE_EXTENSIONS):
+			mode ^= stat.S_IXUSR ^ stat.S_IXOTH
+		os.chmod(f, mode)
+
 
