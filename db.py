@@ -24,7 +24,7 @@ Tables involved:
 create table ttc_vehicle_locations (vehicle_id varchar(100), fudgeroute varchar(20), route_tag varchar(10), dir_tag varchar(100), 
      lat double precision, lon double precision, secs_since_report integer, time_retrieved bigint, 
      predictable boolean, heading integer, time bigint, time_str varchar(100), rowid serial unique, mofr integer, widemofr integer, 
-		 graph_locs varchar(1000), graph_version integer);
+		 graph_locs varchar(1000), graph_version integer, froute_version integer not null);
 create index ttc_vehicle_locations_idx on ttc_vehicle_locations (fudgeroute, time_retrieved desc);
 create index ttc_vehicle_locations_idx2 on ttc_vehicle_locations (vehicle_id, time_retrieved desc);
 create index ttc_vehicle_locations_idx3 on ttc_vehicle_locations  (time_retrieved) ; 
@@ -44,6 +44,7 @@ create index reports_idx_3 on reports ( time desc, time_inserted_str desc ) ;
 
 '''
 
+import psycopg2
 import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket, datetime, calendar, math, copy, cPickle, threading
 from collections import defaultdict, Sequence
 from lru_cache import lru_cache
@@ -52,8 +53,6 @@ from misc import *
 
 SECSSINCEREPORT_BUG_WORKAROUND_ENABLED = True
 SECSSINCEREPORT_BUG_WORKAROUND_CONSTANT = 12
-
-HOSTMONIKER_TO_IP = {'theorem': '72.2.4.176', 'black': '24.52.231.206', 'u': 'localhost', 'v': 'localhost'}
 
 VI_COLS = ' dir_tag, heading, vehicle_id, lat, lon, predictable, fudgeroute, route_tag, secs_since_report, time_retrieved, time, mofr, widemofr, graph_locs, graph_version, froute_version '
 
@@ -64,50 +63,15 @@ DISABLE_GRAPH_PATHS = False
 INTERP_USE_PATCHCACHE = c.USE_PATCHCACHES
 
 g_conn = None
-g_forced_hostmoniker = None
 g_lock = threading.RLock()
 
 g_debug_gridsquaresys = grid.GridSquareSystem(None, None, None, None, None)
 
-def force_host(hostmoniker_):
-	global g_forced_hostmoniker
-	g_forced_hostmoniker = hostmoniker_
-
 def connect():
 	global g_conn
-	DATABASE_CONNECT_POSITIONAL_ARGS = ("dbname='postgres' user='dt' host='%s' password='doingthis'" % (get_host()),)
+	DATABASE_CONNECT_POSITIONAL_ARGS = ("dbname='postgres' user='dt' host='localhost' password='doingthis'",)
 	DATABASE_CONNECT_KEYWORD_ARGS = {}
-	DATABASE_DRIVER_MODULE_NAME = 'psycopg2'
-	USE_DB_DRIVER_IN_CURRENT_DIRECTORY = socket.gethostname().endswith('theorem.ca')
-	if USE_DB_DRIVER_IN_CURRENT_DIRECTORY:
-		driver_module = __import__(DATABASE_DRIVER_MODULE_NAME)
-	else:
-		saved_syspath = sys.path
-		for path_elem_to_remove in ('', '.', os.getcwd()):
-			while path_elem_to_remove in sys.path:
-				sys.path.remove(path_elem_to_remove)
-		driver_module = __import__(DATABASE_DRIVER_MODULE_NAME)
-		sys.path = saved_syspath
-	g_conn = getattr(driver_module, 'connect')(*DATABASE_CONNECT_POSITIONAL_ARGS, **DATABASE_CONNECT_KEYWORD_ARGS)
-
-def get_host():
-	if g_forced_hostmoniker is not None:
-		hostmoniker = g_forced_hostmoniker
-	else:
-		with open('HOST') as fin:
-			hostmoniker = fin.read().strip()
-	if hostmoniker == 'local':
-		if socket.gethostname().startswith('ip-'):
-			hostmoniker = 'v'
-		elif socket.gethostname() == 'unofficialttctrafficreport.ca':
-			hostmoniker = 'u'
-		elif socket.gethostname().endswith('theorem.ca'):
-			hostmoniker = 'theorem'
-		else:
-			hostmoniker = 'black'
-	if hostmoniker not in HOSTMONIKER_TO_IP:
-		raise Exception('Unknown host moniker: "%s"' % hostmoniker)
-	return HOSTMONIKER_TO_IP[hostmoniker]
+	g_conn = psycopg2.connect(*DATABASE_CONNECT_POSITIONAL_ARGS, **DATABASE_CONNECT_KEYWORD_ARGS)
 
 def conn():
 	if g_conn is None:
@@ -1275,11 +1239,6 @@ def get_recent_passing_vehicles(froute_, post_, max_, end_time_em_=now_em(), dir
 def purge(num_days_):
 	assert isinstance(num_days_, int)
 	assert num_days_ >= 0
-	if not socket.gethostname() == 'unofficialttctrafficreport.ca':
-		raise Exception('Not running on prod machine?')
-
-	force_host('u')
-
 	purge_delete(num_days_)
 	purge_vacuum()
 
