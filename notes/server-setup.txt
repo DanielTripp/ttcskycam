@@ -328,7 +328,8 @@ For PSQL sprintf etc.:
 as root:
 apt-get install postgresql-server-dev-9.1
 cd /tmp
-wget http://pgfoundry.org/frs/download.php/2911/pltoolbox-1.0.1.tar.gz
+wget http://pgfoundry.org/frs/download.php/3596/pltoolbox-1.0.3.tar.gz
+uzh
 cdh
 cdh
 USE_PGXS=1 make install
