@@ -75,7 +75,3 @@ if __name__ == '__main__':
 		partially_process_php_file('traffic.php')
 
 
-		for pyfile in [f for f in os.listdir('.') if f.endswith('.py')]:
-			add_python_optimize_flag(pyfile)
-
-
