@@ -69,7 +69,7 @@ check
 ./set-permissions.py 
 check
 echo 'Mangling...'
-./mangle_this_sandbox_make_it_production.py --yes
+./mangle_this_sandbox_make_it_main.py --yes
 check
 echo '... done mangling.'
 
