@@ -65,6 +65,8 @@ vim
 mercurial
 apache2
 fail2ban
+apache2-mpm-worker
+apache2-threaded-dev
 
 
 sudo passwd postgres
@@ -280,6 +282,11 @@ Sample apache2.conf is at the end of this file.
 # I didn't even get it working. 
 a2enmod headers 
 a2enmod expires
+
+# Install mod_wsgi:
+download from https://github.com/GrahamDumpleton/mod_wsgi/archive/4.4.11.tar.gz or similar 
+follow instructions at https://code.google.com/p/modwsgi/wiki/QuickInstallationGuide 
+
 
 # Check out a sandbox:
 
