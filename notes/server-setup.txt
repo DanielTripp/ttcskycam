@@ -223,6 +223,9 @@ user=ubuntu
 
 supervisord  # To start supervisord for the first time
 
+# To be able to set negative niceness, add a line like this to /etc/security/limits.conf 
+dt               -       nice            -20
+
 
 
 --
