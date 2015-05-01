@@ -8,63 +8,52 @@ cd /tmp
 
 HOME=~dt
 
-if [ "$#" == "2" ] ; then 
+if [ "$#" == "1" ] ; then 
 	revision=$1
-	branch=$2
-	using_cmdline_args=true
 elif [ "$#" == "0" ] ; then
-	using_cmdline_args=false
+	revision=default
 else
-	echo 'Wrong number of arguments.  Need either a) a revision and a branch, or b) no arguments (will default to head of trunk.)'
+	echo 'Wrong number of arguments.  Need either a changeset/revision/branch/tag, or no argument.  (Will default to head of default branch.)'
 	exit 1
 fi
-export using_cmdline_args
 export revision
-export branch
 
 function check () {
 	if [ "$?" != "0" ] ; then echo 'Problem.  Exiting.'; exit 1; fi 
 }
 
-sudo revision=$revision branch=$branch using_cmdline_args=$using_cmdline_args -i -u dt bash << _END_
+tmpsandboxdir=$(mktemp -d --tmpdir=/tmp ttc-dbman-sandbox-XXXXXX)
+chown dt $tmpsandboxdir
+chgrp dt $tmpsandboxdir
+
+sudo revision=$revision tmpsandboxdir=$tmpsandboxdir -i -u dt bash << _END_
 
 function check () {
 	if [ "\$?" != "0" ] ; then echo 'Problem.  Exiting.'; exit 1; fi 
 }
 
-echo 'Synching svn mirror...'
-svn_mirror_proj_base_url=\$(~/bin/svn-sync-mirror)
-echo '... done.'
-
-tmpsvndir=\$(mktemp -d --tmpdir=/tmp ttc-main-svn-XXXXXX)
-
-cd ~/svn-mirror-update-main-sandbox
+echo 'Doing pull on mirror...'
+cd ~/ttcskycam-bitbucket-mirror
 check
-
-if [ "\$using_cmdline_args" != "true" ] ; then
-	revision=\$(svn info \$svn_mirror_proj_base_url | g '^Revision:' | sed 's/[^01-9]//g')
-	check
-	branch=trunk
-fi
-
-echo 'Updating sandbox...'
-if [ "\$branch" == "trunk" ] ; then
-	svn switch "\$svn_mirror_proj_base_url"/trunk@\$revision
-	check
-else
-	svn switch "\$svn_mirror_proj_base_url"/branches/\$branch@\$revision
-	check
-fi
+hg pull
+check
 echo '... done.'
 
-mkdir \$tmpsvndir/main
+echo 'Updating mirror...'
+hg up \$revision
+check
+echo '... done.'
+
+VERSION=\$(./get-version.py)
+
+mkdir \$tmpsandboxdir/main
 check
 echo 'Copying sandbox content to tmp dir...'
-cp -r . \$tmpsvndir/main
+rsync -a --exclude .hg ~/ttcskycam-bitbucket-mirror/ \$tmpsandboxdir/main
 check
 echo '... done copying.'
 
-cd \$tmpsvndir/main
+cd \$tmpsandboxdir/main
 check
 ./set-permissions.py 
 check
@@ -73,20 +62,22 @@ echo 'Mangling...'
 check
 echo '... done mangling.'
 
-echo "\$revision"-"\$branch" > VERSION 
+echo \$VERSION > VERSION
 
 echo 'Priming routeinfos...'
 ./prime_routeinfos.py
+check
 echo '... done.'
 
 echo 'Priming memcache streetlabels...'
 ./prime_memcache_streetlabels.py
+check
 echo '... done.'
 
 echo 'Generating some reports...'
 ./reports.py --time now
-echo '... done.'
 check
+echo '... done.'
 
 _END_
 
@@ -95,11 +86,18 @@ check
 apachectl stop
 supervisorctl stop ttc-make-reports-main
 
-sudo -i -u dt bash << _END_
-tmpsvndir=\$(l -td /tmp/ttc-main-svn-* | head -1)
+sudo tmpsandboxdir=$tmpsandboxdir -i -u dt bash << _END_
+
+function check () {
+	if [ "\$?" != "0" ] ; then echo 'Problem.  Exiting.'; exit 1; fi 
+}
+
+cd \$tmpsandboxdir
+check
 rm -rf /var/www/main
-cd \$tmpsvndir
+check
 mv main /var/www
+check
 cd /
 rm -rf \$tmpsvndir
 _END_
