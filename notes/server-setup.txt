@@ -17,10 +17,6 @@ apt-get -y install libssl0.9.8
 apt-get -y install python-psycopg2
 apt-get -y install openjdk-7-jre
 apt-get -y install php5
-apt-get -y remove php5
-apt-get -y install php5
-apt-get -y remove php5
-apt-get -y install php5
 apt-get -y install netcat
 apt-get -y install python-setuptools
 apt-get -y install apache2-prefork-dev
@@ -49,10 +45,6 @@ apt-get -y install libprotobuf-dev
 apt-get -y remove lua5.2
 apt-get -y install lua5.1
 apt-get -y remove liblua5.2-dev
-apt-get -y install liblua5.2-dev
-apt-get -y remove liblua5.2-0
-apt-get -y install build-essential git cmake pkg-config libprotoc-dev libprotobuf7 protobuf-compiler libprotobuf-dev libosmpbf-dev libpng12-dev libbz2-dev libstxxl-dev libstxxl-doc libstxxl1 libxml2-dev libzip-dev libboost-all-dev lua5.1 liblua5.1-0-dev libluabind-dev libluajit-5.1-dev
-apt-get -y install python-numpy
 apt-get -y install python-scipy
 apt-get -y install zlib1g-dev libshp-dev libsqlite3-dev libgd2-xpm-dev libexpat1-dev libgeos-dev libgeos++-dev libxml2-dev libsparsehash-dev libv8-dev libicu-dev libgdal1-dev libprotobuf-dev protobuf-compiler devscripts debhelper fakeroot doxygen libboost-dev git-core
 apt-get -y install libprotobuf-java ant default-jdk maven-repo-helper
@@ -65,8 +57,7 @@ vim
 mercurial
 apache2
 fail2ban
-apache2-mpm-worker
-apache2-threaded-dev
+libapache2-mod-php5
 
 
 sudo passwd postgres
@@ -282,6 +273,7 @@ Sample apache2.conf is at the end of this file.
 # I didn't even get it working. 
 a2enmod headers 
 a2enmod expires
+a2enmod php5
 
 # Install mod_wsgi:
 download from https://github.com/GrahamDumpleton/mod_wsgi/archive/4.4.11.tar.gz or similar 
