@@ -36,7 +36,7 @@ create table predictions (fudgeroute VARCHAR(100), configroute VARCHAR(100), sto
 create index predictions_idx on predictions (fudgeroute, stoptag, time_retrieved desc);
 create index predictions_idx2 on predictions ( time_retrieved );
 
-create table reports (app_version varchar(20), report_type varchar(20), froute varchar(100), direction integer, 
+create table reports (app_version varchar(100), report_type varchar(20), froute varchar(100), direction integer, 
      datazoom integer, time bigint, timestr varchar(30), time_inserted_str varchar(30), report_json text);
 create index reports_idx on reports (app_version, report_type, froute, direction, datazoom, time desc) ;
 create index reports_idx_3 on reports ( time desc, time_inserted_str desc ) ;
