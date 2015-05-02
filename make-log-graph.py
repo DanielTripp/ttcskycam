@@ -113,7 +113,7 @@ if __name__ == '__main__':
 
 	if not version_to_timesamples:
 		# An empty plot produces an error message in our date formatting function.  Here we're preventing that. 
-		version_to_timesamples['x'].append(TimeSample(now_em(), 0))
+		version_to_timesamples['x__x__x'].append(TimeSample(now_em(), 0))
 
 	plt.figure(1)
 	fig, ax = plt.subplots()
@@ -130,6 +130,26 @@ if __name__ == '__main__':
 
 	for timesamples in version_to_timesamples.itervalues():
 		timesamples.sort(key=lambda s: s.finishtime)
+
+	versions = version_to_timesamples.keys()
+	for version in versions:
+		if len(version.split('__')) != 3:
+			raise Exception('version "%s" is not what we were expecting' % version)
+
+	version_num_chars_of_hgnode_to_display = 12
+
+	def get_display_version(version__):
+		splits = version__.split('__')
+		assert len(splits) == 3
+		if splits[1] == 'default':
+			del splits[1]
+		hgnode_part = splits[-1][:version_num_chars_of_hgnode_to_display]
+		return '__'.join(splits[:-1] + [hgnode_part])
+
+	while len(set(get_display_version(v) for v in versions)) < len(versions):
+		version_num_chars_of_hgnode_to_display += 1
+		if version_num_chars_of_hgnode_to_display > 40:
+			raise Exception() # must be a bug 
 
 	versions_in_time_order = sorted(version_to_timesamples.keys(), key=lambda v: version_to_timesamples[v][0].finishtime)
 
@@ -193,8 +213,8 @@ if __name__ == '__main__':
 				arrow_target_y = average(some_random_yvals)*1.1
 			else:
 				arrow_target_y = max_yval
-			ax.annotate(version, xy=(arrow_target_x, arrow_target_y), textcoords='axes fraction', xytext=(textx, get_texty(versionidx)), 
-					arrowprops=dict(arrowstyle='->', linestyle='dotted', color=color), color=color)
+			ax.annotate(get_display_version(version), xy=(arrow_target_x, arrow_target_y), textcoords='axes fraction', 
+					xytext=(textx, get_texty(versionidx)), arrowprops=dict(arrowstyle='->', linestyle='dotted', color=color), color=color)
 
 			if regular_yvals:
 				start_yval = min(max(regular_yvals[:30])*1.2, TOO_HIGH_Y_CUTOFF)
