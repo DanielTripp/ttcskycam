@@ -196,9 +196,12 @@ if __name__ == '__main__':
 			ax.annotate(version, xy=(arrow_target_x, arrow_target_y), textcoords='axes fraction', xytext=(textx, get_texty(versionidx)), 
 					arrowprops=dict(arrowstyle='->', linestyle='dotted', color=color), color=color)
 
-			start_yval = min(max(regular_yvals[:30])*1.2, TOO_HIGH_Y_CUTOFF)
+			if regular_yvals:
+				start_yval = min(max(regular_yvals[:30])*1.2, TOO_HIGH_Y_CUTOFF)
+				end_yval = min(max(regular_yvals[-30:])*1.2, TOO_HIGH_Y_CUTOFF)
+			else:
+				start_yval = end_yval = TOO_HIGH_Y_CUTOFF/2
 			plt.vlines([em_to_datetime(timesamples[0].finishtime)], 0.1, start_yval, color=color, alpha=0.5)
-			end_yval = min(max(regular_yvals[-30:])*1.2, TOO_HIGH_Y_CUTOFF)
 			plt.vlines([em_to_datetime(timesamples[-1].finishtime)], 0.1, end_yval, color=color, alpha=0.5)
 
 			#for timesample in [timesamples[0], timesamples[-1]]:
