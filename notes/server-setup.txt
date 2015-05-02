@@ -58,10 +58,13 @@ mercurial
 apache2
 fail2ban
 libapache2-mod-php5
+ssmtp
 
 
 sudo passwd postgres
 sudo passwd root
+
+setup cron mail via ssmtp 
 
 
 Install .dt-init etc for ubuntu, postgres, and root users.
