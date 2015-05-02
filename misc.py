@@ -1149,6 +1149,10 @@ def string_to_file(filename_, str_):
 	with open(filename_, 'w') as fout:
 		fout.write(str_)
 
+def file_to_string(filename_):
+	with open(filename_) as fin:
+		return fin.read()
+
 def seq_endswith(a_, b_):
 	return a_[-len(b_):] == b_
 

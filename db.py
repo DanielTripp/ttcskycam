@@ -62,6 +62,8 @@ DISABLE_GRAPH_PATHS = False
 
 INTERP_USE_PATCHCACHE = c.USE_PATCHCACHES
 
+PASSWORD = file_to_string(os.path.expanduser('~/.ttcskycam/DB_PASSWORD')).strip()
+
 g_conn = None
 g_lock = threading.RLock()
 
@@ -69,7 +71,7 @@ g_debug_gridsquaresys = grid.GridSquareSystem(None, None, None, None, None)
 
 def connect():
 	global g_conn
-	DATABASE_CONNECT_POSITIONAL_ARGS = ("dbname='postgres' user='dt' host='localhost' password='doingthis'",)
+	DATABASE_CONNECT_POSITIONAL_ARGS = ("dbname='postgres' user='dt' host='localhost' password='%s'" % PASSWORD,)
 	DATABASE_CONNECT_KEYWORD_ARGS = {}
 	g_conn = psycopg2.connect(*DATABASE_CONNECT_POSITIONAL_ARGS, **DATABASE_CONNECT_KEYWORD_ARGS)
 
