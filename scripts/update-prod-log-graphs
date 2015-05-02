@@ -2,50 +2,37 @@
 
 cd /tmp
 
-if [ "$#" == "2" ] ; then 
+if [ "$#" == "1" ] ; then 
 	revision=$1
-	branch=$2
-	using_cmdline_args=true
 elif [ "$#" == "0" ] ; then
-	using_cmdline_args=false
+	revision=default
 else
-	echo 'Wrong number of arguments.  Need either a) a revision and a branch, or b) no arguments (will default to head of trunk.)'
+	echo 'Wrong number of arguments.  Need either a changeset/revision/branch/tag, or no argument.  (Will default to head of default branch.)'
 	exit 1
 fi
-export using_cmdline_args
-export revision
-export branch
 
 function check () {
 	if [ "$?" != "0" ] ; then echo 'Problem.  Exiting.'; exit 1; fi 
 }
 
-echo 'Synching svn mirror...'
-svn_mirror_proj_base_url=$(~/bin/svn-sync-mirror)
+echo 'Doing pull on mirror...'
+cd ~/ttcskycam-bitbucket-mirror
+check
+hg pull
+check
 echo '... done.'
 
-if [ "$using_cmdline_args" != "true" ] ; then
-	revision=$(svn info $svn_mirror_proj_base_url/trunk | grep '^Revision:' | sed 's/[^01-9]//g')
-	branch=trunk
-fi
+echo 'Updating mirror...'
+hg up $revision
+check
+echo '... done.'
+
+VERSION=$(./get-version.py)
 
 tmp_sandbox_copy_dir=$(mktemp -d --tmpdir=/tmp ttc-sandbox-copy-for-log-graphs-XXXXXX)
 
-cd ~/svn-mirror-update-prod-log-graphs
-check
-
-echo 'Updating sandbox...'
-if [ "$branch" == "trunk" ] ; then
-	svn switch "$svn_mirror_proj_base_url"/trunk@$revision
-	check
-else
-	svn switch "$svn_mirror_proj_base_url"/branches/$branch@$revision
-	check
-fi
-echo '... done.'
-
 echo 'Copying sandbox content to tmp dir...'
-cp -r . $tmp_sandbox_copy_dir
+rsync -a --exclude .hg ~/ttcskycam-bitbucket-mirror/ $tmp_sandbox_copy_dir
 check
 echo '... done copying.'
 
@@ -58,20 +45,16 @@ echo 'Mangling...'
 check
 echo '... done mangling.'
 
-echo "$revision"-"$branch" > VERSION 
+echo $VERSION > VERSION 
 
-./make-log-graph.py month
-check
-./make-log-graph.py week
-check
-./make-log-graph.py 3day
-check
-./make-log-graph.py day
-check
+for timeframe in month week 3day day ; do 
+	./make-log-graph.py $timeframe
+	check
+done
 
+cd /
 rm -rf /var/www/log-graphs
+check
 mv $tmp_sandbox_copy_dir /var/www/log-graphs
 cd /
-rm -rf $tmp_sandbox_copy_dir
-check
 
