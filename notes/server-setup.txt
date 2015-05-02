@@ -170,13 +170,13 @@ sudo ln -s /usr/bin/python2.7 /usr/bin/python2.6
 
 'default' user's crontab: 
 
-*   * * * *  if ! [ -e ~/ttc-disable-cronjobs ] ; then cd ~/ttc-dbman; ./poll_locations.py   --redir --touch-flag-file-on-finish ; date >> ~/poll_locations_time_log.txt; fi
-
 */2 * * * *  if ! [ -e ~/ttc-disable-cronjobs ] ; then cd ~/ttc-dbman; ./mc.py start-if-not-running prod ; fi
-0   5 * * *  ~/bin/svn-sync-mirror >/dev/null
+
+0 5 * * * cd ~/ttcskycam-bitbucket-mirror && hg pull --quiet
 
 0 5 * * *  date >> ~/df-log
 0 5 * * *  sleep 1; df | grep -v ^Filesystem >> ~/df-log
+# ^^ test the output of df first 
 
 0 4 * * *  if ! [ -e ~/ttc-disable-cronjobs ] ; then cd ~/ttc-dbman; ./purgedb.py 60d; fi
 
