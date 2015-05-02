@@ -180,6 +180,12 @@ sudo ln -s /usr/bin/python2.7 /usr/bin/python2.6
 
 0 4 * * *  if ! [ -e ~/ttc-disable-cronjobs ] ; then cd ~/ttc-dbman; ./purgedb.py 60d; fi
 
+*/10 * * * * if ! [ -e ~/ttc-disable-cronjobs ] ; then sleep 30; /var/www/log-graphs/make-log-graph.py day;   fi
+*/10 * * * * if ! [ -e ~/ttc-disable-cronjobs ] ; then sleep 20; /var/www/log-graphs/make-log-graph.py 3day;  fi
+0    5 * * * if ! [ -e ~/ttc-disable-cronjobs ] ; then sleep 10;  /var/www/log-graphs/make-log-graph.py week;  fi
+0    4 * * * if ! [ -e ~/ttc-disable-cronjobs ] ; then           /var/www/log-graphs/make-log-graph.py month; fi
+
+
 root's crontab: 
 
 SHELL=/bin/bash
