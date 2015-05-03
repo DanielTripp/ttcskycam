@@ -39,6 +39,7 @@ check
 echo '... done.'
 
 VERSION=\$(./get-version.py)
+check
 
 mkdir \$tmpsandboxdir/ttc-dbman
 check
