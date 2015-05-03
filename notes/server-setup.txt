@@ -286,6 +286,7 @@ Sample apache2.conf is at the end of this file.
 a2enmod headers 
 a2enmod expires
 a2enmod php5
+a2enmod cgi
 
 # Install mod_wsgi:
 download from https://github.com/GrahamDumpleton/mod_wsgi/archive/4.4.11.tar.gz or similar 
@@ -647,6 +648,11 @@ WSGIProcessGroup ttc-main
 
 SetEnv PROCESS_GROUP default
 WSGIProcessGroup %{ENV:PROCESS_GROUP}
+
+<Directory /var/www/*>
+	Options FollowSymLinks +ExecCGI
+	AddHandler cgi-script .cgi
+</Directory>
 
 <Directory /var/www/html/t20396746274628946240298200>
 Options ExecCGI
