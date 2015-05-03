@@ -121,13 +121,6 @@ def get_locations_report(froute_, dir_, datazoom_, time_, last_gotten_timestr_, 
 
 
 
-def get_reports_finished_flag_file_mtime():
-	filename = '/tmp/ttc-reports-version-%s-finished-flag' % (c.VERSION)
-	if os.path.exists(filename):
-		return os.path.getmtime(filename)
-	else:
-		return 0
-
 def get_poll_finished_flag_file_mtime(froute_):
 	filename = '/tmp/ttc-poll-locations-finished-flag-%s' % froute_
 	if os.path.exists(filename):
@@ -136,15 +129,16 @@ def get_poll_finished_flag_file_mtime(froute_):
 		return 0
 
 # arg froute_to_poll_file_mtime_ we modify this. 
-# arg stale_froutes_ we modify this. 
-def wait_for_a_location_poll_to_finish(froute_to_poll_file_mtime_, stale_froutes_, poll_file_watching_start_time_):
+# arg froute_to_last_complain_wallclock_time_ we modify this. 
+def wait_for_a_location_poll_to_finish(froute_to_poll_file_mtime_, froute_to_last_complain_wallclock_time_, 
+		froutes_left_in_round_, poll_file_watching_start_time_):
 	assert set(froute_to_poll_file_mtime_.keys()) == set(routes.NON_SUBWAY_FUDGEROUTES)
 	MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS = 90
 	while True:
 		r = None
 		
 		changed_froutes_n_mtimes = []
-		for froute in routes.NON_SUBWAY_FUDGEROUTES:
+		for froute in (froute for froute in routes.NON_SUBWAY_FUDGEROUTES if froute in froutes_left_in_round_):
 			mtime = get_poll_finished_flag_file_mtime(froute)
 			if mtime != froute_to_poll_file_mtime_[froute]:
 				changed_froutes_n_mtimes.append((froute, mtime))
@@ -152,19 +146,15 @@ def wait_for_a_location_poll_to_finish(froute_to_poll_file_mtime_, stale_froutes
 		if changed_froutes_n_mtimes:
 			changed_froutes_n_mtimes.sort(key=lambda x: x[1])
 			r, mtime = changed_froutes_n_mtimes[0]
-			if r in stale_froutes_:
-				wait_time_secs = (now_em() - max(froute_to_poll_file_mtime_[r], poll_file_watching_start_time_))/1000
-				printerr('%s,reports: watched %s poll locations flag file for %d seconds before it was touched,--poll-slow--' % \
-						(now_str(), r, wait_time_secs))
-				stale_froutes_.remove(r)
 			froute_to_poll_file_mtime_[r] = mtime
 
 		for froute in routes.NON_SUBWAY_FUDGEROUTES:
-			wait_time_secs = (now_em() - max(froute_to_poll_file_mtime_[froute], poll_file_watching_start_time_))/1000
-			if wait_time_secs > MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS and froute not in stale_froutes_:
-				stale_froutes_.add(froute)
-				printerr('%s,reports: watched %s poll locations flag file for %d seconds, still hasn\'t been touched,--poll-slow--' % \
-						(now_str(), froute, wait_time_secs))
+			wait_time_secs = (now_em() - max(get_poll_finished_flag_file_mtime(froute), poll_file_watching_start_time_))/1000
+			if wait_time_secs > MAX_WAIT_SECS_BEFORE_WE_COMPLAIN_IN_THE_LOGS:
+				if froute not in froute_to_last_complain_wallclock_time_ or now_em() - froute_to_last_complain_wallclock_time_[froute] > 60*1000:
+					printerr('%s,reports: watched %s poll locations flag file for %d seconds, still hasn\'t been touched,--poll-slow--' % \
+							(now_str(), froute, wait_time_secs))
+					froute_to_last_complain_wallclock_time_[froute] = now_em()
 
 		if r is not None:
 			return r
@@ -247,12 +237,13 @@ def make_all_reports_forever(redir_, insert_into_db_):
 	routes.prime_routeinfos()
 	prime_graphs()
 	froute_to_poll_file_mtime = get_init_froute_to_poll_file_mtime()
-	stale_froutes = set()
+	froute_to_last_complain_wallclock_time = {}
 	poll_file_watching_start_time = now_em()
 	froutes_left_in_round = set(routes.NON_SUBWAY_FUDGEROUTES)
 	all_reports_in_round_generate_time_secs = 0.0
 	while True:
-		froute = wait_for_a_location_poll_to_finish(froute_to_poll_file_mtime, stale_froutes, poll_file_watching_start_time)
+		froute = wait_for_a_location_poll_to_finish(froute_to_poll_file_mtime, froute_to_last_complain_wallclock_time, 
+				froutes_left_in_round, poll_file_watching_start_time)
 		if redir_:
 			redirect_stdstreams_to_file('reports_generation_')
 		t0 = time.time()
