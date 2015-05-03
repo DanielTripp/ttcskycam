@@ -301,7 +301,7 @@ class RouteInfo:
 		#self.init_stops()
 
 	def init_version(self):
-		with open('fudge_route_%s_version.txt' % self.name) as fin:
+		with open(os.path.join('routes', self.name, 'version.txt')) as fin:
 			self.version = int(fin.read().strip())
 
 	def init_routepts(self):
@@ -312,12 +312,12 @@ class RouteInfo:
 					r.append(geom.LatLng(raw_routept[0], raw_routept[1]))
 				return r
 
-		routepts_both_dirs_filename = 'fudge_route_%s.json' % (self.name)
+		routepts_both_dirs_filename = os.path.join('routes', self.name, 'points.json')
 		if os.path.exists(routepts_both_dirs_filename):
 			routepts = [read_pts_file(routepts_both_dirs_filename)]
 			self.is_split_by_dir = False
 		else:
-			routepts = [read_pts_file('fudge_route_%s_dir%d.json' % (self.name, direction)) for direction in (0, 1)]
+			routepts = [read_pts_file(os.path.join('routes', self.name, 'points-dir%d.json' % direction)) for direction in (0, 1)]
 			if (routepts[0][0] != routepts[1][0]) or (routepts[0][-1] != routepts[1][-1]):
 				raise Exception('one or both split route endpoints are not equal')
 			stretch_splits_if_necessary(routepts[0], routepts[1], self.name)
