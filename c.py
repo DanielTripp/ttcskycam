@@ -30,7 +30,7 @@ with open('MIN_GUIZOOM') as fin:
 with open('MAX_GUIZOOM') as fin:
 	MAX_ZOOM = int(fin.read().strip())
 
-with open('TRACKS_GRAPH_VERSION') as fin:
+with open(os.path.join('tracks', 'GRAPH_VERSION')) as fin:
 	TRACKS_GRAPH_VERSION = int(fin.read().strip())
 
 with open('STREETS_GRAPH_VERSION') as fin:
