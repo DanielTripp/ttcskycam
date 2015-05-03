@@ -131,8 +131,11 @@ if __name__ == '__main__':
 	for timesamples in version_to_timesamples.itervalues():
 		timesamples.sort(key=lambda s: s.finishtime)
 
+	SUPPORT_OLD_VERSIONS = True # this can be removed at some point.  Say, July 2015. 
+
 	versions = version_to_timesamples.keys()
 	for version in versions:
+		if SUPPORT_OLD_VERSIONS: continue 
 		if len(version.split('__')) != 3:
 			raise Exception('version "%s" is not what we were expecting' % version)
 
@@ -140,6 +143,7 @@ if __name__ == '__main__':
 
 	def get_display_version(version__):
 		splits = version__.split('__')
+		if SUPPORT_OLD_VERSIONS and len(splits) != 3: return version__
 		assert len(splits) == 3
 		if splits[1] == 'default':
 			del splits[1]
