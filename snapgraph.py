@@ -1347,11 +1347,12 @@ class SnapGraph(object):
 		print >> stream, '{'
 		for polyline in self.plinename2pts.itervalues():
 			print >> stream, '\t%s' % polyline
-		for gridsquareidx, linesegaddrs in self.si_linesegaddrs_by_gridsquareidx.iteritems():
+		for gridsquareidx, linesegaddrs in enumerate(self.si_linesegaddrs_by_gridsquareidx):
 			print >> stream, '\t%s' % gridsquareidx
 			for linesegaddr in linesegaddrs:
 				print >> stream, '\t\t%s' % linesegaddr
-		for vert, edges in iteritemssorted(self.edges):
+		for vertidx, edges in enumerate(self.edges):
+			vert = self.verts[vertidx]
 			print >> stream, '\t%s' % (vert.strlong())
 			for edge in edges:
 				print >> stream, '\t\t%s' % edge
