@@ -203,6 +203,7 @@ if __name__ == '__main__':
 			color = get_color(version)
 			plt.plot(regular_xvals, regular_yvals, color=color, marker='+', linestyle='None')
 			plt.plot(too_high_xvals, too_high_yvals, color=color, marker='o', linestyle='None')
+			plt.xlim(plt.xlim()[0], em_to_datetime(now_em()))
 
 			textx = float(versionidx+1)/(len(version_to_timesamples)+1)
 
