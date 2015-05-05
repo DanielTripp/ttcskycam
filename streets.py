@@ -43,7 +43,7 @@ def get_streetname_to_polyline():
 	return r
 
 def get_polylines_from_supplemental_json_file():
-	with open('streets-supplemental.json') as fin:
+	with open(os.path.join('streets', 'streets-supplemental.json')) as fin:
 		raw_plines = json.load(fin)
 		return [[geom.LatLng(pt) for pt in pline] for pline in raw_plines]
 
@@ -111,7 +111,7 @@ def get_streetname_to_polylines_from_shapefile_directly():
 	street_fcode_descs = ['Access Road', 'Busway', 'Collector', 'Collector Ramp', 
 			'Local', 'Major Arterial', 'Major Arterial Ramp', 'Minor Arterial', 'Minor Arterial Ramp', 
 			'Pending', 'Other', 'Other Ramp']
-	sf = shapefile.Reader('toronto_street_map/centreline_wgs84/CENTRELINE_WGS84')
+	sf = shapefile.Reader(os.path.join('streets', 'toronto_street_map', 'centreline_wgs84', 'CENTRELINE_WGS84'))
 	fields = [x for x in sf.fields if x[0] != 'DeletionFlag']
 	idx_FCODE_DESC = [x[0] for x in fields].index('FCODE_DESC')
 	idx_LF_NAME = [x[0] for x in fields].index('LF_NAME')
