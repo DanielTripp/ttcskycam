@@ -33,7 +33,7 @@ with open('MAX_GUIZOOM') as fin:
 with open(os.path.join('tracks', 'GRAPH_VERSION')) as fin:
 	TRACKS_GRAPH_VERSION = int(fin.read().strip())
 
-with open('STREETS_GRAPH_VERSION') as fin:
+with open(os.path.join('streets', 'GRAPH_VERSION')) as fin:
 	STREETS_GRAPH_VERSION = int(fin.read().strip())
 
 VALID_GUIZOOMS = range(MIN_ZOOM, MAX_ZOOM+1)
