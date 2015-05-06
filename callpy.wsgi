@@ -23,8 +23,6 @@ sys.path.append('.')
 import geom, vinfo, mc, db, util
 from misc import *
 
-assert 0 # tdr 
-
 LOG_CALLS = os.path.exists('CALLPY_LOG_CALLS')
 
 def get_arg_strvals(vardict_):
