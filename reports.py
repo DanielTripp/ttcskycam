@@ -234,6 +234,7 @@ def get_init_froute_to_poll_file_mtime():
 	return froute_to_poll_file_mtime
 
 def make_all_reports_forever(redir_, insert_into_db_):
+	assert 0 # tdr 
 	routes.prime_routeinfos()
 	prime_graphs()
 	froute_to_poll_file_mtime = get_init_froute_to_poll_file_mtime()
@@ -275,7 +276,6 @@ def prime_graphs():
 
 if __name__ == '__main__':
 
-	assert 0 # tdr 
 	arg_parser = argparse.ArgumentParser()
 	arg_parser.add_argument('--dont-insert-into-db', action='store_true')
 	arg_parser.add_argument('--time')
