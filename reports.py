@@ -234,7 +234,6 @@ def get_init_froute_to_poll_file_mtime():
 	return froute_to_poll_file_mtime
 
 def make_all_reports_forever(redir_, insert_into_db_):
-	assert 0 # tdr 
 	routes.prime_routeinfos()
 	prime_graphs()
 	froute_to_poll_file_mtime = get_init_froute_to_poll_file_mtime()
