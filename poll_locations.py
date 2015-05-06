@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/env python
 
 import sys, os, subprocess, re, time, xml.dom, xml.dom.minidom, traceback, json, getopt
 from collections import *
