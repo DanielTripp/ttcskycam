@@ -35,7 +35,6 @@ var SHOW_ZOOM = false;
 
 var SHOW_PATHS_TEXT = false;
 var SHOW_LOADING_URLS = false;
-var DISABLE_GEOLOCATION = false;
 
 var MAP_SYNC_DEFAULT = false;
 
@@ -123,6 +122,7 @@ var g_froute_to_spatialindex = null;
 var show_instructions = !DONT_SHOW_INSTRUCTIONS && g_browser_is_desktop && 
 		localStorage.getItem(get_marker_pos_localstorage_key(true)) == null && 
 		localStorage.getItem(get_marker_pos_localstorage_key(false)) == null;
+var g_current_location_marker = null;
 
 <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
 passthru('python -c "import c, routes
@@ -1354,16 +1354,34 @@ function write_force_sets_to_localstorage_maybe() {
 }
 
 function init_geolocation() {
-	if(!DISABLE_GEOLOCATION) {
-		if(navigator.geolocation) {
-			var on_success = function(position) {
-				var latlng = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
-				g_trip_orig_marker.setPosition(latlng);
-				g_map.panTo(latlng);
-				get_paths_from_server();
-			};
-			navigator.geolocation.getCurrentPosition(on_success, null, {timeout: 10000});
-		}
+	bind_checkbox_to_localstorage('geolocation_checkbox');
+	if(is_selected('geolocation_checkbox')) {
+		get_and_use_current_location();
+	}
+}
+
+function get_and_use_current_location() {
+	if(navigator.geolocation) {
+		var on_success = function(position) {
+			var latlng = new google.maps.LatLng(position.coords.latitude, position.coords.longitude);
+			g_trip_orig_marker.setPosition(latlng);
+			g_current_location_marker = new google.maps.Marker({position: latlng, map: g_map, draggable: false, 
+					icon: {url: 'bluedot.png', anchor: new google.maps.Point(10, 10)}, visible: true, clickable: false, zIndex: 1
+					});
+			g_map.panTo(latlng);
+			get_paths_from_server();
+		};
+		navigator.geolocation.getCurrentPosition(on_success, null, {timeout: 10000});
+	}
+}
+
+function on_geolocation_clicked() {
+	if(g_current_location_marker != null) {
+		g_current_location_marker.setMap(null);
+		g_current_location_marker = null;
+	}
+	if(is_selected('geolocation_checkbox')) {
+		get_and_use_current_location();
 	}
 }
 
@@ -2325,6 +2343,12 @@ $(document).ready(initialize);
 				<input type="button" id="playpause_button" onclick="on_playpause_clicked()" value="" />
 				<input type="button" id="back_button" onclick="on_back_clicked()" value="<" />
 				<input type="button" id="forward_button" onclick="on_forward_clicked()" value=">" />
+			</div>
+
+			<hr style="border-top:1px solid #ccc" />
+			<div>
+				<label><input id="geolocation_checkbox" type="checkbox" onclick="on_geolocation_clicked()" />
+				Use current location as starting point</label>
 			</div>
 
 			<div id="div_dev_controls">
