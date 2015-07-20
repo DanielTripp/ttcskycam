@@ -2209,6 +2209,11 @@ function on_show_debug_report_button_clicked() {
 		});
 }
 
+function on_reset_button_clicked() {
+	localStorage.clear();
+	location.reload();
+}
+
 $(document).ready(initialize);
 
     </script>
@@ -2344,7 +2349,8 @@ $(document).ready(initialize);
 			</div>
 		<div style="clear: both">
 			<hr style="border-top:1px solid #ccc" />
-			<p><a href="/about.html">About this website.</a></p>
+			<input type="button" onclick="on_reset_button_clicked()" value="Reset everything" /><br>
+			<a href="/about.html">About this website.</a><br>
 			<p></p>
 		</div>
 		<div id="route-options-dialog"><div>
