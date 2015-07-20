@@ -1077,8 +1077,6 @@ function init_everything_that_doesnt_depend_on_map() {
 		$('#div_framerate').remove();
 	}
 
-	init_num_extra_routes_controls();
-
 	init_message_dialog();
 	init_route_options_dialog();
 	init_route_select_dialog();
@@ -1772,10 +1770,12 @@ function calc_display_set() {
 	}
 
 	var extras_added = 0;
+	var enable_more_extra_routes_button = false;
 	for(var i=0; i<g_extra_path_froutendirs.length; i++) {
 		var froutendir = g_extra_path_froutendirs[i];
 		var froute = froutendir[0], dir = froutendir[1];
 		if(extras_added >= g_num_extra_routes_to_show) {
+			enable_more_extra_routes_button = true;
 			break;
 		}
 		if(!in_r(froute) && !g_force_hide_froutes.contains(froute)) {
@@ -1788,6 +1788,7 @@ function calc_display_set() {
 			extras_added += 1;
 		}
 	}
+	$('#more_extra_routes_button').prop('disabled', !enable_more_extra_routes_button);
 
 	g_force_show_froutes.forEach(function(froute) {
 		if(!in_r(froute)) {
@@ -1805,25 +1806,18 @@ function calc_display_set() {
 	return r;
 }
 
-function init_num_extra_routes_controls() {
-	set_contents('span_num_extra_routes', ''+g_num_extra_routes_to_show);
-
-	$('#down_img').on({'click': on_num_extra_routes_down_clicked});
-	$('#up_img').on({'click': on_num_extra_routes_up_clicked});
-}
-
-function on_num_extra_routes_down_clicked() {
+function on_fewer_extra_routes_clicked() {
 	if(g_num_extra_routes_to_show > 0) {
 		g_num_extra_routes_to_show -= 1;
-		set_contents('span_num_extra_routes', ''+g_num_extra_routes_to_show);
+		$('#less_extra_routes_button').prop('disabled', (g_num_extra_routes_to_show == 0));
 		calc_display_set_and_deal_with_it();
 	}
 }
 
-function on_num_extra_routes_up_clicked() {
+function on_more_extra_routes_clicked() {
 	if(g_num_extra_routes_to_show < 99) {
 		g_num_extra_routes_to_show += 1;
-		set_contents('span_num_extra_routes', ''+g_num_extra_routes_to_show);
+		$('#less_extra_routes_button').prop('disabled', false);
 		calc_display_set_and_deal_with_it();
 	}
 }
@@ -2301,8 +2295,8 @@ $(document).ready(initialize);
 			<hr style="border-top:1px solid #ccc" />
 
 			<!-- Num extra routes: -->
-			Max. extra routes to show: <font size="+1"><span id="span_num_extra_routes"></span></font>  
-			<img id="down_img" src="down.png"/> <img id="up_img" src="up.png"/> <br/>
+			Show <input type="button" id="more_extra_routes_button" onclick="on_more_extra_routes_clicked()" value="more" /> or 
+			<input type="button" id="less_extra_routes_button" onclick="on_fewer_extra_routes_clicked()" value="fewer" /> alternate routes
 			<hr style="border-top:1px solid #ccc" />
 
 			<!-- Play / pause: -->
