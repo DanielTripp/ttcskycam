@@ -35,7 +35,7 @@ var SHOW_ZOOM = false;
 
 var SHOW_PATHS_TEXT = false;
 var SHOW_LOADING_URLS = false;
-var DISABLE_GEOLOCATION = true;
+var DISABLE_GEOLOCATION = false;
 
 var MAP_SYNC_DEFAULT = false;
 
@@ -2348,9 +2348,12 @@ $(document).ready(initialize);
 			</div>
 		<div style="clear: both">
 			<hr style="border-top:1px solid #ccc" />
+			<p>
 			<input type="button" onclick="on_reset_button_clicked()" value="Reset everything" /><br>
-			<br>
+			</p>
+			<p>
 			<a href="/about.html">About this website.</a><br>
+			</p>
 			<p></p>
 		</div>
 		<div id="route-options-dialog"><div>
