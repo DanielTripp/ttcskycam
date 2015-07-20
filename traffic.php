@@ -1369,9 +1369,6 @@ function map_fit_bounds_to_trip_markers() {
 	var sw = new google.maps.LatLng(Math.min(p1.lat(), p2.lat()), Math.min(p1.lng(), p2.lng()));
 	var ne = new google.maps.LatLng(Math.max(p1.lat(), p2.lat()), Math.max(p1.lng(), p2.lng()));
 	g_map.fitBounds(new google.maps.LatLngBounds(sw, ne));
-	if(g_browser_is_desktop) {
-		g_map.setZoom(g_map.getZoom()-2);
-	}
 }
 
 function refresh_streetlabels_allroutes() {
@@ -1638,9 +1635,12 @@ function on_route_select_button_clicked(froute_) {
 }
 
 function init_trip_markers() {
-	g_trip_orig_marker = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.6494532, -79.4314174), 
+	var orig_pos = get_marker_pos_from_localstorage(true, [43.6494532, -79.4314174]);
+	var dest_pos = get_marker_pos_from_localstorage(false, [43.6523100, -79.4063549]);
+
+	g_trip_orig_marker = new google.maps.Marker({map: g_map, position: orig_pos, 
 		draggable: true, icon: 'http://www.google.com/mapfiles/markerA.png', zIndex: 6});
-	g_trip_dest_marker = new google.maps.Marker({map: g_map, position: new google.maps.LatLng(43.6523100, -79.4063549), 
+	g_trip_dest_marker = new google.maps.Marker({map: g_map, position: dest_pos, 
 		draggable: true, icon: 'http://www.google.com/mapfiles/markerB.png', zIndex: 6});
 
 	google.maps.event.addListener(g_trip_orig_marker, 'dragend', on_trip_orig_marker_moved);
@@ -1656,6 +1656,16 @@ function init_trip_markers() {
 				content: infowin_noscroll('... and this one to where<br>you want to go.'), zIndex: 1});
 		g_instructions_dest_infowin.open(g_map, g_trip_dest_marker);
 	}
+}
+
+function get_marker_pos_from_localstorage(orig_aot_dest_, default_latlng_) {
+	var str_from_localstorage = localStorage.getItem(get_marker_pos_localstorage_key(orig_aot_dest_));
+	try {
+		if(str_from_localstorage != null) {
+			return google_LatLng($.parseJSON(str_from_localstorage));
+		}
+	} catch(err) {}
+	return google_LatLng(default_latlng_);
 }
 
 // Many thanks to http://www.canbike.ca/information-technology/2013/11/01/firefox-infowindow-scrollbar-fix-google-maps-api-v3.html 
@@ -1676,6 +1686,8 @@ function on_trip_dest_marker_moved() {
 }
 
 function on_trip_marker_moved(orig_aot_dest_) {
+	var marker = (orig_aot_dest_ ? g_trip_orig_marker : g_trip_dest_marker);
+	localStorage.setItem(get_marker_pos_localstorage_key(orig_aot_dest_), google_LatLng_to_json_str(marker.getPosition()));
 	if(show_instructions()) {
 		if(g_num_trip_marker_moves_so_far == 0) {
 			g_num_trip_marker_moves_so_far += 1;
@@ -1685,13 +1697,17 @@ function on_trip_marker_moved(orig_aot_dest_) {
 			boxText.style.cssText = "border: 1px solid black; margin-top: 8px; background: white; padding: 5px; width: 175px";
 			boxText.innerHTML = "Also, you can click on certain streets for more options.";
 			g_instructions_also_infobox = new InfoBox({content: boxText, pixelOffset: new google.maps.Size(-70, 0), closeBoxMargin: "10px 2px 2px 2px"});
-			g_instructions_also_infobox.open(g_map, (orig_aot_dest_ ? g_trip_orig_marker : g_trip_dest_marker));
+			g_instructions_also_infobox.open(g_map, marker);
 		} else if(g_num_trip_marker_moves_so_far == 1) {
 			g_num_trip_marker_moves_so_far += 1;
 			g_instructions_also_infobox.close();
 		}
 	}
 	get_paths_from_server();
+}
+
+function get_marker_pos_localstorage_key(orig_aot_dest_) {
+	return sprintf('%s-marker-pos', (orig_aot_dest_ ? 'orig' : 'dest'));
 }
 
 function kmph_to_mps(kmph_) {
