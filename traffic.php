@@ -120,6 +120,9 @@ var g_force_dir0_froutes = new buckets.Set(), g_force_dir1_froutes = new buckets
 var g_main_path = [], g_extra_path_froutendirs = [];
 var g_use_rendered_aot_arrow_vehicle_icons = g_browser_is_desktop;
 var g_froute_to_spatialindex = null;
+var show_instructions = !DONT_SHOW_INSTRUCTIONS && g_browser_is_desktop && 
+		localStorage.getItem(get_marker_pos_localstorage_key(true)) == null && 
+		localStorage.getItem(get_marker_pos_localstorage_key(false)) == null;
 
 <?php # RUN_THIS_PHP_BLOCK_IN_MANGLE_TO_PRODUCTION 
 passthru('python -c "import c, routes
@@ -1648,7 +1651,7 @@ function init_trip_markers() {
 
 	map_fit_bounds_to_trip_markers();
 
-	if(show_instructions()) {
+	if(show_instructions) {
 		g_instructions_orig_infowin = new google.maps.InfoWindow({
 				content: infowin_noscroll('Move this marker to where<br>you are starting from.'), zIndex: 2});
 		g_instructions_orig_infowin.open(g_map, g_trip_orig_marker);
@@ -1673,10 +1676,6 @@ function infowin_noscroll(content_) {
 	return sprintf('<div style="line-height:1.35;overflow:hidden;white-space:nowrap;">%s</div>', content_);
 }
 
-function show_instructions() {
-	return !DONT_SHOW_INSTRUCTIONS && g_browser_is_desktop;
-}
-
 function on_trip_orig_marker_moved() {
 	on_trip_marker_moved(true);
 }
@@ -1688,7 +1687,7 @@ function on_trip_dest_marker_moved() {
 function on_trip_marker_moved(orig_aot_dest_) {
 	var marker = (orig_aot_dest_ ? g_trip_orig_marker : g_trip_dest_marker);
 	localStorage.setItem(get_marker_pos_localstorage_key(orig_aot_dest_), google_LatLng_to_json_str(marker.getPosition()));
-	if(show_instructions()) {
+	if(show_instructions) {
 		if(g_num_trip_marker_moves_so_far == 0) {
 			g_num_trip_marker_moves_so_far += 1;
 			g_instructions_orig_infowin.close();
@@ -2350,6 +2349,7 @@ $(document).ready(initialize);
 		<div style="clear: both">
 			<hr style="border-top:1px solid #ccc" />
 			<input type="button" onclick="on_reset_button_clicked()" value="Reset everything" /><br>
+			<br>
 			<a href="/about.html">About this website.</a><br>
 			<p></p>
 		</div>
