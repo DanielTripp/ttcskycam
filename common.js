@@ -357,6 +357,10 @@ function toJsonString(obj_, indent_) {
 	return window.JSON.stringify(obj_, undefined, (indent_ ? 2 : 0));
 }
 
+function google_LatLng_to_json_str(latlng_) {
+	return toJsonString([latlng_.lat(), latlng_.lng()]);
+}
+
 function cgi_url(cgi_path_, func_args_) {
 	var paramstr = "";
 	for(var i=0; i<func_args_.length; i++) {
