@@ -499,17 +499,20 @@ def get_froute(x_):
 	return snapgraph.get_base_plinename(x_.plinename)
 
 def pack_ways(ways_):
-	froutendir_to_score = defaultdict(int)
-	for wayi, way in enumerate(ways_):
-		for froutendir in way:
-			froutendir_to_score[froutendir] += len(ways_)-wayi
-	all_froutendirs = [x[0] for x in sorted(froutendir_to_score.items(), key=lambda x: x[1], reverse=True)]
-	for i in range(len(all_froutendirs)-1, -1, -1):
-		froutendir = all_froutendirs[i]
-		froutenoppositedir = (froutendir[0], 1 if froutendir[1] == 0 else 0)
-		if froutenoppositedir in all_froutendirs[:i]:
-			all_froutendirs.pop(i)
-	return (ways_[0], all_froutendirs)
+	if not ways_:
+		return ([], [])
+	else:
+		froutendir_to_score = defaultdict(int)
+		for wayi, way in enumerate(ways_):
+			for froutendir in way:
+				froutendir_to_score[froutendir] += len(ways_)-wayi
+		all_froutendirs = [x[0] for x in sorted(froutendir_to_score.items(), key=lambda x: x[1], reverse=True)]
+		for i in range(len(all_froutendirs)-1, -1, -1):
+			froutendir = all_froutendirs[i]
+			froutenoppositedir = (froutendir[0], 1 if froutendir[1] == 0 else 0)
+			if froutenoppositedir in all_froutendirs[:i]:
+				all_froutendirs.pop(i)
+		return (ways_[0], all_froutendirs)
 
 def get_packed_ways(orig_latlng_, dest_latlng_):
 	r = pack_ways(get_snapgraph().get_ways(orig_latlng_, dest_latlng_))
