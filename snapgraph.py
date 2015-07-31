@@ -2509,7 +2509,9 @@ def yen_should_stop_because_of_kint(distsnpaths_so_far_, k_):
 # if k_ is a 4-tuple, then we only enforce the first pass part.
 def yen_should_stop_because_of_kfloat(distsnpaths_so_far_, latest_candidate_distnpath_, k_):
 	assert is_yen_k_simple(k_)
-	assert is_sorted(distsnpaths_so_far_, key=lambda e: e[0])
+	# Two paths can have very close distances, off only by meaningless numerical error, if the routes 
+	# were created from the same latlngs, which we do sometimes.  So: rounding. 
+	assert is_sorted(distsnpaths_so_far_, key=lambda e: round(e[0], 5))
 	if isinstance(k_, float) or is_seq_like(k_, (0, 0.0)) or is_seq_like(k_, (0, 0, 0.0, 0.0)):
 		if isinstance(k_, float):
 			kfloat = k_

@@ -1,6 +1,6 @@
 - Nncrement version txt file 
 - Edit streetlabels.yaml if required 
-	- ./build-streetlabels.py FROUTE ; cd img; svn-add-all-unknown-files; cd ..
+	- ./build-streetlabels.py FROUTE && cd img && hg add * && cd ..
 - Delete routeinfo in picklestore, then: ./r && prime_routeinfos.py 
 - Rebuild system graph
 
