@@ -1,6 +1,7 @@
-- increment version txt file 
-- make sure street labels still make sense. 
-- delete routeinfo in picklestore, then run prime_routeinfos.py from command line
-- rebuild system graph
+- Nncrement version txt file 
+- Edit streetlabels.yaml if required 
+	- ./build-streetlabels.py FROUTE ; cd img; svn-add-all-unknown-files; cd ..
+- Delete routeinfo in picklestore, then: ./r && prime_routeinfos.py 
+- Rebuild system graph
 
 
