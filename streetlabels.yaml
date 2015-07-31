@@ -75,7 +75,10 @@ spadina:
     122: Spadina Ave
     797: ''
     1104: Spadina Ave
-    3371: ''
+    3371: Lower Spadina Ave
+    3529: ''
+    3539: Queens Quay W
+    4800: ''
 
 stclair:
     0: ''
@@ -102,22 +105,22 @@ keele:
 
 harbourfront:
     0:
-        0: ''
-        551: Queens Quay W
-        2392: Bathurst St
-        2527: ''
-        2564: Fleet St
-        3350: ''
-        3420: Manitoba Dr
+        0: Manitoba Dr
+        692: ''
+        776: Fleet St
+        1564: ''
+        1593: Bathurst St
+        1732: Queens Quay W
+        3569: ''
     1:
         0: ''
-        551: Queens Quay W
-        2392: Bathurst St
-        2527: ''
-        2564: Fleet St
-        3350: ''
-        3420: Manitoba Dr
-        3579: ''
+        523: Manitoba Dr
+        692: ''
+        776: Fleet St
+        1564: ''
+        1593: Bathurst St
+        1732: Queens Quay W
+        3569: ''
 
 wellesley:
     0:
