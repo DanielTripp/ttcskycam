@@ -132,7 +132,7 @@ class Vertex(object):
 			if len(ptaddrs) != 1:
 				plinenames = [ptaddr.plinename for ptaddr in self.ptaddrs]
 				plinename_to_pts = dict((plinename, self.snapgraph.plinename2pts[plinename]) for plinename in plinenames)
-				raise Exception('Problem around %s, polyline %d (%s) - %s, %s' \
+				raise Exception('Problem around %s, polyline %s (%s) - %s, %s' \
 						% (self, plinename_, ptaddrs, self.ptaddrs, plinename_to_pts))
 			return ptaddrs[0]
 
