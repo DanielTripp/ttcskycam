@@ -960,7 +960,8 @@ def print_est_time_remaining(str_, t0_, i_, N_, every=1):
 			else:
 				timestr = '%.1f minutes' % (est_time_remaining_secs/(60))
 			percent = i_*100/N_
-			printerr('%s%d/%d - %d%% done - est. %s remaining.' % (('%s: ' % str_ if str_ else ''), i_, N_, percent, timestr))
+			printerr('%s%d/%d - %d%% done - est. %s remaining - %.1f/sec.' \
+					% (('%s: ' % str_ if str_ else ''), i_, N_, percent, timestr, rate))
 
 # Thanks to http://stackoverflow.com/questions/23598973/intercepting-heapq 
 # http://stackoverflow.com/questions/1465662/how-can-i-implement-decrease-key-functionality-in-pythons-heapq 
