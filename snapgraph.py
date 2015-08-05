@@ -1271,7 +1271,7 @@ class SnapGraph(object):
 			else:
 				r.append(vertex)
 		for limitzone, vertexes in zip(limitzones, vertexes_by_limitzoneidx):
-			if limitzone.ideal_vert_latlng is not None:
+			if vertexes and limitzone.ideal_vert_latlng is not None:
 				r.append(min(vertexes, key=lambda vert: vert.pos().dist_m(limitzone.ideal_vert_latlng)))
 		return set(r)
 
@@ -2304,9 +2304,9 @@ def dijkstra(srcvertex_, dest_, all_vertexes_, get_connected_vertexndists_, out_
 	else:
 		return {vert: info[vert].dist for vert in (dest_ if destlist else info.iterkeys())}
 
+# The A* path-finding algorithm.  Thanks to http://en.wikipedia.org/wiki/A*_search_algorithm
 # Returns a single (dist, pathsteps) pair if k==1.
 # 	otherwise returns a list of (dist, pathsteps) pairs.
-# The A* path-finding algorithm.  Thanks to http://en.wikipedia.org/wiki/A*_search_algorithm
 # This version assumes, and exploits, a monotonic heuristic function. 
 def a_star(srcvertex_, destvertex_, all_vertexes_, get_connected_vertexndists_, heuristic_cost_estimate_, 
 		k=None, out_visited_vertexes=None, log=False):
