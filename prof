@@ -18,5 +18,5 @@ py_script_args = sys.argv[3:]
 subprocess.check_call([sys.executable, '-O', '-m', 'cProfile', '-o', profile_data_filename] 
 		+ [py_script_filename] + py_script_args)
 
-make_profiler_svg_file(profile_data_filename)
+profile_data_to_svg_file(profile_data_filename)
 
