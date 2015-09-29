@@ -1,4 +1,4 @@
-This is the source code behind the website (http://unofficialttctrafficreport.ca/).  It's goal is to give an up-to-the-minute visual representation of public transit conditions in Toronto.  
+This is the source code behind the website (http://ttcskycam.ca/).  It's goal is to give an up-to-the-minute visual representation of public transit conditions in Toronto.  
 
 It it based on [NextBus](http://www.nextbus.com/) data.
 
