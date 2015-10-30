@@ -1,7 +1,0 @@
-#!/usr/bin/env bash
-
-tar_filename=/tmp/ttc-$(uuidgen).tar.gz
-tar zcf "$tar_filename" *.py *.yaml *.php *.js *.html *.json 
-scp "$tar_filename" dt@theorem.ca:~
-rm "$tar_filename"
-
