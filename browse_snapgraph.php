@@ -427,7 +427,7 @@ function get_paths_from_server() {
 			console.log('Less than two markers.  Can\'t do path.');
 		} else if(latlngs.length == 2) {
 			callpy('browse_snapgraph.find_paths', get_sgname(), latlngs[0], latlngs[1], 
-						is_selected('multisnap_for_paths_checkbox'), get_snap_radius_from_gui(), 
+						get_snap_arg(), get_snap_radius_from_gui(), 
 						get_pathkfactor_from_gui(), is_selected('show_visited_vertexes_checkbox'), 
 					{success: function(r__) {
 						g_path_latlngs = r__['path_latlngs'];
@@ -449,6 +449,10 @@ function get_paths_from_server() {
 				});
 		}
 	}
+}
+
+function get_snap_arg() {
+	return radio_val('snap_style');
 }
 
 function show_path_text_and_controls() {
@@ -855,8 +859,12 @@ function get_posaddr_latlng_from_server(posaddr_str_) {
 				Show visited vertexes</label> 
 		<label><input type="checkbox" id="arrows_checkbox" name="arrows_checkbox" checked onclick="get_paths_from_server()"/>
 				Show arrows on path</label> 
-		<label><input type="checkbox" id="multisnap_for_paths_checkbox" checked onclick="get_paths_from_server()"/>
-				Multisnap for paths</label> 
+
+		//// Snap style for paths: 
+		<label><input type="radio" name="snap_style" value="1" onclick="get_paths_from_server()" />Single</label>
+		<label><input type="radio" name="snap_style" value="m" onclick="get_paths_from_server()" checked />Multi</label>
+		<label><input type="radio" name="snap_style" value="pcp" onclick="get_paths_from_server()" />PCP</label>
+
 		<br>
 		<input type="checkbox" id="multisnap_show_infowindows" />
 		<label for="multisnap_show_infowindows">Multisnap: show infowindows</label> |
