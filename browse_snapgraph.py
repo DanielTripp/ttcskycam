@@ -45,7 +45,9 @@ def find_multipath(sgname_, latlngs_):
 	path = get_sg(sgname_).find_multipath(latlngs_)
 	return (path.latlngs() if path is not None else None)
 
-def find_paths(sgname_, startlatlng_, destlatlng_, multisnap_, snap_tolerance_, k_, get_visited_vertexes_):
+def find_paths(sgname_, startlatlng_, destlatlng_, snap_style_, snap_tolerance_, k_, get_visited_vertexes_):
+	assert snap_style_ in ('1', 'm', 'pcp')
+
 	sg = get_sg(sgname_)
 
 	k = k_
@@ -54,8 +56,7 @@ def find_paths(sgname_, startlatlng_, destlatlng_, multisnap_, snap_tolerance_, 
 		k = tuple(k)
 
 	visited_vertexes = (set() if get_visited_vertexes_ else None)
-	snap_arg = ('m' if multisnap_ else '1')
-	dists_n_pathsteps = sg.find_paths(startlatlng_, snap_arg, destlatlng_, snap_arg, snap_tolerance=snap_tolerance_, k=k, \
+	dists_n_pathsteps = sg.find_paths(startlatlng_, snap_style_, destlatlng_, snap_style_, snap_tolerance=snap_tolerance_, k=k, \
 			out_visited_vertexes=visited_vertexes)
 	path_latlngs = []
 	for dist, pathsteps in dists_n_pathsteps:
