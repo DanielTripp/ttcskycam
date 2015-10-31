@@ -22,7 +22,19 @@ from misc import *
 
 if __name__ == '__main__':
 
-	encoded_vals = sys.argv[1:]
-	decoded_vals = [decode_url_paramval(v) for v in encoded_vals]
-	print decoded_vals
+	args = sys.argv[1:]
+	if args:
+		print [decode_url_paramval(v) for v in encoded_vals]
+	else:
+		for line in sys.stdin:
+			decoded_args = []
+			for space_split in line.split(' '):
+				for ampersand_split in space_split.split('&'):
+					if '=' in ampersand_split:
+						possible_arg = ampersand_split.split('=')[1]
+						try:
+							decoded_args.append(decode_url_paramval(possible_arg))
+						except:
+							pass
+			print decoded_args
 
