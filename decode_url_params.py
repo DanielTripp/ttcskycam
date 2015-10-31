@@ -17,12 +17,8 @@ You should have received a copy of the GNU General Public License
 along with ttcskycam.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
-import sys, os, urlparse, json, pprint, time, pickle, xml.dom, xml.dom.minidom, datetime, time, getopt
-from itertools import *
+import sys
 from misc import *
-from backport_OrderedDict import *
-import routes, traffic, db, vinfo, geom, mc, tracks, util, predictions, paths, c, reports, streetlabels, snapgraph, picklestore, streets
-#from routes import *
 
 if __name__ == '__main__':
 
