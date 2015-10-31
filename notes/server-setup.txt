@@ -367,6 +367,8 @@ psql -d postgres -U dt
 > select pst.sprintf('_%-3.3s_', fudgeroute  )  from ttc_vehicle_locations limit 1;
 
 
+Install webalizer 
+Install mod_status 
 
 
 
