@@ -413,7 +413,7 @@ class SystemSnapGraph(snapgraph.SnapGraph):
 
 	def get_ways(self, startlatlng_, destlatlng_):
 		r = []
-		distsnpaths = self.find_paths(startlatlng_, None, destlatlng_, None, snap_tolerance=1000, k=(10,1.55))
+		distsnpaths = self.find_paths(startlatlng_, 'pcp', destlatlng_, 'pcp', snap_tolerance=1000, k=(10,1.55))
 		for dist, path in distsnpaths:
 			r.append(self.pathsteps_to_way(path))
 		return r
