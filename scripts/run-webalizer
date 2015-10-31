@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+# This script is suitable for running from cron. 
+
+set -eu -o pipefail
+
+if [ "$#" != 1 ] ; then
+	echo 'Usage - we need one argument - a number of days.'
+	exit 1
+fi
+
+num_days=$1
+
+all_logs_file="$(mktemp -t run-webalizer-XXXXXXXX)"
+ls /var/log/apache2 >/dev/null # checking for access 
+zcat -f $(ls -t $(find /var/log/apache2 -name 'access.log*' -mtime -"$num_days") | tac ) > "$all_logs_file"
+dest_dir=/var/www/webalizer-----------/$num_days-days
+if [ -e "$dest_dir" ] ; then
+	rm -r "$dest_dir"
+fi
+dest_parent_dir="$(dirname "$dest_dir")"
+if [ ! -e "$dest_parent_dir" ] ; then
+	mkdir "$dest_parent_dir"
+	chown dt "$dest_parent_dir"
+	chgrp dt "$dest_parent_dir"
+	chmod o+rx "$dest_parent_dir"
+	echo 'Options +Indexes
+IndexOptions IgnoreCase FancyIndexing NameWidth=* DescriptionWidth=*
+IndexOrderDefault Descending Date' > "$dest_parent_dir"/.htaccess
+	chown dt "$dest_parent_dir"/.htaccess
+	chmod o+r "$dest_parent_dir"/.htaccess
+fi
+mkdir "$dest_dir"
+webalizer -q -o "$dest_dir" "$all_logs_file"
+rm "$all_logs_file"
+chmod -R o+r "$dest_dir"
+chmod o+x "$dest_dir"
+
