@@ -136,7 +136,7 @@ def start_memcache(instance_, log=True):
 
 # Using netstat's "-p" option as we do here requires netstat to run as root so I've setuid'ed it on my machine to make this work. 
 def get_server_pid_linux(instance_):
-	netstat_stdout_contents = subprocess.Popen(['netstat', '--tcp', '-p', '-a'], stdout=subprocess.PIPE).communicate()[0]
+	netstat_stdout_contents = subprocess.Popen(['netstat', '--tcp', '-p', '-a', '-n'], stdout=subprocess.PIPE).communicate()[0]
 	for line in netstat_stdout_contents.split('\n'):
 		if re.search(r':%d\b' % server_get_port(instance_), line) and 'LISTEN' in line:
 			pid = int(re.sub(r'^.*?(\d+)[^\d]*$', r'\1', line))
