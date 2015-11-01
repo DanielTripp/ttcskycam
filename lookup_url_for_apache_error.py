@@ -27,20 +27,6 @@ if __name__ == '__main__':
 	def get_timestamp_str_from_access_log_line(line_):
 		return line_.split(' ')[3][1:]
 
-	def get_access_log_line(ip_addr_, timestamp_):
-		timestamp_in_access_log_format = time.strftime(ACCESS_LOG_TIME_FORMAT, timestamp_)
-		access_log_filename = get_access_log_filename(timestamp_)
-		if not access_log_filename:
-			return None
-		r = None
-		with open(access_log_filename) as access_log_fin:
-			for access_log_line in access_log_fin:
-				if access_log_line.startswith(ip_addr_) \
-						and timestamp_in_access_log_format == get_timestamp_str_from_access_log_line(access_log_line):
-					r = access_log_line.rstrip()
-					break
-		return r
-
 	def get_possible_access_log_lines(ip_addr_, err_log_timestamp_):
 		access_log_filename = get_access_log_filename(err_log_timestamp_)
 		if not access_log_filename:
@@ -48,10 +34,10 @@ if __name__ == '__main__':
 		r = []
 		with open(access_log_filename) as access_log_fin:
 			for access_log_line in access_log_fin:
-				if access_log_line.startswith(ip_addr_):
+				if access_log_line.startswith(ip_addr_) and 'callpy' in access_log_line:
 					timestamp_from_access_log_line = \
 							time.strptime(get_timestamp_str_from_access_log_line(access_log_line), ACCESS_LOG_TIME_FORMAT)
-					if time.mktime(timestamp_from_access_log_line) < time.mktime(err_log_timestamp_):
+					if time.mktime(timestamp_from_access_log_line) <= time.mktime(err_log_timestamp_):
 						r.append(access_log_line.rstrip())
 		r = r[-5:]
 		return r
@@ -80,18 +66,13 @@ if __name__ == '__main__':
 				err_timestamp = time.strptime(timestamp_in_err_log_format, '%a %b %d %H:%M:%S %Y')
 				for error_log_line in get_error_log_context_lines(err_log_line, err_timestamp):
 					print 'error log:', error_log_line
-				access_log_line = get_access_log_line(ip_addr, err_timestamp)
-				if access_log_line:
-					print '--> access log:', access_log_line
-					print '-->    decoded:', decode_url_in_access_log_line(access_log_line)
+				possible_access_log_lines = get_possible_access_log_lines(ip_addr, err_timestamp)
+				if possible_access_log_lines:
+					for access_log_line in possible_access_log_lines:
+						print '--> possible access log:', access_log_line
+						print '-->             decoded:', decode_url_in_access_log_line(access_log_line)
 				else:
-					possible_access_log_lines = get_possible_access_log_lines(ip_addr, err_timestamp)
-					if possible_access_log_lines:
-						for access_log_line in possible_access_log_lines:
-							print '--> possible access log:', access_log_line
-							print '-->             decoded:', decode_url_in_access_log_line(access_log_line)
-					else:
-						print '--> access log line not found.'
+					print '--> access log lines not found.'
 
 	args = sys.argv[1:]
 	if args:
