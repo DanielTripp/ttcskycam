@@ -8,6 +8,7 @@
       body { height: 70%; margin: 0; padding: 0 }
     </style>
 		<link type="text/css" href="css/ui-lightness/jquery-ui-1.8.17.custom.css" rel="stylesheet" />
+		<link rel="shortcut icon" type="image/x-icon" href="favicon.ico" />
     <script type="text/javascript"
       src="http://maps.googleapis.com/maps/api/js?sensor=true&v=3.14">
     </script>
