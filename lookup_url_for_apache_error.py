@@ -39,7 +39,7 @@ if __name__ == '__main__':
 							time.strptime(get_timestamp_str_from_access_log_line(access_log_line), ACCESS_LOG_TIME_FORMAT)
 					if time.mktime(timestamp_from_access_log_line) <= time.mktime(err_log_timestamp_):
 						r.append(access_log_line.rstrip())
-		r = r[-5:]
+		r = r[-10:][::-1]
 		return r
 
 	def get_error_log_context_lines(error_log_line_, err_timestamp_):
