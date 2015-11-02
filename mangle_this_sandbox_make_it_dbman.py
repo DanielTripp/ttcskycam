@@ -27,7 +27,7 @@ if __name__ == '__main__':
 		time.sleep(1)
 
 	for dirpath, dirnames, filenames in os.walk('.'):
-		for dirname in [x for x in dirnames if x not in ['psycopg2', 'picklestore', 'yaml', 'routes', 'tracks', 'streets']]:
+		for dirname in [x for x in dirnames if x not in ['psycopg2', 'picklestore', 'yaml', 'routes', 'tracks', 'streets', 'scripts']]:
 			shutil.rmtree(os.path.join(dirpath, dirname))
 		break
 
