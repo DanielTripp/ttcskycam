@@ -235,7 +235,7 @@ class SystemSnapGraph(snapgraph.SnapGraph):
 		self.build_pcp_vert2vert_distsnpaths()
 		self.use_vert_only_floyd_warshall = False
 		self.use_floyd_warshall = True
-		# tdr unc self.build_pcp_multisnap_info()
+		self.build_pcp_multisnap_info()
 
 	def build_stopvertidx_by_vertidx(self):
 		# This stores the adjacent stop vertidx for each non-stop vertidx. 
@@ -258,7 +258,6 @@ class SystemSnapGraph(snapgraph.SnapGraph):
 			self.pcp_vert2vert_distsnpaths[vert1idx][vert2idx] = distsnpaths
 			self.pcp_vert2vert_distsnpaths[vert2idx][vert1idx] = self.get_reverse_dir_distsnpaths(distsnpaths)
 			print_est_time_remaining('build_pcp_vert2vert_distsnpaths', t0, i, len(vert_combos), 100)
-		printerr('pcp build time: %.1f' % (time.time() - t0)) # tdr 
 
 	@staticmethod
 	def get_reverse_dir_distsnpaths(distsnpaths_):
