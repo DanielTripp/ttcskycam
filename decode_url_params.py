@@ -24,7 +24,7 @@ if __name__ == '__main__':
 
 	args = sys.argv[1:]
 	if args:
-		print [decode_url_paramval(v) for v in encoded_vals]
+		print [decode_url_paramval(v) for v in args]
 	else:
 		for line in sys.stdin:
 			decoded_args = []
