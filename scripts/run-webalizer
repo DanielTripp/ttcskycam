@@ -31,7 +31,7 @@ IndexOrderDefault Descending Date' > "$dest_parent_dir"/.htaccess
 	chmod o+r "$dest_parent_dir"/.htaccess
 fi
 mkdir "$dest_dir"
-webalizer -q -o "$dest_dir" "$all_logs_file"
+webalizer -Q -o "$dest_dir" "$all_logs_file"
 rm "$all_logs_file"
 chmod -R o+r "$dest_dir"
 chmod o+x "$dest_dir"
