@@ -33,7 +33,7 @@ for root, dirs, files in os.walk('.'):
 		os.chmod(os.path.join(root, directory), mode_for_dirs)
 	for f in (os.path.join(root, f) for f in files):
 		mode = stat.S_IRUSR ^ stat.S_IWUSR ^ stat.S_IROTH
-		if any(f.endswith('.'+ext) for ext in EXECUTABLE_EXTENSIONS):
+		if os.path.basename(root) == 'scripts' or any(f.endswith('.'+ext) for ext in EXECUTABLE_EXTENSIONS):
 			mode ^= stat.S_IXUSR ^ stat.S_IXOTH
 		os.chmod(f, mode)
 
