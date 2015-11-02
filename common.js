@@ -339,14 +339,14 @@ function callpy_url(module_and_funcname_, func_args_) {
 function callpy_object_to_jsonstr(obj_) {
 	var r = null;
 	if(obj_ instanceof google.maps.LatLng) {
-		r = [obj_.lat(), obj_.lng()];
+		r = ['latlng', obj_.lat(), obj_.lng()];
 	} else if(obj_ instanceof buckets.LinkedList) {
 		r = [];
 		obj_.forEach(function(e) {
 			r.push(e);
 		});
 	} else if($.isArray(obj_) && obj_.length > 0 && obj_[0] instanceof google.maps.LatLng) {
-		r = obj_.map(function(e) { return [e.lat(), e.lng()]; });
+		r = obj_.map(function(e) { return ['latlng', e.lat(), e.lng()]; });
 	} else {
 		r = obj_;
 	}

@@ -184,7 +184,7 @@ function forget_resnapped_markers() {
 }
 
 function snaptest(glatlon_, fudgeroutename_) {
-	return callpy_sync('routes.snaptest', fudgeroutename_, [glatlon_.lat(), glatlon_.lng()], 1);
+	return callpy_sync('routes.snaptest', fudgeroutename_, glatlon_, 1);
 }
 
 function mofr_to_latlon(mofr_, fudgeroutename_) {
