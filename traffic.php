@@ -1417,7 +1417,8 @@ function refresh_streetlabels_singleroute(froute_) {
 	if(!do_streetlabels_for_guizoom(guizoom) || !g_show_traffic_lines) {
 		forget_streetlabels_singleroute(froute_);
 	} else {
-		callpy('streetlabels.get_labels', froute_, direction, guizoom, g_map.getBounds().getSouthWest(), g_map.getBounds().getNorthEast(), 
+		callpy('streetlabels.get_labels', froute_, massage_dir(direction), guizoom, 
+				g_map.getBounds().getSouthWest(), g_map.getBounds().getNorthEast(), 
 			function(labels) {
 				// This is a callback, so since we started the call, this route could have been hidden or the guizoom could have been changed, 
 				// or all traffic lines hidden.  
