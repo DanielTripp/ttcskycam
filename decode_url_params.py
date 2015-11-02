@@ -28,7 +28,7 @@ if __name__ == '__main__':
 	else:
 		for line in sys.stdin:
 			decoded_args = []
-			for space_split in line.split(' '):
+			for space_split in line.rstrip().split(' '):
 				for ampersand_split in space_split.split('&'):
 					if '=' in ampersand_split:
 						possible_arg = ampersand_split.split('=')[1]
