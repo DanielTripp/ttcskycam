@@ -231,7 +231,7 @@ function refresh_traffic_from_server(fudgeroute_) {
 	var datazoom = GUIZOOM_TO_DATAZOOM[g_map.getZoom()];
 	if(!data.traffic_request_pending) {
 		data.traffic_request_pending = true;
-		callpy('reports.get_traffic_report', fudgeroute_, dir_to_request, datazoom, get_datetime_from_gui(), 
+		callpy('reports.get_traffic_report', fudgeroute_, massage_dir(dir_to_request), datazoom, get_datetime_from_gui(), 
 				(data.datazoom_to_traffic_mofr2speed.containsKey(datazoom) ? data.traffic_last_returned_timestr : null), 
 			{success: function(r_) {
 				var data = g_fudgeroute_data.get(fudgeroute_);
@@ -265,6 +265,15 @@ function refresh_traffic_from_server(fudgeroute_) {
 				data.traffic_request_pending = false;
 			}}
 		);
+	}
+}
+
+/* Agrees with common.js / callpy_object_to_jsonstr() */
+function massage_dir(dir_) {
+	if(dir_ == 0 || dir_ == 1) {
+		return dir_;
+	} else {
+		return [['latlng', dir_[0][0], dir_[0][1]], ['latlng', dir_[1][0], dir_[1][1]]];
 	}
 }
 
@@ -329,7 +338,7 @@ function refresh_vehicles_from_server(fudgeroute_) {
 	var datazoom = GUIZOOM_TO_DATAZOOM[g_map.getZoom()];
 	if(!data.vehicles_request_pending) {
 		data.vehicles_request_pending = true;
-		callpy('reports.get_locations_report', fudgeroute_, dir_to_request, datazoom, get_datetime_from_gui(), 
+		callpy('reports.get_locations_report', fudgeroute_, massage_dir(dir_to_request), datazoom, get_datetime_from_gui(), 
 				(data.datazoom_to_time_to_vid_to_vi.containsKey(datazoom) ? data.locations_last_returned_timestr : null), 
 			{success: function(r_) {
 				var data = g_fudgeroute_data.get(fudgeroute_);
