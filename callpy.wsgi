@@ -102,8 +102,7 @@ def application(environ, start_response):
 	check_environ(environ)
 
 	if '.' not in sys.path:
-		printerr('----------- having to add to sys.path') # temporary 
-		printerr('sys.path was:', sys.path) # temporary 
+		# This was necessary once.  Not sure if it still is.
 		sys.path.append('.')
 	try:
 		referer = environ['HTTP_REFERER'] if 'HTTP_REFERER' in environ else None
@@ -132,7 +131,8 @@ def check_environ(environ_):
 	# process, then we'll be killing a part of apache, which is not smart. 
 	# So here we make sure (and again this only matters for testing) that the WSGI setup 
 	# (in /etc/apache2/apache2.conf) makes us a WSGI "daemon process". 
-	assert environ_['mod_wsgi.process_group'] != ''
+	if environ_['mod_wsgi.process_group'] == '':
+		raise Exception()
 
 
 
