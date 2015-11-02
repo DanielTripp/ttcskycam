@@ -37,14 +37,15 @@ def get_arg_strvals(vardict_):
 	return r
 
 def wants_to_be_a_LatLng(obj_):
-	return isinstance(obj_, Sequence) and len(obj_) == 2 and isinstance(obj_[0], float) and isinstance(obj_[1], float) \
-			and (43.0 < obj_[0] < 44.0) and (-80 < obj_[1] < -79)
+	return isinstance(obj_, Sequence) and len(obj_) == 3 and obj_[0] == 'latlng' and \
+			isinstance(obj_[1], float) and isinstance(obj_[2], float) and \
+			(-90 <= obj_[1] <= 90) and (-180 <= obj_[2] <= 180)
 
 def wants_to_be_a_list_of_LatLngs(obj_):
 	return isinstance(obj_, Sequence) and all(wants_to_be_a_LatLng(e) for e in obj_)
 
 def to_LatLng(obj_):
-	return geom.LatLng(obj_[0], obj_[1])
+	return geom.LatLng(obj_[1], obj_[2])
 
 def get_arg_objvals(vardict_):
 	r = []
