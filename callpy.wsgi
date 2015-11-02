@@ -17,7 +17,7 @@ You should have received a copy of the GNU General Public License
 along with ttcskycam.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
-import sys, os, os.path, urlparse, json, time, re, cgi
+import sys, os, os.path, urlparse, json, time, re, cgi, urllib
 from collections import Sequence
 sys.path.append('.')
 import geom, vinfo, mc, db, util
@@ -99,12 +99,13 @@ def post_get_args(environ_):
 
 # WSGI entry point.
 def application(environ, start_response):
-	check_environ(environ)
-
-	if '.' not in sys.path:
-		# This was necessary once.  Not sure if it still is.
-		sys.path.append('.')
 	try:
+		check_environ(environ)
+
+		if '.' not in sys.path:
+			# This was necessary once.  Not sure if it still is.
+			sys.path.append('.')
+
 		referer = environ['HTTP_REFERER'] if 'HTTP_REFERER' in environ else None
 		query_string = environ['QUERY_STRING']
 		if environ['REQUEST_METHOD'] == 'POST':
@@ -122,7 +123,30 @@ def application(environ, start_response):
 	except:
 		mc.close_connection()
 		db.close_connection()
+		printerr('[client %s]          (pid=%s) Request url: %s' % (environ['REMOTE_ADDR'], os.getpid(), get_request_url(environ)))
 		raise
+
+# Thanks to Ian Becking via https://www.python.org/dev/peps/pep-0333/ 
+def get_request_url(environ):
+	url = environ['wsgi.url_scheme']+'://'
+
+	if environ.get('HTTP_HOST'):
+			url += environ['HTTP_HOST']
+	else:
+			url += environ['SERVER_NAME']
+
+			if environ['wsgi.url_scheme'] == 'https':
+					if environ['SERVER_PORT'] != '443':
+						 url += ':' + environ['SERVER_PORT']
+			else:
+					if environ['SERVER_PORT'] != '80':
+						 url += ':' + environ['SERVER_PORT']
+
+	url += urllib.quote(environ.get('SCRIPT_NAME', ''))
+	url += urllib.quote(environ.get('PATH_INFO', ''))
+	if environ.get('QUERY_STRING'):
+			url += '?' + environ['QUERY_STRING']
+	return url
 
 def check_environ(environ_):
 	# We want to restart this current (WSGI) process from within sometimes, during testing (see debug_reports).  
