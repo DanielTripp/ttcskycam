@@ -22,6 +22,7 @@
 		<script type="text/javascript" src="spatialindex.js"></script>
     <script type="text/javascript">
 
+var PERIODIC_PAGE_RELOAD_PERIOD_SECONDS = 60*60*24;
 var MAP_HEIGHT_PERCENT_OF_WINDOW_HEIGHT = 0.75;
 var DONT_SHOW_INSTRUCTIONS = false;
 var TEST_INVISIBLE = false;
@@ -1102,6 +1103,24 @@ function init_everything_that_doesnt_depend_on_map() {
 	if(!BROWSER_SUPPORTS_SVG) {
 		$('#svg_clock').remove();
 	}
+
+	schedule_periodic_page_reload();
+}
+
+/* Doing this because of some error logs that were seen on the server.  
+It looked like some users were browsing copies of traffic.php that were several 
+days old and didn't match the server-side code (called via ajax / callpy.wsgi) 
+any more.  So we do this in the hope that it will put a time limit on how long 
+after a site update that kind of thing happens.  That particular client page / 
+server code version mismatch in the logs didn't degrade the user's experience, 
+but the next one might.
+*/
+function schedule_periodic_page_reload() {
+	setTimeout(function() { location.reload(); }, PERIODIC_PAGE_RELOAD_PERIOD_SECONDS*1000);
+}
+
+function get_current_time_epochmillis() {
+	return (new Date()).getTime();
 }
 
 function on_browser_window_resized() {

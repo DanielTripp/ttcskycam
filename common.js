@@ -1,5 +1,12 @@
 var g_map;
 
+/* This is important.  If a browser cached the results of our AJAX calls, that 
+ * could lead to the user not getting the latest reports.  We currently use 
+ * max-age caching of 1 day via .htaccess for everything (all file types) 
+ * including callpy.wsgi.  That's why disabling caching of callpy.wsgi GETs 
+ * like this is important. */
+$.ajaxSetup({cache: false});
+
 // From http://stackoverflow.com/questions/7616461/generate-a-hash-from-string-in-javascript-jquery 
 function hashCode(str_) {
     var r = 0;

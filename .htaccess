@@ -2,3 +2,14 @@
 Order allow,deny
 Deny from all
 </Files>
+
+# We should make an effort to ensure that the results of our callpy.wsgi AJAX 
+# calls aren't cached by the browser - and we do, but not by excluding that 
+# .wsgi file here, because that won't work on (at least) Internet Explorer 7, 
+# according to 
+# http://stackoverflow.com/questions/244918/internet-explorer-7-ajax-links-only-load-once
+# We do it in common.js instead via jQuery's "ajaxSetup".
+ExpiresActive On
+ExpiresDefault A86400
+#              ^^ 1 day 
+
