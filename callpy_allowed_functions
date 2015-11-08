@@ -30,3 +30,5 @@ debug_reports.read_from_file
 debug_reports.write_to_db
 debug_reports.restart_memcache_and_wsgi
 debug_reports.get_froute_and_dir_and_datetimestr
+geom.constrain_line_segment_to_box
+geom.does_line_segment_overlap_box

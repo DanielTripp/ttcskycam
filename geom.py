@@ -121,12 +121,17 @@ class LatLng:
 		# Not really infinite, because I don't feel like coding that, but instead we'll use the lng value of 
 		# the most-eastward point in the poly.   Plus 1.0 for safety. 
 		ray_lineseg = LineSeg(self, LatLng(self.lat, max(pt.lng for pt in poly_)+1.0))
-		num_intersections = 0
+		# We use a set of rounded points because of the possibility of the ray "intersecting a corner" of the 
+		# polygon (that is, intersecting two adjacent lines very close to their ends).  We want to count that 
+		# as one intersection - not two.  A case that would give the incorrect result if we didn't do this 
+		# rounding is point: [43.67985301,-79.46568847] and polygon: 
+		# [[43.65880637,-79.38394546], [43.67985301,-79.39304352], [43.68717726,-79.34978485], [43.66507767,-79.34025764]]
+		intersect_pts = set()
 		for polypt1, polypt2 in hopscotch(poly_ + [poly_[0]]):
 			intersect_pt = get_line_segment_intersection(polypt1, polypt2, ray_lineseg.start, ray_lineseg.end)
 			if intersect_pt is not None:
-				num_intersections += 1
-		return (num_intersections % 2 == 1)
+				intersect_pts.add(intersect_pt.rounded(5))
+		return (len(intersect_pts) % 2 == 1)
 
 	def is_within_box(self, southwest_, northeast_):
 		assert isinstance(southwest_, LatLng) and isinstance(northeast_, LatLng)
@@ -230,6 +235,9 @@ class LatLng:
 		lon2 = lon1 + math.atan2(math.sin(brng)*math.sin(d/R)*math.cos(lat1), math.cos(d/R)-math.sin(lat1)*math.sin(lat2))
 		return LatLng(math.degrees(lat2), math.degrees(lon2))
 
+	def rounded(self, num_digits_):
+		return LatLng(round(self.lat, num_digits_), round(self.lng, num_digits_))
+
 def angle(arm1_, origin_, arm2_):
 	assert isinstance(arm1_, LatLng) and isinstance(origin_, LatLng) and isinstance(arm2_, LatLng)
 	abs_ang1 = origin_.abs_angle(arm1_)
@@ -324,7 +332,10 @@ def get_line_segment_intersection(pt1, pt2, pt3, pt4):
 			line_3_4_u = (intersectpt.lng - pt3.lng)/(pt4.lng - pt3.lng)
 		else:
 			line_3_4_u = (intersectpt.lat - pt3.lat)/(pt4.lat - pt3.lat)
-		if (0 <= line_1_2_u <= 1.0) and (0 <= line_3_4_u <= 1.0):
+		# Here we give a small tolerance so that we return true for lines that almost intersect.  
+		# This behaviour is useful elsewhere (LatLng.inside_polygon()).
+		err = 0.000001
+		if (-err <= line_1_2_u <= 1+err) and (-err <= line_3_4_u <= 1+err):
 			return intersectpt
 		else:
 			return None
