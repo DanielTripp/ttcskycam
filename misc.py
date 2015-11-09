@@ -951,17 +951,22 @@ def print_est_time_remaining(str_, t0_, i_, N_, every=1):
 		if i_ == 0:
 			printerr('??? hours remaining.')
 		else:
-			rate = (i_+1)/(time.time() - t0_)
+			time_elapsed_secs = time.time() - t0_
+			rate = (i_+1)/time_elapsed_secs
 			est_time_remaining_secs = (N_-(i_+1))/rate
-			if est_time_remaining_secs > 60*60*48:
-				timestr = '%.1f days' % (est_time_remaining_secs/(60*60*24))
-			elif est_time_remaining_secs > 60*60:
-				timestr = '%.1f hours' % (est_time_remaining_secs/(60*60))
-			else:
-				timestr = '%.1f minutes' % (est_time_remaining_secs/(60))
 			percent = i_*100/N_
-			printerr('%s%d/%d - %d%% done - est. %s remaining - %.1f/sec.' \
-					% (('%s: ' % str_ if str_ else ''), i_, N_, percent, timestr, rate))
+			max_digits = len(str(N_))
+			printerr(('%s%'+str(max_digits)+'d/%d - %2d%% done - %s elapsed - %s remaining - %.1f/sec.') \
+					% (('%s: ' % str_ if str_ else ''), i_, N_, percent, time_span_str(time_elapsed_secs), 
+					time_span_str(est_time_remaining_secs), rate))
+
+def time_span_str(secs_):
+	if secs_ > 60*60*48:
+		return '%.1f days' % (secs_/(60*60*24))
+	elif secs_ > 60*60:
+		return '%.1f hours' % (secs_/(60*60))
+	else:
+		return '%.1f minutes' % (secs_/(60))
 
 # Thanks to http://stackoverflow.com/questions/23598973/intercepting-heapq 
 # http://stackoverflow.com/questions/1465662/how-can-i-implement-decrease-key-functionality-in-pythons-heapq 
