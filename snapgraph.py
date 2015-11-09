@@ -564,8 +564,11 @@ class SnapGraph(object):
 					for e in value:
 						assert isinstance(e, geom.LatLng) or is_seq_like(e, (0.0, 0.0))
 			self.plinename2pts = {plinename: to_latlngs(pts) for plinename, pts in plines_.iteritems()}
-		if len(self.plinename2pts) == 0 or any(len(pts) < 2 for pts in self.plinename2pts.itervalues()):
-			raise Exception('Not enough pline / points.')
+		if len(self.plinename2pts) == 0:
+			raise Exception('No plines.')
+		for plinename, pts in self.plinename2pts.iteritems():
+			if len(pts) < 2:
+				raise Exception('pline %s has %d points.  This is not enough.' % (plinename, len(pts)))
 	
 	def __str__(self):
 		return 'SnapGraph(%s)' % (self.name if self.name is not None else id(self))
@@ -1239,8 +1242,8 @@ class SnapGraph(object):
 
 			if len(r) > len(largest_component)/200:
 				# This is meant to handle rare cases.  If it's handling common cases, then that's probably a bug. 
-				raise Exception('Something is probably wrong.  %d island plines, %d vertexes in largest component.' \
-						% (len(r), len(largest_component)))
+				raise Exception('Something is probably wrong.  %d island plines, %d vertexes in largest component.  Islands: %s.' \
+						% (len(r), len(largest_component), r))
 
 		return r
 
@@ -1344,19 +1347,20 @@ class SnapGraph(object):
 				self.edges[vertidx2].append(Edge(vertidx1, dist, plinename, opposite_direction))
 
 	def pprint(self, stream=sys.stdout):
-		print >> stream, '{'
-		for polyline in self.plinename2pts.itervalues():
-			print >> stream, '\t%s' % polyline
-		for gridsquareidx, linesegaddrs in enumerate(self.si_linesegaddrs_by_gridsquareidx):
-			print >> stream, '\t%s' % gridsquareidx
-			for linesegaddr in linesegaddrs:
-				print >> stream, '\t\t%s' % linesegaddr
+		print >> stream, 'Vertexes:'
 		for vertidx, edges in enumerate(self.edges):
 			vert = self.verts[vertidx]
-			print >> stream, '\t%s' % (vert.strlong())
+			print >> stream, '\tvertex %d / %s' % (vertidx, vert.strlong())
 			for edge in edges:
 				print >> stream, '\t\t%s' % edge
-		print >> stream, '}'
+		print >> stream, 'Polylines:'
+		for plinename, pts in iteritemssorted(self.plinename2pts):
+			print >> stream, '\t%s: %s' % (plinename, pts)
+		print >> stream, 'Spatial index:'
+		for gridsquareidx, linesegaddrs in enumerate(self.si_linesegaddrs_by_gridsquareidx):
+			print >> stream, '\tgrid square %d:' % gridsquareidx
+			for linesegaddr in linesegaddrs:
+				print >> stream, '\t\t%s' % linesegaddr
 
 	# mapl = 'meters along polyline' 
 	def init_plinename_to_ptidx_to_mapl(self):
@@ -1433,10 +1437,9 @@ class SnapGraph(object):
 		# predictable order from one run to the next, and so their ids will be the 
 		# same, to make debugging easier. 
 		def key(latlngid__):
-			pt = self.get_point(latlngid_to_addr[latlngid__])
-			return pt.lat + pt.lng
+			return latlngid_to_addr[latlngid__]
 		for latlngid, ontop_latlngids in iteritemssorted(latlngid_to_ontop_latlngids, key=key):
-			ptaddrs = set(latlngid_to_addr[ontop_latlngid] for ontop_latlngid in set([latlngid]) | ontop_latlngids)
+			ptaddrs = sorted(set(latlngid_to_addr[ontop_latlngid] for ontop_latlngid in set([latlngid]) | ontop_latlngids))
 			for ptaddr1, ptaddr2 in combinations(ptaddrs, 2):
 				if ptaddr1 in ptaddr_to_vertex:
 					vertex = ptaddr_to_vertex[ptaddr1]
@@ -1451,7 +1454,7 @@ class SnapGraph(object):
 				vertex.ptaddrs.add(ptaddr1)
 				vertex.ptaddrs.add(ptaddr2)
 
-		for ptaddr in ptaddr_to_vertex.keys():
+		for ptaddr in sorted(ptaddr_to_vertex.keys()):
 			vertex = ptaddr_to_vertex[ptaddr]
 			vertex.remove_unnecessary_ptaddrs()
 			if len(vertex.get_looping_plinenames()) > 0:
