@@ -231,8 +231,12 @@ class SystemSnapGraph(snapgraph.SnapGraph):
 			return self.get_latlng(loc_).dist_m(latlng_)*3
 
 	def build_pcp(self):
+		mc.restart() # super.find_paths() uses memcache and if we accidentally use path results 
+			# from an older version of the graph while building the pre-calculated paths of this 
+			# version of the graph, that would cause problems. 
 		self.use_vert_only_floyd_warshall = True
 		self.build_pcp_vert2vert_distsnpaths()
+		self.check_pcp()
 		self.use_vert_only_floyd_warshall = False
 		self.use_floyd_warshall = True
 		self.build_pcp_multisnap_info()
@@ -451,6 +455,56 @@ class SystemSnapGraph(snapgraph.SnapGraph):
 		else:
 			raise Exception()
 		return (0 if posaddrs_lessthan(posaddr1, posaddr2) else 1)
+
+	def pprint(self, verbose=False, stream=sys.stdout):
+		super(SystemSnapGraph, self).pprint(stream=stream)
+		if verbose:
+			print >> stream, 'stopvertidx_by_vertidx:'
+			for vertidx, stopvertidx in enumerate(self.stopvertidx_by_vertidx):
+				print >> stream, '\t%d -> %s' % (vertidx, stopvertidx)
+			print >> stream, 'pcp_vert2vert_distsnpaths:'
+			for vert1idx, x in enumerate(self.pcp_vert2vert_distsnpaths):
+				for vert2idx, distsnpaths in enumerate(x):
+					print >> stream, '\tvert %d -> %d:' % (vert1idx, vert2idx), 
+					if distsnpaths is None:
+						print >> stream, None
+					else:
+						print >> stream
+						for dist, path in distsnpaths:
+							print >> stream, '\t\tdist = %.2f\n\t\t\t%s' % (dist, path)
+
+	# Here we check for some errors that existed in a graph that was built once 
+	# (and unfortunately committed in revision 49662959825b - July 31, 2015) 
+	# Those errors may have happened because we didn't restart memcache 
+	# before building pre-calculated paths at that time.  We do now, but we 
+	# still do these checks. 
+	def check_pcp(self):
+		self.check_pcp_end_verts()
+		self.check_pcp_verts_connected()
+
+	def check_pcp_end_verts(self):
+		for vert1idx, x in enumerate(self.pcp_vert2vert_distsnpaths):
+			for vert2idx, distsnpaths in enumerate(x):
+				if distsnpaths is not None:
+					for i, (dist, path) in enumerate(distsnpaths):
+						if path[0] != vert1idx or path[-1] != vert2idx:
+							raise Exception('bad pcp: %d -> %d, path[%d] end verts are bad: %s' % (vert1idx, vert2idx, i, path))
+
+	def check_pcp_verts_connected(self):
+		for vert1idx, x in enumerate(self.pcp_vert2vert_distsnpaths):
+			for vert2idx, distsnpaths in enumerate(x):
+				if distsnpaths is not None:
+					for i, (dist, path) in enumerate(distsnpaths):
+						for vert1, vert2 in hopscotch(path):
+							if not self.are_verts_connected(vert1, vert2):
+								raise Exception('bad pcp: %d -> %d, path[%d] connectedness is bad: %s' % (vert1idx, vert2idx, i, path))
+
+	def are_verts_connected(self, vert1idx_, vert2idx_):
+		def f(v1__, v2__):
+			return any(edge.vertidx == v2__ for edge in self.edges[v1__])
+		r = f(vert1idx_, vert2idx_)
+		assert r == f(vert2idx_, vert1idx_)
+		return r
 
 #	@staticmethod
 #	def make_get_connected_vertexndists_callable(sg_, startloc_, destloc_):
