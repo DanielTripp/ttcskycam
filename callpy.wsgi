@@ -78,7 +78,7 @@ def post_call_func(query_string_, args_, referer_):
 
 def call_func(module_and_funcname_, args_, referer_):
 	if (module_and_funcname_ in g_allowed_functions) or \
-			((referer_ is not None and os.path.basename(referer_).startswith('test.24972394874134958')) and module_and_funcname.startswith('t.')):
+			((referer_ is not None and os.path.basename(referer_).startswith('test.24972394874134958')) and module_and_funcname_.startswith('t.')):
 		modulename, funcname = module_and_funcname_.split('.')
 		if LOG_CALLS:
 			printerr('callpy - %s %s' % (module_and_funcname_, args))
