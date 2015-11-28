@@ -22,6 +22,9 @@ import profile, cProfile
 from collections import Sequence, MutableSequence, defaultdict, MutableSet
 from itertools import *
 
+# Workaround for http://bugs.python.org/issue7980 
+time.strptime("2013-06-02", "%Y-%m-%d")
+
 def es_to_str(t_):
 	if t_ is None or t_ == 0:
 		return None
