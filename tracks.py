@@ -18,7 +18,7 @@ along with ttcskycam.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
 import os, json
-import geom, snapgraph, mc, picklestore
+import geom, snapgraph, mc, picklestore, c
 from misc import *
 from collections import Sequence
 from lru_cache import lru_cache
@@ -26,7 +26,8 @@ from lru_cache import lru_cache
 @lru_cache(1)
 @picklestore.decorate
 def get_snapgraph():
-	return snapgraph.SnapGraph(get_polylines_from_files(), forpaths=True, forpaths_disttolerance=15, name='tracks')
+	return snapgraph.SnapGraph(get_polylines_from_files(), forpaths=True, forpaths_disttolerance=15, 
+			name='tracks-%d-%s' % (c.TRACKS_GRAPH_VERSION, c.VERSION))
 
 def get_polylines_from_files():
 	r = []
