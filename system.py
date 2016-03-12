@@ -33,7 +33,8 @@ USE_CITY_TESTING_SUBSET = False
 class SystemSnapGraph(snapgraph.SnapGraph):
 
 	def __init__(self, froute_to_pline_):
-		super(SystemSnapGraph, self).__init__(froute_to_pline_, forpaths_disttolerance=70, name='trip', 
+		super(SystemSnapGraph, self).__init__(froute_to_pline_, forpaths_disttolerance=70, 
+				name='system-%s' % c.VERSION, 
 				vertex_limit_zones_filename='systemsnapgraph-vertex-limit-zones.yaml')
 		self.waiting_for_vehicle_equiv_dist = kmph_to_mps(15)*(10*60)
 		self.add_inter_pline_transfers()

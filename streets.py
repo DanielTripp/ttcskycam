@@ -18,7 +18,7 @@ along with ttcskycam.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
 import os, json
-import geom, snapgraph, picklestore
+import geom, snapgraph, picklestore, c
 from misc import *
 from collections import Sequence
 from itertools import *
@@ -138,7 +138,8 @@ def get_weight_by_streettype(type_):
 @picklestore.decorate
 def get_snapgraph():
 	return snapgraph.SnapGraph(get_streetname_to_polyline(), forpaths=True, 
-			forpaths_disttolerance=RDP_SIMPLIFY_EPSILON_METERS+1, name='streets')
+			forpaths_disttolerance=RDP_SIMPLIFY_EPSILON_METERS+1, 
+			name='streets-%d-%s' % (c.STREETS_GRAPH_VERSION, c.VERSION))
 
 def heading(linesegaddr_, referencing_lineseg_aot_point_):
 	return snapgraph().heading(linesegaddr_, referencing_lineseg_aot_point_)
