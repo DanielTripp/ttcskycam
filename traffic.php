@@ -1546,8 +1546,10 @@ function update_force_sets_from_dialog_gui() {
 		show_route_auto(g_route_options_dialog_froute);
 	}
 
-	var direction = {'dir0': 0, 'dir1': 1, 'dirauto': null}[radio_val('dir')];
-	force_dir(g_route_options_dialog_froute, direction);
+	if(!is_subway(g_route_options_dialog_froute)) {
+		var direction = {'dir0': 0, 'dir1': 1, 'dirauto': null}[radio_val('dir')];
+		force_dir(g_route_options_dialog_froute, direction);
+	}
 
 	assert_force_sets_consistent();
 	write_force_sets_to_localstorage_maybe();
