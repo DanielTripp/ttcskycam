@@ -59,16 +59,23 @@ def find_paths(sgname_, startlatlng_, destlatlng_, snap_style_, snap_tolerance_,
 	dists_n_pathsteps = sg.find_paths(startlatlng_, snap_style_, destlatlng_, snap_style_, snap_tolerance=snap_tolerance_, k=k, \
 			out_visited_vertexes=visited_vertexes)
 	path_latlngs = []
+	path_ways = ([] if sgname_ == 'system' and snap_style_ == 'pcp' else None)
 	for dist, pathsteps in dists_n_pathsteps:
 		path = snapgraph.Path([pathsteps], sg)
 		path_latlngs.append(path.latlngs())
+		if path_ways is not None:
+			path_ways.append(sg.pathsteps_to_way(pathsteps))
 
 	if get_visited_vertexes_:
 		visited_vertex_latlngs = [sg.get_latlng(vvert) for vvert in visited_vertexes]
 	else:
 		visited_vertex_latlngs = None
 
-	return {'path_latlngs': path_latlngs, 'visited_vertex_latlngs': visited_vertex_latlngs}
+	if path_ways is not None:
+		assert len(path_ways) == len(path_latlngs)
+
+	return {'path_latlngs': path_latlngs, 'visited_vertex_latlngs': visited_vertex_latlngs, 
+			'path_ways': path_ways}
 
 def multisnap(sgname_, latlng_, radius_):
 	posaddrs = get_sg(sgname_).multisnap(latlng_, radius_)

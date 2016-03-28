@@ -28,7 +28,7 @@ var RADIUS_OF_EARTH_METERS = 6367.44465*1000;
 var g_static_graph_objects = [];
 var g_path_objects = [];
 var g_path_markers = [];
-var g_path_latlngs = null, g_visited_vertex_latlngs = null;
+var g_path_latlngs = null, g_path_ways = null, g_visited_vertex_latlngs = null;
 var g_multisnap_objects = [];
 var g_found_polyline = null, g_found_vertex_map_objects = null, g_found_posaddr = null;
 
@@ -47,6 +47,8 @@ function initialize() {
 	init_map();
 
 	set_value('snap_radius_textfield', DEFAULT_SNAP_RADIUS.toString());
+
+	bind_radio_buttons_to_localstorage('snap_style');
 
 	google.maps.event.addListenerOnce(g_map, 'bounds_changed', function() {
 		g_map.setZoom(17);
@@ -431,6 +433,7 @@ function get_paths_from_server() {
 						get_pathkfactor_from_gui(), is_selected('show_visited_vertexes_checkbox'), 
 					{success: function(r__) {
 						g_path_latlngs = r__['path_latlngs'];
+						g_path_ways = r__['path_ways'];
 						show_path_text_and_controls();
 						draw_paths();
 						g_visited_vertex_latlngs = r__['visited_vertex_latlngs'];
@@ -460,10 +463,16 @@ function show_path_text_and_controls() {
 
 	var contents = '';
 	if(g_path_latlngs != null) {
+		if(g_path_ways != null) {
+			assert(g_path_ways.length == g_path_latlngs.length);
+		}
 		for(var i=0; i<g_path_latlngs.length; i++) {
+			var way_str = (g_path_ways != null ? toJsonString(g_path_ways[i]).slice(1, -1) : '');
 			contents += sprintf(
-				'<label><input type="checkbox" onclick="on_path_solo_checkbox_clicked(%d)" id="%s" %s/>[%d]&nbsp;&nbsp;&nbsp;</label>', 
-					i, get_path_solo_checkbox_id(i), CHECKBOX_STYLE, i);
+				'<nobr><label><input type="checkbox" onclick="on_path_solo_checkbox_clicked(%d)" id="%s" %s/>'
+						+'<b>[%d]</b>&nbsp;%s&nbsp;&nbsp;</label></nobr> ', 
+					i, get_path_solo_checkbox_id(i), CHECKBOX_STYLE, i, 
+					way_str);
 		}
 	} else {
 		contents = '...';
