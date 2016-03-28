@@ -570,7 +570,8 @@ def pack_ways(ways_):
 		return (ways_[0], all_froutendirs)
 
 def get_packed_ways(orig_latlng_, dest_latlng_):
-	r = pack_ways(get_snapgraph().get_ways(orig_latlng_, dest_latlng_))
+	ways = get_snapgraph().get_ways(orig_latlng_, dest_latlng_)
+	r = pack_ways(ways)
 	return r
 
 # lte = 'less than or equal to'. 
