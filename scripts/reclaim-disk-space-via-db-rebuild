@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+
+PATH=$PATH:~/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+function check () {
+	exitval="$?"
+	if [ "$exitval" != "0" ] ; then 
+		if [ "$#" -gt 0 ] ; then
+			echo 'Problem at "'"$1"'".  Exiting.'; 
+		else
+			echo 'Problem.  Exiting.'; 
+		fi
+		exit "$exitval"; 
+	fi 
+}
+
+supervisorctl stop ttc-make-reports-main > /dev/null
+check "stop reports"
+supervisorctl stop ttc-poll-locations > /dev/null
+check "stop poll"
+/etc/init.d/postgresql  restart > /dev/null
+check "restart postgres"
+supervisorctl start ttc-poll-locations > /dev/null
+check "start poll"
+apache-restart
+check "restart apache"
+
+sudo -u postgres bash << _END_
+
+cd / # If we don't do this then pg_dump and psql will complain: 
+	# 'could not change directory to "/root/bin"'.
+
+function check () {
+	exitval="\$?"
+	if [ "$exitval" != "0" ] ; then 
+		if [ "\$#" -gt 0 ] ; then
+			echo 'Problem at "'"\$1"'".  Exiting.'; 
+		else
+			echo 'Problem.  Exiting.'; 
+		fi
+		exit "\$exitval"; 
+	fi 
+}
+
+file=\$(mktemp -t XXXX.reclaim-disk-space.sql)
+check "mktemp sql"
+pg_dump -t reports -c -s > \$file
+check "pg_dump"
+psql --file=\$file --quiet
+# Seems that psql will have an exit status of 0 even if some commands in it failed.  
+# So we'll count on them outputting something to stdout/stderr and cron e-mailing that 
+# as a way to make those errors known to a human.
+rm \$file
+check "rm sql file"
+
+_END_
+
+supervisorctl start ttc-make-reports-main > /dev/null
+check "start reports"
+
