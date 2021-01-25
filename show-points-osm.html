@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" name="viewport" content="initial-scale=1.0, user-scalable=no" />
+    <style type="text/css">
+      html { height: 100% }
+      body { height: 70%; margin: 0; padding: 0 }
+    </style>
+
+		<link type="text/css" href="css/ui-lightness/jquery-ui-1.8.17.custom.css" rel="stylesheet" />
+		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
+		<script type="text/javascript" src="js/jquery-ui-1.8.17.custom.min.js"></script>
+		<script type="text/javascript" src="js/buckets-minified.js"></script>
+		<script type="text/javascript" src="sprintf.js"></script>
+		<script type="text/javascript" src="js/json2.js"></script>
+		<script type="text/javascript" src="common.js"></script>
+		<script type="text/javascript" src="spatialindex.js"></script>
+		<!--
+		<script type="text/javascript" src="js/infobox_packed.js"></script>
+		-->
+
+		 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css"
+		    integrity="sha512-xodZBNTC5n17Xt2atTPuE1HxjVMSvLVW9ocqUKLsCC5CXdbqCmblAshOMAS6/keqq/sMZMZ19scR4PsZChSR7A=="
+				   crossorigin=""/>
+<script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"
+   integrity="sha512-XQoYMqMTK8LvdxXYG3nZ448hOEQiglfqkJs1NOQV44cWnUrBc8PkAOcXy20w0vlaXaVUearIOBhiXZ5V3ynxwA=="
+   crossorigin=""></script>
+
+
+<script type="text/javascript" src="common.js"></script>
+<script type="text/javascript">
+
+var g_marker = null; 
+var g_polyline = null;
+var g_map = null;
+var g_polyline_latlngs = [];
+
+function initialize() {
+	g_map = L.map('mapid').setView([43.653472856217064, -79.465244886669], 13);
+
+
+	L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw', {
+		maxZoom: 18,
+		attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors, ' +
+			'Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+		id: 'mapbox/streets-v11',
+		tileSize: 512,
+		zoomOffset: -1
+	}).addTo(g_map);
+
+	/*
+	var marker1 = L.marker([43.65412491212708, -79.45865738111844]).addTo(g_map);
+	var marker2 = L.marker([43.65612491212708, -79.45865738111844]).addTo(g_map);
+
+	var latlngs = [
+		[43.65412491212708, -79.45865738111844], 
+		[43.65412491212708+0.002, -79.45865738111844]
+	];
+
+	var polyline = L.polyline(latlngs, {color: 'blue'}).addTo(g_map);
+
+	g_map.fitBounds(polyline.getBounds());
+	*/
+}
+
+function refresh_everything_from_latlngs() {
+	draw_objects();
+}
+
+function draw_objects() {
+	draw_polyline();
+	draw_marker();
+}
+
+function draw_polyline() {
+	g_polyline = L.polyline(g_polyline_latlngs, {color: 'blue'}).addTo(g_map);
+	g_map.fitBounds(g_polyline.getBounds());
+}
+
+function draw_marker() {
+	g_marker = L.marker(g_polyline_latlngs[0][0]).addTo(g_map);
+}
+
+function refresh_from_textarea() {
+	forget_drawn_objects();
+	get_latlngs_from_textarea();
+	refresh_everything_from_latlngs();
+}
+
+
+function get_latlngs_from_textarea() {
+	var contents_str = get_value('contents_textarea');
+	get_latlngs_from_string(contents_str);
+}
+
+function get_latlngs_from_string(str_) {
+	g_polyline_latlngs = [];
+	if(str_ != null) {
+		var raw_polylines = [];
+		try {
+			var str = str_.replace(/\(/g, '[');
+			str = str.replace(/\)/g, ']');
+			str = str.replace(/\s/g, '');
+			try {
+				raw_polylines = $.parseJSON(str);
+				console.log('Slightly massaged JSON parse succeeded.');
+			} catch(e) {
+				while(str.length > 0 && str.match(/^-79\.\d\d\d\d+/) == null && str.charAt(0) !== '[') { // remove leading non-JSON: 
+					str = str.substring(1, str.length);
+				}
+				while(str.length > 0 && str.match(/43\.\d\d\d\d+$/) == null && str.charAt(str.length-1) !== ']') { // remove trailing non-JSON: 
+					str = str.substring(0, str.length-1);
+				}
+				console.log(sprintf('Trying massaged JSON: "%s"', str));
+				raw_polylines = $.parseJSON('['+str+']');
+				console.log('JSON parse succeeded.');
+			}
+			if(typeof raw_polylines[0][0] === 'number') { // file contains a polyline, not a list of polylines? 
+				raw_polylines = [raw_polylines]; // now it's a list of polylines. 
+			} else if(typeof raw_polylines[0] === 'number') { // or maybe it's just a single lat/lng 
+				raw_polylines = [[raw_polylines]];
+			}
+		} catch(e) {
+			console.log('All massaged JSON parse attempts failed.');
+			// So it wasn't JSON.    Maybe it's XML: 
+			try {
+				var polyline = [];
+				var dom = $.parseXML(str);
+				$(dom).find('*').each(function() {
+					var lat = $(this).attr('lat'), lng = $(this).attr('lon');
+					if(lat != undefined && lng != undefined) {
+						polyline.push([lat, lng]);
+					}
+				});
+				raw_polylines = [polyline];
+			} catch(err) {
+				console.log('XML parse failed.');
+				console.log('Doing line-by-line.');
+				var polyline = [];
+				raw_polylines = [polyline];
+				var filelines = str_.split('\n');
+				for(var filelinei in filelines) {
+					var fileline = filelines[filelinei];
+					var regex = /.*?[^:]?(43\.\d\d\d\d+).*?(-79\.\d\d\d\d+).*/g;
+					var match = regex.exec(fileline);
+					if(match != null) {
+						console.log('match');
+					  var lat = parseFloat(match[1], 10);
+						var lng = parseFloat(match[2], 10);
+						polyline.push([lat, lng]);
+					}
+				}
+			}
+		}
+		raw_polylines.forEach(function(raw_polyline) {
+			var latlng_polyline = [];
+			g_polyline_latlngs.push(latlng_polyline);
+			raw_polyline.forEach(function(rawpt) {
+				var latlng = L.latLng(rawpt[0], rawpt[1]);
+				latlng_polyline.push(latlng);
+			});
+		});
+	}
+}
+
+function forget_drawn_objects() {
+	if(g_marker != null) {
+		g_marker.remove();
+		g_marker = null;
+	}
+	if(g_polyline != null) {
+		g_polyline.remove();
+		g_polyline = null;
+	}
+}
+
+</script>
+
+
+	</head>
+
+
+	<body onload="initialize()">
+		<div style="width:50%; float:left">
+			<!--
+			<textarea id="contents_textarea" cols="75" rows="20" wrap="off"></textarea>
+			-->
+			<textarea style="width: 95%;" rows="20" id="contents_textarea" wrap="off"></textarea>
+			<input type="button" onclick="refresh_from_textarea()" value="Refresh" /><br>
+		</div>
+ 		<div style="height: 400px; width:50%; float:right" id="mapid"></div>
+  </body>
+</html>

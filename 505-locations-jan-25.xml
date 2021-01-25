@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8" ?> 
+<body copyright="All data copyright Toronto Transit Commission 2021.">
+<vehicle id="8655" routeTag="505" dirTag="505_1_505BusRush" lat="43.6597292" lon="-79.3646175" secsSinceReport="24" predictable="true" heading="253" speedKmHr="22"/>
+<vehicle id="4595" routeTag="505" dirTag="505_0_505" lat="43.6521644" lon="-79.4062576" secsSinceReport="24" predictable="true" heading="74" speedKmHr="0"/>
+<vehicle id="4584" routeTag="505" dirTag="505_0_505" lat="43.6546783" lon="-79.3890312" secsSinceReport="24" predictable="true" heading="90" speedKmHr="0"/>
+<vehicle id="4596" routeTag="505" dirTag="505_0_505" lat="43.6555433" lon="-79.45225" secsSinceReport="24" predictable="true" heading="169" speedKmHr="25"/>
+<vehicle id="4585" routeTag="505" dirTag="505_1_505rush" lat="43.6771354" lon="-79.3582077" secsSinceReport="24" predictable="true" heading="216" speedKmHr="0"/>
+<vehicle id="4431" routeTag="505" dirTag="505_1_505rush" lat="43.652069" lon="-79.4071731" secsSinceReport="25" predictable="true" heading="254" speedKmHr="26"/>
+<vehicle id="4531" routeTag="505" dirTag="505_0_505" lat="43.6613882" lon="-79.3573117" secsSinceReport="25" predictable="true" heading="72" speedKmHr="23"/>
+<vehicle id="4476" routeTag="505" dirTag="505_1_505rush" lat="43.6523584" lon="-79.4060175" secsSinceReport="26" predictable="true" heading="253" speedKmHr="10"/>
+<vehicle id="8874" routeTag="505" lat="43.6774253" lon="-79.3579559" secsSinceReport="24" predictable="false" heading="238" speedKmHr="3"/>
+<vehicle id="1011" routeTag="505" dirTag="505_0_505busL" lat="43.6501693" lon="-79.4397277" secsSinceReport="26" predictable="true" heading="216" speedKmHr="0"/>
+<vehicle id="1140" routeTag="505" dirTag="505_0_505busL" lat="43.6717224" lon="-79.4482879" secsSinceReport="24" predictable="true" heading="216" speedKmHr="0"/>
+<vehicle id="1349" routeTag="505" dirTag="505_0_505busL" lat="43.656948" lon="-79.3747024" secsSinceReport="26" predictable="true" heading="77" speedKmHr="0"/>
+<vehicle id="4508" routeTag="505" dirTag="505_0_505" lat="43.6564239" lon="-79.3801225" secsSinceReport="25" predictable="true" heading="110" speedKmHr="0"/>
+<vehicle id="1114" routeTag="505" dirTag="505_0_505busL" lat="43.6544952" lon="-79.3904286" secsSinceReport="25" predictable="true" heading="82" speedKmHr="3"/>
+<vehicle id="4587" routeTag="505" dirTag="505_0_505" lat="43.6496111" lon="-79.4317981" secsSinceReport="24" predictable="true" heading="95" speedKmHr="0"/>
+<vehicle id="4444" routeTag="505" dirTag="505_1_505rush" lat="43.6567687" lon="-79.4532546" secsSinceReport="25" predictable="true" heading="266" speedKmHr="0"/>
+<vehicle id="4423" routeTag="505" dirTag="505_1_505rush" lat="43.6561721" lon="-79.3791428" secsSinceReport="25" predictable="true" heading="288" speedKmHr="0"/>
+<vehicle id="4600" routeTag="505" dirTag="505_0_505" lat="43.664672" lon="-79.3522714" secsSinceReport="24" predictable="true" heading="343" speedKmHr="23"/>
+<vehicle id="4578" routeTag="505" dirTag="505_1_505rush" lat="43.668762" lon="-79.3530356" secsSinceReport="25" predictable="true" heading="186" speedKmHr="19"/>
+<vehicle id="4579" routeTag="505" dirTag="505_1_505rush" lat="43.6595115" lon="-79.3658828" secsSinceReport="25" predictable="true" heading="253" speedKmHr="0"/>
+<vehicle id="4548" routeTag="505" dirTag="505_1_505rush" lat="43.6531465" lon="-79.3970829" secsSinceReport="25" predictable="true" heading="253" speedKmHr="8"/>
+<lastTime time="1611580881432"/>
+</body>

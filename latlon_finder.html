@@ -7,9 +7,14 @@
       html { height: 100% }
       body { height: 70%; margin: 0; padding: 0 }
     </style>
+		<script defer
+		    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyANH3Uvf7qhomr0pA--qrVYO9_HeJZQfog&callback=initMap">
+				</script>
+		<!--
     <script type="text/javascript"
 		      src="http://maps.googleapis.com/maps/api/js?sensor=false&v=3.14">
 					    </script>
+		-->
 		<script type="text/javascript" src="js/richmarker-compiled.js"></script>
 		<script type="text/javascript" src="js/jquery-1.7.1.min.js"></script>
 		<script type="text/javascript" src="common.js"></script>
@@ -19,7 +24,13 @@
 var g_marker = null;
 var g_geocoder = new google.maps.Geocoder();
 
+function initMap() { // tdr 
+console.log("initmap");	
+}
+
 function initialize() {
+
+console.log("initialize");	
 
 	init_map();
 

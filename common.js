@@ -19,8 +19,8 @@ function hashCode(str_) {
     return r;
 }
 
-eval(get_sync("sprintf.js"));
-eval(get_sync("js/buckets-minified.js"));
+//eval(get_sync("sprintf.js"));
+//eval(get_sync("js/buckets-minified.js"));
 
 var g_loading_urls = null;
 
@@ -984,6 +984,6 @@ function last_elem(array_) {
 	return array_[array_.length-1];
 }
 
-eval(get_sync("js/json2.js"));
+//eval(get_sync("js/json2.js"));
 
 
