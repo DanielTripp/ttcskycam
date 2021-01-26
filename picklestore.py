@@ -45,13 +45,14 @@ def decorate(user_function_):
 					if LOG: printerr('picklestore: %s: reading pickled file.' % filename)
 					with open(full_filename) as fin:
 						r = cPickle.load(fin)
+					if LOG: printerr('picklestore: %s: finished reading pickled file.' % filename)
 				else:
 					if LOG: printerr('picklestore: %s: calling user function.' % filename)
 					r = user_function_(*args, **kwargs)
 					if LOG: printerr('picklestore: %s: done calling user function.' % filename)
 					if LOG: printerr('picklestore: %s: dumping to pickle file.' % filename)
 					with open(full_filename, 'w') as fout:
-						cPickle.dump(r, fout, cPickle.HIGHEST_PROTOCOL)
+						cPickle.dump(r, fout) # tdr 
 					if LOG: printerr('picklestore: %s: done dumping to pickle file.' % filename)
 				g_filename_to_object[filename] = r
 			return r

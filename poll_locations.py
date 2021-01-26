@@ -1,6 +1,6 @@
-#!/usr/bin/env python
+#!/cygdrive/c/Python27/python.exe
 
-import sys, os, subprocess, re, time, xml.dom, xml.dom.minidom, traceback, json, getopt
+import sys, os, subprocess, re, time, xml.dom, xml.dom.minidom, traceback, json, getopt, tempfile
 from collections import *
 from xml.parsers.expat import ExpatError
 import db, vinfo, routes, tracks, streets
@@ -140,7 +140,12 @@ if __name__ == '__main__':
 		if args:
 			sys.exit('No arguments allowed.  Only options.')
 
-		pollstate_filename = (get_opt(opts, 'pollstatefile') or 'pollstate.json')
+		pollstate_filename = get_opt(opts, 'pollstatefile')
+		if not pollstate_filename:
+			pollstate_tempdir = os.path.join(tempfile.gettempdir(), 'tmp-ttcskycam-pollstate')
+			try: os.mkdir(pollstate_tempdir) 
+			except OSError: pass
+			pollstate_filename = os.path.join(pollstate_tempdir, 'pollstate.json')
 
 		if get_opt(opts, 'redirect-stdstreams-to-file'):
 			redirect_stdstreams_to_file('poll_locations_')
