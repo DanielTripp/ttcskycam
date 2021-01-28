@@ -30,7 +30,7 @@
 <script type="text/javascript" src="common.js"></script>
 <script type="text/javascript">
 
-var g_marker = null; 
+var g_markers = new buckets.LinkedList();
 var g_polyline = null;
 var g_map = null;
 var g_polyline_latlngs = [];
@@ -78,7 +78,49 @@ function draw_polyline() {
 }
 
 function draw_marker() {
-	g_marker = L.marker(g_polyline_latlngs[0][0]).addTo(g_map);
+	for(var iLatLng=0; iLatLng<g_polyline_latlngs[0].length; iLatLng++) {
+		var latLng = g_polyline_latlngs[0][iLatLng];
+		var title = sprintf("Point %d", iLatLng);
+		//var icon = iLatLng == 0 ? : ;
+		//var icon = new L.Icon.Default();
+
+/*
+		var icon = new L.icon({
+			iconUrl: 'my-icon.png',
+			iconSize: [38, 95],
+			iconAnchor: [22, 94],
+			//popupAnchor: [-3, -76],
+			});
+*/
+		var icon = makeIcon(iLatLng == 0 ? '#FF0000' : '#0000FF');
+		g_markers.add(L.marker(latLng, {title: title, icon: icon}).addTo(g_map));
+	}
+}
+
+function makeIcon(color_) {
+	/* Thanks https://stackoverflow.com/a/40870439/321556 */ 
+
+	const markerHtmlStyles = `
+		background-color: ${color_};
+		width: 3rem;
+		height: 3rem;
+		display: block;
+		left: -1.5rem;
+		top: -1.5rem;
+		position: relative;
+		border-radius: 3rem 3rem 0;
+		transform: rotate(45deg) scale(0.5,0.5);
+		border: 1px solid #FFFFFF`
+
+	const icon = L.divIcon({
+		className: "my-custom-pin",
+		iconAnchor: [0, 18],
+		labelAnchor: [-6, 0],
+		popupAnchor: [0, -18],
+		html: `<span style="${markerHtmlStyles}" />`
+	})
+
+	return icon;
 }
 
 function refresh_from_textarea() {
@@ -164,10 +206,11 @@ function get_latlngs_from_string(str_) {
 }
 
 function forget_drawn_objects() {
-	if(g_marker != null) {
-		g_marker.remove();
-		g_marker = null;
-	}
+	g_markers.forEach(function(marker) { 
+		marker.remove();
+	});
+	g_markers.clear();
+
 	if(g_polyline != null) {
 		g_polyline.remove();
 		g_polyline = null;
