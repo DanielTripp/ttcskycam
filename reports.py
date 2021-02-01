@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/cygdrive/c/Python27/python.exe
 
 '''
 This file is part of ttcskycam.
@@ -19,7 +19,7 @@ along with ttcskycam.  If not, see <http://www.gnu.org/licenses/>.
 
 from collections import *
 import sys, os, os.path, json, argparse, traceback, time, pprint
-import vinfo, db, routes, geom, mc, yards, traffic, c, util, multiproc, streets, tracks
+import vinfo, db, routes, geom, mc, yards, traffic, c, util, streets, tracks
 from misc import *
 
 GET_CURRENT_REPORTS_FROM_DB = os.path.exists('GET_CURRENT_REPORTS_FROM_DB')
@@ -163,15 +163,14 @@ def wait_for_a_location_poll_to_finish(froute_to_poll_file_mtime_, froute_to_las
 
 g_froute_to_times = None
 
-@multiproc.include_entire_traceback
-def make_reports_single_route(report_time_, froute_, insert_into_db_):
+def make_reports_single_route(report_time_, froute_, insert_into_db_, datazooms_):
 	global g_froute_to_times
 	if LOG_INDIV_ROUTE_TIMES:
 		t0 = time.time()
 	got_errors = False
 	for direction in (0, 1):
 		reporttype_to_datazoom_to_reportdataobj = defaultdict(lambda: {})
-		for datazoom in c.VALID_DATAZOOMS:
+		for datazoom in datazooms_:
 			try:
 				traffic_data = traffic.get_traffics_impl(froute_, direction, datazoom, report_time_)
 				reporttype_to_datazoom_to_reportdataobj['traffic'][datazoom] = traffic_data
@@ -193,39 +192,6 @@ def make_reports_single_route(report_time_, froute_, insert_into_db_):
 		if g_froute_to_times is not None:
 			g_froute_to_times[froute_].append(t1 - t0)
 	return got_errors
-
-def make_shardpool():
-	return multiproc.ShardPool(shardfunc, 8)
-
-# Dead code? 
-def shardfunc(func_, args_):
-	assert func_ == make_reports_single_route
-	froute = args_[1]
-	assert froute in routes.NON_SUBWAY_FUDGEROUTES
-	froute_to_shard = {
-			# These choices were arrived at by experiments: 
-			'king': 5,
-			'queen': 0,
-			'dufferin': 1,
-			'bathurst': 3,
-			'keele': 7,
-			'spadina': 2,
-			'carlton': 6,
-			'dundas': 4,
-			'dupont': 4,
-			'lansdowne': 5,
-			'ossington': 6,
-			'stclair': 7, 
-			# These weren't: 
-			'wellesley': 0, 
-			'harbourfront': 1, 
-			'sherbourne': 2, 
-			'parliament': 3, 
-			'symington': 4, 
-			'davenport': 5, 
-			'junction': 6, 
-		}
-	return froute_to_shard[froute]
 
 def get_init_froute_to_poll_file_mtime():
 	froute_to_poll_file_mtime = {}
@@ -262,10 +228,10 @@ def make_all_reports_forever(redir_, insert_into_db_):
 		sys.stdout.flush()
 		sys.stderr.flush()
 
-def make_all_reports_once(report_time_, insert_into_db_):
+def make_all_reports_once(report_time_, insert_into_db_, datazooms_):
 	got_errors = False
 	for froute in routes.NON_SUBWAY_FUDGEROUTES:
-		got_errors |= make_reports_single_route(report_time_, froute, insert_into_db_)
+		got_errors |= make_reports_single_route(report_time_, froute, insert_into_db_, datazooms_)
 	if got_errors:
 		sys.exit(37)
 
@@ -282,13 +248,12 @@ if __name__ == '__main__':
 	args = arg_parser.parse_args()
 	if args.time is not None and args.redir:
 		raise Exception('redir not allowed when doing a single time.')
-	if LOG_INDIV_ROUTE_TIMES and args.multiproc == 'y':
-		raise Exception('Don\'t know how to log individual route times when multiproc is on.')
 
 	insert_into_db = not args.dont_insert_into_db
 	if args.time is not None:
 		report_time = (round_down_by_minute(now_em()) if args.time == 'now' else str_to_em(args.time))
-		make_all_reports_once(report_time, insert_into_db)
+		datazooms = [max(c.VALID_DATAZOOMS)]
+		make_all_reports_once(report_time, insert_into_db, datazooms)
 	else:
 		make_all_reports_forever(args.redir, insert_into_db)
 

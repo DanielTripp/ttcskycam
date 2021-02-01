@@ -45,7 +45,7 @@ create index reports_idx_3 on reports ( time desc, time_inserted_str desc ) ;
 '''
 
 import psycopg2
-import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket, datetime, calendar, math, copy, cPickle, threading
+import sys, subprocess, re, time, xml.dom, xml.dom.minidom, pprint, json, socket, datetime, calendar, math, copy, threading
 from collections import defaultdict, Sequence
 from lru_cache import lru_cache
 import vinfo, geom, grid, traffic, routes, yards, tracks, streets, snapgraph, predictions, mc, c, util
