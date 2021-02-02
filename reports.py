@@ -163,7 +163,7 @@ def wait_for_a_location_poll_to_finish(froute_to_poll_file_mtime_, froute_to_las
 
 g_froute_to_times = None
 
-def make_reports_single_route(report_time_, froute_, insert_into_db_, datazooms_):
+def make_reports_single_route(report_time_, froute_, insert_into_db_, datazooms_, make_traffic_report_, make_locations_report_):
 	global g_froute_to_times
 	if LOG_INDIV_ROUTE_TIMES:
 		t0 = time.time()
@@ -171,20 +171,22 @@ def make_reports_single_route(report_time_, froute_, insert_into_db_, datazooms_
 	for direction in (0, 1):
 		reporttype_to_datazoom_to_reportdataobj = defaultdict(lambda: {})
 		for datazoom in datazooms_:
-			try:
-				traffic_data = traffic.get_traffics_impl(froute_, direction, datazoom, report_time_)
-				reporttype_to_datazoom_to_reportdataobj['traffic'][datazoom] = traffic_data
-			except:
-				printerr('%s,error generating traffic report for %s / %s / dir=%d / datazoom=%d,--generate-error--' % (now_str(), em_to_str(report_time_), froute_, direction, datazoom))
-				traceback.print_exc()
-				got_errors = True
-			try:
-				locations_data = traffic.get_recent_vehicle_locations_impl(froute_, direction, datazoom, report_time_)
-				reporttype_to_datazoom_to_reportdataobj['locations'][datazoom] = locations_data
-			except:
-				printerr('%s,error generating locations report for %s / %s / dir=%d / datazoom=%d,--generate-error--' % (now_str(), em_to_str(report_time_), froute_, direction, datazoom))
-				traceback.print_exc()
-				got_errors = True
+			if make_traffic_report_:
+				try:
+					traffic_data = traffic.get_traffics_impl(froute_, direction, datazoom, report_time_)
+					reporttype_to_datazoom_to_reportdataobj['traffic'][datazoom] = traffic_data
+				except:
+					printerr('%s,error generating traffic report for %s / %s / dir=%d / datazoom=%d,--generate-error--' % (now_str(), em_to_str(report_time_), froute_, direction, datazoom))
+					traceback.print_exc()
+					got_errors = True
+			if make_locations_report_:
+				try:
+					locations_data = traffic.get_recent_vehicle_locations_impl(froute_, direction, datazoom, report_time_)
+					reporttype_to_datazoom_to_reportdataobj['locations'][datazoom] = locations_data
+				except:
+					printerr('%s,error generating locations report for %s / %s / dir=%d / datazoom=%d,--generate-error--' % (now_str(), em_to_str(report_time_), froute_, direction, datazoom))
+					traceback.print_exc()
+					got_errors = True
 		if not got_errors and insert_into_db_:
 			db.insert_reports(froute_, direction, report_time_, reporttype_to_datazoom_to_reportdataobj)
 	if LOG_INDIV_ROUTE_TIMES:
@@ -231,7 +233,8 @@ def make_all_reports_forever(redir_, insert_into_db_):
 def make_all_reports_once(report_time_, insert_into_db_, datazooms_):
 	got_errors = False
 	for froute in routes.NON_SUBWAY_FUDGEROUTES:
-		got_errors |= make_reports_single_route(report_time_, froute, insert_into_db_, datazooms_)
+	#for froute in ['dundas']: # tdr 
+		got_errors |= make_reports_single_route(report_time_, froute, insert_into_db_, datazooms_, False, True)
 	if got_errors:
 		sys.exit(37)
 
