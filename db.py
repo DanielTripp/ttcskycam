@@ -62,7 +62,7 @@ DISABLE_GRAPH_PATHS = False
 
 INTERP_USE_PATCHCACHE = c.USE_PATCHCACHES
 
-PASSWORD = file_to_string(os.path.expanduser('~dt/.ttcskycam/DB_PASSWORD')).strip()
+PASSWORD = file_to_string(os.path.expanduser('~/.ttcskycam/DB_PASSWORD')).strip()
 
 g_conn = None
 g_lock = threading.RLock()
