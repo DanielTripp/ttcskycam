@@ -1502,6 +1502,14 @@ def insert_reports_into_db(froute_, dir_, time_, reporttype_to_datazoom_to_repor
 			curs.execute('insert into reports values (%s,%s,%s,%s,%s,%s,%s,%s,%s)', cols)
 			curs.close()
 
+# This method has a bug if the report exists in the lrucache or memcache, but not in the db. 
+def does_report_exist_in_db(report_type_, froute_, dir_, datazoom_, time_):
+	try:
+		get_report(report_type_, froute_, dir_, datazoom_, time_)
+		return True
+	except ReportNotFoundException:
+		return False
+
 def insert_reports_into_memcache(froute_, dir_, time_, reporttype_to_datazoom_to_reportjson_):
 	for reporttype, datazoom_to_reportjson in reporttype_to_datazoom_to_reportjson_.iteritems():
 		for datazoom, reportjson in datazoom_to_reportjson.iteritems():

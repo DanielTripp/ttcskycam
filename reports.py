@@ -163,7 +163,7 @@ def wait_for_a_location_poll_to_finish(froute_to_poll_file_mtime_, froute_to_las
 
 g_froute_to_times = None
 
-def make_reports_single_route(report_time_, froute_, insert_into_db_, datazooms_, make_traffic_report_, make_locations_report_):
+def make_reports_single_route(report_time_, froute_, insert_into_db_, insert_db_dupes_, datazooms_, make_traffic_report_, make_locations_report_):
 	global g_froute_to_times
 	if LOG_INDIV_ROUTE_TIMES:
 		t0 = time.time()
@@ -172,6 +172,7 @@ def make_reports_single_route(report_time_, froute_, insert_into_db_, datazooms_
 		reporttype_to_datazoom_to_reportdataobj = defaultdict(lambda: {})
 		for datazoom in datazooms_:
 			if make_traffic_report_:
+				assert False # letting this code (i.e. all of traffic reports) go unmaintained 
 				try:
 					traffic_data = traffic.get_traffics_impl(froute_, direction, datazoom, report_time_)
 					reporttype_to_datazoom_to_reportdataobj['traffic'][datazoom] = traffic_data
@@ -179,7 +180,7 @@ def make_reports_single_route(report_time_, froute_, insert_into_db_, datazooms_
 					printerr('%s,error generating traffic report for %s / %s / dir=%d / datazoom=%d,--generate-error--' % (now_str(), em_to_str(report_time_), froute_, direction, datazoom))
 					traceback.print_exc()
 					got_errors = True
-			if make_locations_report_:
+			if make_locations_report_ and we_should_calc_report(insert_into_db_, insert_db_dupes_, 'locations', froute_, direction, datazoom, report_time):
 				try:
 					locations_data = traffic.get_recent_vehicle_locations_impl(froute_, direction, datazoom, report_time_)
 					reporttype_to_datazoom_to_reportdataobj['locations'][datazoom] = locations_data
@@ -194,6 +195,15 @@ def make_reports_single_route(report_time_, froute_, insert_into_db_, datazooms_
 		if g_froute_to_times is not None:
 			g_froute_to_times[froute_].append(t1 - t0)
 	return got_errors
+
+def we_should_calc_report(insert_into_db_, insert_db_dupes_, report_type_, froute_, dir_, datazoom_, time_):
+	if not insert_into_db_:
+		return True
+	else:
+		if insert_db_dupes_:
+			return True
+		else:
+			return not db.does_report_exist_in_db(report_type_, froute_, dir_, datazoom_, time_)
 
 def get_init_froute_to_poll_file_mtime():
 	froute_to_poll_file_mtime = {}
@@ -230,11 +240,11 @@ def make_all_reports_forever(redir_, insert_into_db_):
 		sys.stdout.flush()
 		sys.stderr.flush()
 
-def make_all_reports_once(report_time_, insert_into_db_, datazooms_):
+def make_all_reports_once(report_time_, insert_into_db_, insert_db_dupes_, froutes_, datazooms_):
+	assert isinstance(froutes_, list)
 	got_errors = False
-	for froute in routes.NON_SUBWAY_FUDGEROUTES:
-	#for froute in ['dundas']: # tdr 
-		got_errors |= make_reports_single_route(report_time_, froute, insert_into_db_, datazooms_, False, True)
+	for froute in froutes_:
+		got_errors |= make_reports_single_route(report_time_, froute, insert_into_db_, insert_db_dupes_, datazooms_, False, True)
 	if got_errors:
 		sys.exit(37)
 
@@ -242,21 +252,44 @@ def prime_graphs():
 	tracks.get_snapgraph()
 	streets.get_snapgraph()
 
+def generate_backfill_report_times(start_time_, end_time_):
+	step_in_minutes = 15
+	start_time, end_time = (round_down_by_minute_step(e, step_in_minutes) for e in (start_time_, end_time_))
+	cur_time = start_time
+	while cur_time < end_time:
+		yield cur_time
+		cur_time += 1000L*60*step_in_minutes
+		# ^^ This code might have bugs w.r.t. DST and/or leap seconds. 
+		assert cur_time == round_down_by_minute_step(cur_time, step_in_minutes)
+
 if __name__ == '__main__':
 
 	arg_parser = argparse.ArgumentParser()
 	arg_parser.add_argument('--dont-insert-into-db', action='store_true')
 	arg_parser.add_argument('--time')
+	arg_parser.add_argument('--backfill-time-range')
+	arg_parser.add_argument('--froutes')
 	arg_parser.add_argument('--redir', action='store_true')
 	args = arg_parser.parse_args()
+	if args.time and args.backfill_time_range:
+		raise Exception('Specifying both a single time and a time range is not supported')
 	if args.time is not None and args.redir:
-		raise Exception('redir not allowed when doing a single time.')
+		raise Exception('redir not supported when doing a single time.')
 
+	froutes = routes.NON_SUBWAY_FUDGEROUTES if args.froutes is None else args.froutes.split(',')
 	insert_into_db = not args.dont_insert_into_db
 	if args.time is not None:
-		report_time = (round_down_by_minute(now_em()) if args.time == 'now' else str_to_em(args.time))
+		report_time = long(round_down_by_minute(now_em()) if args.time == 'now' else str_to_em(args.time))
 		datazooms = [max(c.VALID_DATAZOOMS)]
-		make_all_reports_once(report_time, insert_into_db, datazooms)
+		make_all_reports_once(report_time, insert_into_db, False, froutes, datazooms)
+	elif args.backfill_time_range is not None:
+		start_time_em, end_time_em = (str_to_em(e) for e in args.backfill_time_range.split(',', 1))
+		# ^^ This code ignores time zones and DST, and probably has bugs. 
+		datazooms = [max(c.VALID_DATAZOOMS)]
+		for report_time in generate_backfill_report_times(start_time_em, end_time_em):
+			print 'Backfilling reports for %s.' % em_to_str(report_time)
+			insert_db_dupes = False
+			make_all_reports_once(report_time, insert_into_db, insert_db_dupes, froutes, datazooms)
 	else:
 		make_all_reports_forever(args.redir, insert_into_db)
 

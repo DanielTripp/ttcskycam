@@ -37,6 +37,12 @@ def em_to_str(t_):
 	else:
 		return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t_/1000))
 
+def em_to_str_z(t_):
+	if t_ is None or t_ == 0:
+		return None
+	else:
+		return time.strftime('%Y-%m-%d %H:%M:%S %Z', time.localtime(t_/1000))
+
 def em_to_str_ymdhms(t_):
 	return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t_/1000))
 
@@ -365,7 +371,7 @@ def round_down_by_minute_step(t_em_, step_):
 	dt = datetime.datetime.fromtimestamp(t_em_/1000.0)
 	dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, round_down(dt.minute, step_)) # Omitting second on purpose.  That's what
 			# does the rounding down by minute.
-	r = long(calendar.timegm(dt.timetuple())*1000)
+	r = datetime_to_em(dt)
 	return r
 
 def datetime_to_em(datetime_):

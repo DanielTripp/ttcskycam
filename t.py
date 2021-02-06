@@ -27,8 +27,10 @@ import numpy as np
 
 if __name__ == '__main__':
 
-	sg = streets.get_snapgraph()
-	sg.pprint()
-
+	t1 = str_to_em(sys.argv[1])
+	t2 = em_to_str_z(t1)
+	t3 = str_to_em(t2)
+	print (t1, t2, t3-t1)
+	#print em_to_str(round_down_by_minute_step(t, 15))
 
 	
