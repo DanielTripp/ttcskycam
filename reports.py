@@ -283,11 +283,10 @@ if __name__ == '__main__':
 		datazooms = [max(c.VALID_DATAZOOMS)]
 		make_all_reports_once(report_time, insert_into_db, False, froutes, datazooms)
 	elif args.backfill_time_range is not None:
-		start_time_em, end_time_em = (str_to_em(e) for e in args.backfill_time_range.split(',', 1))
-		# ^^ This code ignores time zones and DST, and probably has bugs. 
+		start_time_em, end_time_em = (str_to_em_z(e) for e in args.backfill_time_range.split(',', 1))
 		datazooms = [max(c.VALID_DATAZOOMS)]
 		for report_time in generate_backfill_report_times(start_time_em, end_time_em):
-			print 'Backfilling reports for %s.' % em_to_str(report_time)
+			print 'Backfilling reports for %s.' % em_to_str_z(report_time)
 			insert_db_dupes = False
 			make_all_reports_once(report_time, insert_into_db, insert_db_dupes, froutes, datazooms)
 	else:

@@ -18,8 +18,9 @@ along with ttcskycam.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
 '''
-Tables involved: 
- 
+Tables definitions are below.
+
+The "time string" columns here (eg. time_str, time_retrieved_str) are a muddle w.r.t. time zones.  
 
 create table ttc_vehicle_locations (vehicle_id varchar(100), fudgeroute varchar(20), route_tag varchar(10), dir_tag varchar(100), 
      lat double precision, lon double precision, secs_since_report integer, time_retrieved bigint, 
