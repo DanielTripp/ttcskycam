@@ -31,9 +31,23 @@ from misc import *
 # 	percentage along that line segment. 
 # A 'location' has no corresponding class, but is used in some function arguments to describe an object which could be a 
 # 	vertex or a posaddr. 
+# A multipath is a path along three or more points.  You might say waypoints.  This is in contrast to a simple path between two points.  
+# 	The "multi" in multipath does not refer to multiple possible paths i.e. options about paths that one might take between fixed points. 
+# 	We use "options about paths" in the context of simple paths between two points, but not multipaths. 
+# wdist = weighted dist 
+# 	A pline has a weight, and a weight will be lower for faster roads eg. highways.  
+#   The weight is contained in the pline name eg. for 'Keele St (part 1);w=0.50' the weight is 0.50.  
+# 	The weight here should not be confused with a 'w' flag.  
+# flag 
+# 	A vertex or pline can have flags.  They're contained in the name, as a prefix, in brackets.  
+# 	's' flag means 'stop' 
+# 	'w' flag means 'way', I think. 
+
 # 
 # Abbreviations:
 # si = spatial index 
+# pals = percent along line segment. 
+# mapl = meters along polyline 
 
 
 USE_PATCHCACHE_FIND_MULTIPATH = False
@@ -419,6 +433,10 @@ class Path(object):
 	def __repr__(self):
 		return self.__str__()
 
+# A PathPiece is a piece of a path in the context of a multipath.  
+# A multipath is a path along multiple waypoints.  Not a 
+# There is one piece for each pair of waypoints.  
+# In the context of a two-point path, there will only be one path piece - explicitly or implicitly. 
 class PathPiece(object):
 
 	def __init__(self, path_, pieceidx_, parent_sg_):
@@ -579,6 +597,8 @@ class SnapGraph(object):
 			raise Exception()
 		return hash(self.name)
 
+	# This function finds possible paths between two latlng arguments. 
+	# Contrast to find_multipath, which takes multiple latlngs as an argument. 
 	# return list of (dist, pathsteps) pairs.  Dist is a float, in meters.   List is sorted in ascending order of dist. 
 	@lru_cache(maxsize=60000, cacheable=lambda args, kwds: kwds.get('out_visited_vertexes') is None)
 	def find_paths(self, startlatlng_, startlocs_, destlatlng_, destlocs_, snap_tolerance=c.GRAPH_SNAP_RADIUS, \
@@ -674,6 +694,8 @@ class SnapGraph(object):
 			# when going around corners.  I don't know how to explain this in comments, without pictures. 
 			return self.get_latlng(loc_).dist_m(latlng_)*PATHS_GPS_ERROR_FACTOR
 
+	# The "multi" in "multipath" refers to the multiple latlngs in the argument.  
+	# Contrast to find_paths, which has exactly two latlngs in the argument. 
 	# return a Path, or None if no path is possible.
 	def find_multipath(self, latlngs_, vis_, locses=None, log_=False):
 		return self.find_multipath_impl(tuple(latlngs_), vis_, locses=tuple(locses), log_=log_)

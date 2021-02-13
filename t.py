@@ -27,10 +27,40 @@ import numpy as np
 
 if __name__ == '__main__':
 
-	t1 = str_to_em(sys.argv[1])
-	t2 = em_to_str_z(t1)
-	t3 = str_to_em(t2)
-	print (t1, t2, t3-t1)
-	#print em_to_str(round_down_by_minute_step(t, 15))
+	t0 = 1611669166101
+	rounded_set = set()
+	for arg in range(t0, t0+1000L*60*30, 7):
+		rounded = round_up_by_minute(arg)
+		rounded_set.add(rounded)
+		#print '%s=%s %s=%s diff=%s' % (arg, em_to_str_z(arg), rounded, em_to_str_z(rounded), arg - rounded) 
+	for rounded in sorted(rounded_set):
+		if 0:
+			assert round_down_by_minute(rounded-1) == rounded - 1000L*60
+			assert round_down_by_minute(rounded) == rounded
+			assert round_down_by_minute(rounded+1) == rounded
+			assert round_down_by_minute(rounded+1000L*60-1) == rounded
+			assert round_down_by_minute(rounded+1000L*60) == rounded+1000L*60
+		elif 0:
+			step = 15
+			assert round_down_by_minute_step(rounded-1, step) == rounded - 1000L*60*step
+			assert round_down_by_minute_step(rounded, step) == rounded
+			assert round_down_by_minute_step(rounded+1, step) == rounded
+			assert round_down_by_minute_step(rounded+1000L*60*step-1, step) == rounded
+			assert round_down_by_minute_step(rounded+1000L*60*step, step) == rounded+1000L*60*step
+		else:
+			for d in range(-3000, -1):
+				#print d
+				#print round_up_by_minute(rounded + d) , rounded
+				assert round_up_by_minute(rounded + d) == rounded
+			#assert round_up_by_minute(rounded-1) == rounded
+			assert round_up_by_minute(rounded) == rounded
+			assert round_up_by_minute(rounded+1) == rounded + 1000L*60 
+			assert round_up_by_minute(rounded+1000L*60-1) == rounded + 1000L*60
+			assert round_up_by_minute(rounded+1000L*60) == rounded + 1000L*60
+			assert round_up_by_minute(rounded+1000L*60+1) == rounded + 1000L*60*2
 
-	
+
+
+
+
+

@@ -149,7 +149,6 @@ def str_to_em_z(str_):
 	r = dateutil.parser.parse(str_)
 	if not is_datetime_tz_aware(r):
 		raise ValueError('datetime object parsed from "%s" is not time-zone aware' % str_)
-	print r # tdr 
 	r = datetime_to_em(r)
 	return r
 
