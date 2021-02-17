@@ -27,40 +27,15 @@ import numpy as np
 
 if __name__ == '__main__':
 
-	t0 = 1611669166101
-	rounded_set = set()
-	for arg in range(t0, t0+1000L*60*30, 7):
-		rounded = round_up_by_minute(arg)
-		rounded_set.add(rounded)
-		#print '%s=%s %s=%s diff=%s' % (arg, em_to_str_z(arg), rounded, em_to_str_z(rounded), arg - rounded) 
-	for rounded in sorted(rounded_set):
-		if 0:
-			assert round_down_by_minute(rounded-1) == rounded - 1000L*60
-			assert round_down_by_minute(rounded) == rounded
-			assert round_down_by_minute(rounded+1) == rounded
-			assert round_down_by_minute(rounded+1000L*60-1) == rounded
-			assert round_down_by_minute(rounded+1000L*60) == rounded+1000L*60
-		elif 0:
-			step = 15
-			assert round_down_by_minute_step(rounded-1, step) == rounded - 1000L*60*step
-			assert round_down_by_minute_step(rounded, step) == rounded
-			assert round_down_by_minute_step(rounded+1, step) == rounded
-			assert round_down_by_minute_step(rounded+1000L*60*step-1, step) == rounded
-			assert round_down_by_minute_step(rounded+1000L*60*step, step) == rounded+1000L*60*step
-		else:
-			for d in range(-3000, -1):
-				#print d
-				#print round_up_by_minute(rounded + d) , rounded
-				assert round_up_by_minute(rounded + d) == rounded
-			#assert round_up_by_minute(rounded-1) == rounded
-			assert round_up_by_minute(rounded) == rounded
-			assert round_up_by_minute(rounded+1) == rounded + 1000L*60 
-			assert round_up_by_minute(rounded+1000L*60-1) == rounded + 1000L*60
-			assert round_up_by_minute(rounded+1000L*60) == rounded + 1000L*60
-			assert round_up_by_minute(rounded+1000L*60+1) == rounded + 1000L*60*2
+	def pack_into_linesegidx(plineidx_, ptidx_):
+		assert plineidx < 2**30
+		assert ptidx < 2*30
+		r = (plineidx << 30) ^ ptidx
+		return r
 
-
-
-
-
+	plineidx = (2**31 - 2)
+	plineidx = int(sys.argv[1])
+	ptidx = int(sys.argv[2])
+	linesegidx = pack_into_linesegidx(plineidx, ptidx)
+	print bin(linesegidx)
 

@@ -27,8 +27,20 @@ from misc import *
 
 # Some vocabulary: 
 # A Vertex is a vertex in the graph theory sense. 
-# A PosAddr represents a location on an edge of the graph.  It is represented in terms of a line segment address and a 
-# 	percentage along that line segment. 
+#		We don't use 'vertex' to describe every point along a pline.  We use 'ptaddr' ('point address') for that. 
+#		A vertex is where two or more plines intersect.  
+#		Those plines can intersect in the middle, or join end-to-end.  Either way, a vertex is defined by a set of ptaddrs. 
+# A PosAddr represents a location on a line segment.  It is represented in terms of a line segment address and a 
+# 	percentage along that line segment.   In our vocabulary, a line segment is not an edge.  
+# A 'line segment address' (AKA linesegaddr) is the same as a 'point address' (AKA ptaddr) in terms of data.  
+#		The data is 1) a pline identifier (probably the pline name), and 2) a point index along that pline.  
+# 	In the context of a linesegaddr, these identify a line segment: the line segment between "point index" and "point index plus 1".  
+#		In the context of a ptaddr, these data simply identify that point. 
+# An 'edge' is used in the context of routing AKA path-finding.  
+#		An edge connects two vertices.  An edge is directed i.e. one-way.  
+#		An edge might contain several line segments.  Those line segments 
+#		will all be on the same pline.  One edge will contain exactly one pline.  An edge will not necessarily contain 
+#		all of a pline.  For example, two plines might intersect, forming a vertex in the middle 
 # A 'location' has no corresponding class, but is used in some function arguments to describe an object which could be a 
 # 	vertex or a posaddr. 
 # A multipath is a path along three or more points.  You might say waypoints.  This is in contrast to a simple path between two points.  
@@ -93,6 +105,15 @@ class PtAddr(object):
 
 	def copy(self):
 		return PtAddr(self.plinename, self.ptidx)
+
+	# This idx is for ML.  It has no meaning w.r.t. a map or routing. 
+	def get_linesegidx(self, sg_):
+		assert isinstance(sg_, SnapGraph)
+		plineidx = sg_.plinename_to_idx[self.plinename]
+		assert plineidx < 2**30
+		assert self.ptidx < 2*30
+		r = (plineidx << 30) ^ self.ptidx
+		return r
 
 class Vertex(object):
 
@@ -377,6 +398,46 @@ class Path(object):
 		r = uniq(r)
 		return r
 
+	def get_edge_idxes(self):
+		allsteps = sum(self.piecestepses, [])
+		assert len(allsteps) >= 2
+		assert all(isinstance(e, PosAddr) or isinstance(e, int) for e in allsteps)
+		r = []
+		for step1, step2 in hopscotch(allsteps):
+			if isinstance(step1, PosAddr) and isinstance(step2, int):
+				r.append(self.snapgraph.get_edge_idx_between(step1, step2))
+			elif isinstance(step1, int) and isinstance(step2, int):
+				if step1 != step2:
+					vert1 = self.snapgraph.verts[step1]; vert2 = self.snapgraph.verts[step2]
+					plinename = vert1.get_shortest_common_plinename(vert2)
+			elif isinstance(step1, int) and isinstance(step2, PosAddr):
+				r.append(step2.plinename)
+			elif isinstance(step1, PosAddr) and isinstance(step2, PosAddr):
+				if step1 != step2:
+					r.append(step1.plinename)
+		return r
+
+	def get_linesegidxes(self):
+		assert False # This function is rough work. 
+		allsteps = sum(self.piecestepses, [])
+		assert len(allsteps) >= 2
+		assert all(isinstance(e, PosAddr) or isinstance(e, int) for e in allsteps)
+		r_linesegaddrs = []
+		for step1, step2 in hopscotch(allsteps):
+			if isinstance(step1, PosAddr) and isinstance(step2, int):
+				r_linesegaddrs += self.snapgraph.get_linesegaddrs_between(step1, step2)
+			elif isinstance(step1, int) and isinstance(step2, int):
+				if step1 != step2:
+					vert1 = self.snapgraph.verts[step1]; vert2 = self.snapgraph.verts[step2]
+					plinename = vert1.get_shortest_common_plinename(vert2)
+			elif isinstance(step1, int) and isinstance(step2, PosAddr):
+				r.append(step2.plinename)
+			elif isinstance(step1, PosAddr) and isinstance(step2, PosAddr):
+				if step1 != step2:
+					r.append(step1.plinename)
+		r = [e.get_linesegidx(self.snapgraph) for e in r_linesegaddrs]
+		return r
+
 	def piece_latlngs(self):
 		return [self.latlngs(pieceidx) for pieceidx in xrange(self.num_pieces())]
 
@@ -495,6 +556,14 @@ class PathPiece(object):
 
 class Edge(object):
 
+	# This is a directed edge i.e. it's one-way.  Most edges will have a counterpart going the opposite way.  
+	# That counterpart is a separate object.  
+	# Fields: 
+	# vertidx: The starting vertidx of this edge.  
+	# direction: The direction along the pline of this edge: ascending or descending.  
+	# Ascending means that this edge goes in ascending order of the ptidxes of the pline.  
+	# 0 for ascending, 1 for descending.  
+
 	def __init__(self, vertidx_, wdist_, plinename_, direction_):
 		assert isinstance(vertidx_, int) and isinstance(wdist_, float) and isinstance(plinename_, str)
 		assert direction_ in (0, 1)
@@ -559,6 +628,20 @@ class SnapGraph(object):
 		except AttributeError:
 			self._multipath_patchcache_vid_to_argses_n_results = defaultdict(list)
 		return self._multipath_patchcache_vid_to_argses_n_results
+
+	@property
+	def plinename_to_idx(self):
+		if not hasattr(self, '_plinename_to_idx'):
+			self._plinename_to_idx = {}
+			idx = 0
+			for plinename in sorted(self.plinename2pts.keys()):
+				self._plinename_to_idx[plinename] = idx
+				idx += 1
+		return self._plinename_to_idx
+
+	def get_linesegidx_from_linesegaddr(self, linesegaddr_):
+		assert isinstance(linesegaddr_, PtAddr)
+		plineidx = self.plinename_to_idx[linesegaddr_.plinename]
 
 	def init_plines(self, plines_):
 		self.init_plinename2pts(plines_)
@@ -786,6 +869,40 @@ class SnapGraph(object):
 			assert (not r_pieces) or (len(r_pieces) == len(latlngs_)-1)
 			r_pieces = self.fix_gps_artifact_path_doublebacks(r_pieces, c.GRAPH_SNAP_RADIUS, vid, log_)
 			return (Path(r_pieces, self) if r_pieces else None)
+
+	def get_edge_idx_between(self, posaddr_, vertidx_):
+		assert isinstance(posaddr_, PosAddr) and isinstance(vertidx_, int)
+		vert = self.verts[vertidx_]
+		if len(vert.get_looping_plinenames()) > 0:
+			raise Exception('looping plines not supported here yet.') 
+		plinename = posaddr_.plinename
+		vert = self.verts[vertidx_]
+		vert_ptidx = vert.get_ptidx(plinename)
+		edge_direction = 0 if posaddr_.ptidx < vert_ptidx else 1
+		matching_edges = [edge for edge in self.edges[vertidx_] if edge.plinename == plinename and edge.direction == edge_direction]
+		if len(matching_edges) != 1:
+			raise Exception('edges between %s %s: there are %d: %s' % (posaddr_, vertidx_, len(matching_edges), matching_edges))
+		matching_edge = matching_edges[0]
+		print matching_edge # tdr 
+		r = get_index_of_by_identity(self.edges, matching_edge)
+		return r
+
+	def get_linesegaddrs_between(self, posaddr_, vertidx_):
+		assert False # This function is rough work. 
+		assert isinstance(posaddr_, PosAddr) and isinstance(vertidx_, int)
+		vert = self.verts[vertidx_]
+		if len(vert.get_looping_plinenames()) > 0:
+			raise Exception('looping plines not supported here yet.') 
+		ptaddr_of_vert = vert.get_ptaddr(posaddr_.plinename)
+		if ptaddr_of_vert.plinename != posaddr_.plinename:
+			raise Exception('error w/ %s %s.' % (posaddr_, vert))
+		plinename = ptaddr_of_vert.plinename
+		if posaddr_.ptidx < ptaddr_of_vert.ptidx:
+			r_ptidxes = range(posaddr_.ptidx, ptaddr_of_vert.ptidx)
+		else:
+			r_ptidxes = range(posaddr_.ptidx, ptaddr_of_vert.ptidx-1, -1)
+		r = [PtAddr(plinename, ptidx) for ptidx in r_ptidxes]
+		return r
 
 	def prune_multipath_patchcache(self, cur_timekey_):
 		vids_to_delete = []

@@ -60,18 +60,20 @@ if __name__ == '__main__':
 		break
 
 	streets_sg = streets.get_snapgraph()
-	print len(streets_sg.plinename2pts)
-	max_num_pts = 0
-	for plinename, pts in streets_sg.plinename2pts.iteritems():
-		max_num_pts = max(max_num_pts, len(pts))
-	print max_num_pts
-	sys.exit(0)
+	if 0:
+		print len(streets_sg.plinename2pts)
+		max_num_pts = 0
+		for plinename, pts in streets_sg.plinename2pts.iteritems():
+			max_num_pts = max(max_num_pts, len(pts))
+		print max_num_pts
+		sys.exit(0)
 	start_latlon = geom.LatLng(43.667224383419686, -79.46532130569948)
 	dest_latlon =   geom.LatLng(43.65539969538242, -79.46032559867878)
 	dists_n_pathsteps = streets_sg.find_paths(start_latlon, 'm', dest_latlon, 'm')
 	dist, pathsteps = dists_n_pathsteps[0]
 	path = snapgraph.Path([pathsteps], streets_sg)
-	print path 
+	print path.get_edge_idxes()
+	#print path 
 	#pprint.pprint(paths, indent=2, width=150)
 
 

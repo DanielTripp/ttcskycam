@@ -1290,6 +1290,13 @@ class TimeWindow(object):
 	def gt_trimmed_vilist(self, vilist_):
 		return [vi for vi in vilist_ if vi.time_retrieved > self.end]
 
+def get_index_of_by_identity(seq_, obj_):
+	for idx, e in enumerate(seq_):
+		if e is obj_:
+			return idx
+	else:
+		raise ValueError()
+
 if __name__ == '__main__':
 
 	pass
