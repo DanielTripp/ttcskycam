@@ -25,7 +25,7 @@ from lru_cache import lru_cache
 import geom, grid, mc, c
 from misc import *
 
-# Some vocabulary: 
+# Vocabulary: 
 # A Vertex is a vertex in the graph theory sense. 
 #		We don't use 'vertex' to describe every point along a pline.  We use 'ptaddr' ('point address') for that. 
 #		A vertex is where two or more plines intersect.  
@@ -559,7 +559,7 @@ class Edge(object):
 	# This is a directed edge i.e. it's one-way.  Most edges will have a counterpart going the opposite way.  
 	# That counterpart is a separate object.  
 	# Fields: 
-	# vertidx: The starting vertidx of this edge.  
+	# vertidx: The vertidx at _the other end_ of this edge.  i.e. not the starting vert.  the ending vert. 
 	# direction: The direction along the pline of this edge: ascending or descending.  
 	# Ascending means that this edge goes in ascending order of the ptidxes of the pline.  
 	# 0 for ascending, 1 for descending.  
@@ -577,6 +577,9 @@ class Edge(object):
 
 	def __str__(self):
 		return 'Edge(%d, %.1f, %s, %s)' % (self.vertidx, self.wdist, self.plinename, self.direction)
+
+	def strlong(self):
+		return 'Edge(vertidx=%d, wdist=%.1f, pline=\'%s\', dir=%s)' % (self.vertidx, self.wdist, self.plinename, self.direction)
 
 	def __repr__(self):
 		return self.__str__()
@@ -638,6 +641,15 @@ class SnapGraph(object):
 				self._plinename_to_idx[plinename] = idx
 				idx += 1
 		return self._plinename_to_idx
+
+	def get_edges_to_vert(self, to_vertidx_):
+		assert isinstance(to_vertidx_, int) and (0 <= to_vertidx_ < len(self.verts))
+		r = []
+		for from_vertidx, from_vert_edges in enumerate(self.edges):
+			for from_vert_edge in from_vert_edges:
+				if from_vert_edge.vertidx == to_vertidx_:
+					r.append(from_vert_edge)
+		return r
 
 	def get_linesegidx_from_linesegaddr(self, linesegaddr_):
 		assert isinstance(linesegaddr_, PtAddr)
@@ -878,13 +890,17 @@ class SnapGraph(object):
 		plinename = posaddr_.plinename
 		vert = self.verts[vertidx_]
 		vert_ptidx = vert.get_ptidx(plinename)
+		edges_to_vert = self.get_edges_to_vert(vertidx_)
 		edge_direction = 0 if posaddr_.ptidx < vert_ptidx else 1
-		matching_edges = [edge for edge in self.edges[vertidx_] if edge.plinename == plinename and edge.direction == edge_direction]
+		matching_edges = [edge for edge in edges_to_vert if edge.plinename == plinename and edge.direction == edge_direction]
 		if len(matching_edges) != 1:
 			raise Exception('edges between %s %s: there are %d: %s' % (posaddr_, vertidx_, len(matching_edges), matching_edges))
 		matching_edge = matching_edges[0]
-		print matching_edge # tdr 
-		r = get_index_of_by_identity(self.edges, matching_edge)
+		if 0: # tdr 
+			print 'args', posaddr_, self.get_latlng(posaddr_)
+			print matching_edge.strlong()
+			print 'start vert', vert.strlong()
+			print 'end vert', self.verts[matching_edge.vertidx].strlong()
 		return r
 
 	def get_linesegaddrs_between(self, posaddr_, vertidx_):
