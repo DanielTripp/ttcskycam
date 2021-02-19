@@ -106,15 +106,6 @@ class PtAddr(object):
 	def copy(self):
 		return PtAddr(self.plinename, self.ptidx)
 
-	# This idx is for ML.  It has no meaning w.r.t. a map or routing. 
-	def get_linesegidx(self, sg_):
-		assert isinstance(sg_, SnapGraph)
-		plineidx = sg_.plinename_to_idx[self.plinename]
-		assert plineidx < 2**30
-		assert self.ptidx < 2*30
-		r = (plineidx << 30) ^ self.ptidx
-		return r
-
 class Vertex(object):
 
 	next_namenum = 0
@@ -398,44 +389,24 @@ class Path(object):
 		r = uniq(r)
 		return r
 
-	def get_edge_idxes(self):
+	def get_edges(self):
 		allsteps = sum(self.piecestepses, [])
 		assert len(allsteps) >= 2
 		assert all(isinstance(e, PosAddr) or isinstance(e, int) for e in allsteps)
 		r = []
 		for step1, step2 in hopscotch(allsteps):
 			if isinstance(step1, PosAddr) and isinstance(step2, int):
-				r.append(self.snapgraph.get_edge_idx_between(step1, step2))
+				r.append(self.snapgraph.get_edge_between(step1, step2))
 			elif isinstance(step1, int) and isinstance(step2, int):
-				if step1 != step2:
-					vert1 = self.snapgraph.verts[step1]; vert2 = self.snapgraph.verts[step2]
-					plinename = vert1.get_shortest_common_plinename(vert2)
+				if step1 != step2: # I don't know if step1 == step2 will ever happen 
+					r.append(self.snapgraph.get_edge_between(step1, step2))
 			elif isinstance(step1, int) and isinstance(step2, PosAddr):
+				continue  # tdr 
 				r.append(step2.plinename)
 			elif isinstance(step1, PosAddr) and isinstance(step2, PosAddr):
+				continue  # tdr 
 				if step1 != step2:
 					r.append(step1.plinename)
-		return r
-
-	def get_linesegidxes(self):
-		assert False # This function is rough work. 
-		allsteps = sum(self.piecestepses, [])
-		assert len(allsteps) >= 2
-		assert all(isinstance(e, PosAddr) or isinstance(e, int) for e in allsteps)
-		r_linesegaddrs = []
-		for step1, step2 in hopscotch(allsteps):
-			if isinstance(step1, PosAddr) and isinstance(step2, int):
-				r_linesegaddrs += self.snapgraph.get_linesegaddrs_between(step1, step2)
-			elif isinstance(step1, int) and isinstance(step2, int):
-				if step1 != step2:
-					vert1 = self.snapgraph.verts[step1]; vert2 = self.snapgraph.verts[step2]
-					plinename = vert1.get_shortest_common_plinename(vert2)
-			elif isinstance(step1, int) and isinstance(step2, PosAddr):
-				r.append(step2.plinename)
-			elif isinstance(step1, PosAddr) and isinstance(step2, PosAddr):
-				if step1 != step2:
-					r.append(step1.plinename)
-		r = [e.get_linesegidx(self.snapgraph) for e in r_linesegaddrs]
 		return r
 
 	def piece_latlngs(self):
@@ -560,6 +531,8 @@ class Edge(object):
 	# That counterpart is a separate object.  
 	# Fields: 
 	# vertidx: The vertidx at _the other end_ of this edge.  i.e. not the starting vert.  the ending vert. 
+	#		This class doesn't store the 'from' vertidx.  It's unclear if there's are any benefits to that.  
+	# 	There is a clear cost: some code in here would be simpler if we had the 'from' vertidx.  
 	# direction: The direction along the pline of this edge: ascending or descending.  
 	# Ascending means that this edge goes in ascending order of the ptidxes of the pline.  
 	# 0 for ascending, 1 for descending.  
@@ -578,8 +551,24 @@ class Edge(object):
 	def __str__(self):
 		return 'Edge(%d, %.1f, %s, %s)' % (self.vertidx, self.wdist, self.plinename, self.direction)
 
-	def strlong(self):
-		return 'Edge(vertidx=%d, wdist=%.1f, pline=\'%s\', dir=%s)' % (self.vertidx, self.wdist, self.plinename, self.direction)
+	def strlong(self, snapgraph_):
+		from_vertidx = self.get_from_vertidx(snapgraph_)
+		start_pos = snapgraph_.verts[from_vertidx].pos()
+		end_pos = snapgraph_.verts[self.vertidx].pos()
+		return 'Edge(vertidx=%d, wdist=%.1f, pline=\'%s\', dir=%s, [%s, %s]' % \
+				(self.vertidx, self.wdist, self.plinename, self.direction, start_pos, end_pos)
+
+	def get_from_vertidx(self, snapgraph_):
+		vertidxes_going_to_end_vert_of_this_edge = snapgraph_.get_vertidxes_going_to_vertidx(self.vertidx)
+		matching_from_vertidxes = []
+		for vertidx_going_to_end_vert_of_this_edge in vertidxes_going_to_end_vert_of_this_edge:
+			for edge in snapgraph_.edges[vertidx_going_to_end_vert_of_this_edge]:
+				if edge is self:
+					matching_from_vertidxes.append(vertidx_going_to_end_vert_of_this_edge)
+		if len(matching_from_vertidxes) != 1:
+			raise Exception()
+		r = matching_from_vertidxes[0]
+		return r
 
 	def __repr__(self):
 		return self.__str__()
@@ -651,9 +640,14 @@ class SnapGraph(object):
 					r.append(from_vert_edge)
 		return r
 
-	def get_linesegidx_from_linesegaddr(self, linesegaddr_):
-		assert isinstance(linesegaddr_, PtAddr)
-		plineidx = self.plinename_to_idx[linesegaddr_.plinename]
+	def get_vertidxes_going_to_vertidx(self, to_vertidx_):
+		assert isinstance(to_vertidx_, int) and (0 <= to_vertidx_ < len(self.verts))
+		r = []
+		for from_vertidx, from_vert_edges in enumerate(self.edges):
+			for from_vert_edge in from_vert_edges:
+				if from_vert_edge.vertidx == to_vertidx_:
+					r.append(from_vertidx)
+		return r
 
 	def init_plines(self, plines_):
 		self.init_plinename2pts(plines_)
@@ -882,7 +876,15 @@ class SnapGraph(object):
 			r_pieces = self.fix_gps_artifact_path_doublebacks(r_pieces, c.GRAPH_SNAP_RADIUS, vid, log_)
 			return (Path(r_pieces, self) if r_pieces else None)
 
-	def get_edge_idx_between(self, posaddr_, vertidx_):
+	def get_edge_between(self, loc1_, loc2_):
+		if isinstance(loc1_, PosAddr) and isinstance(loc2_, int):
+			return self.get_edge_between_impl_posaddr_to_vertidx(loc1_, loc2_)
+		elif isinstance(loc1_, int) and isinstance(loc2_, int):
+			return self.get_edge_between_impl_vertidx_to_vertidx(loc1_, loc2_)
+		else:
+			raise Error()
+
+	def get_edge_between_impl_posaddr_to_vertidx(self, posaddr_, vertidx_):
 		assert isinstance(posaddr_, PosAddr) and isinstance(vertidx_, int)
 		vert = self.verts[vertidx_]
 		if len(vert.get_looping_plinenames()) > 0:
@@ -901,7 +903,18 @@ class SnapGraph(object):
 			print matching_edge.strlong()
 			print 'start vert', vert.strlong()
 			print 'end vert', self.verts[matching_edge.vertidx].strlong()
-		return r
+		return matching_edge
+
+	def get_edge_between_impl_vertidx_to_vertidx(self, vertidx1_, vertidx2_):
+		assert isinstance(vertidx1_, int) and isinstance(vertidx2_, int)
+		vert1 = self.verts[vertidx1_]; vert2 = self.verts[vertidx2_]
+		shortest_plinename = vert1.get_shortest_common_plinename(vert2)
+		edges_from_vert1 = self.edges[vertidx1_]
+		matching_edges = [edge for edge in edges_from_vert1 if edge.plinename == shortest_plinename and edge.vertidx == vertidx2_]
+		if len(matching_edges) != 1:
+			raise Exception('Expected 1 edge.  Got %d: %s.  vertidxes: %s %s' % (len(matching_edges), matching_edges, vertidx1_, vertidx2_))
+		matching_edge = matching_edges[0]
+		return matching_edge
 
 	def get_linesegaddrs_between(self, posaddr_, vertidx_):
 		assert False # This function is rough work. 

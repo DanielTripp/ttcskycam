@@ -72,7 +72,9 @@ if __name__ == '__main__':
 	dists_n_pathsteps = streets_sg.find_paths(start_latlon, 'm', dest_latlon, 'm')
 	dist, pathsteps = dists_n_pathsteps[0]
 	path = snapgraph.Path([pathsteps], streets_sg)
-	print path.get_edge_idxes()
+	edges = path.get_edges()
+	for edge in edges:
+		print edge.strlong(streets_sg)
 	#print path 
 	#pprint.pprint(paths, indent=2, width=150)
 
