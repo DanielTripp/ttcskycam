@@ -33,7 +33,8 @@
 var g_markers = new buckets.LinkedList();
 var g_polyline = null;
 var g_map = null;
-var g_polyline_latlngs = [];
+var g_polyline_latlngs = []; /* This is a list of lists of latlngs, but for now we only use the first element of the outer list.  
+	This is a muddle. */ 
 
 function initialize() {
 	g_map = L.map('mapid').setView([43.653472856217064, -79.465244886669], 13);
@@ -73,8 +74,10 @@ function draw_objects() {
 }
 
 function draw_polyline() {
-	g_polyline = L.polyline(g_polyline_latlngs, {color: 'blue'}).addTo(g_map);
-	g_map.fitBounds(g_polyline.getBounds());
+	g_polyline = L.polyline(g_polyline_latlngs[0], {color: 'blue'}).addTo(g_map);
+	if(g_polyline.getLatLngs().length >= 2) {
+		g_map.fitBounds(g_polyline.getBounds());
+	}
 }
 
 function draw_marker() {
@@ -181,16 +184,19 @@ function get_latlngs_from_string(str_) {
 				var polyline = [];
 				raw_polylines = [polyline];
 				var filelines = str_.split('\n');
-				for(var filelinei in filelines) {
-					var fileline = filelines[filelinei];
-					var regex = /.*?[^:]?(43\.\d\d\d\d+).*?(-79\.\d\d\d\d+).*/g;
-					var match = regex.exec(fileline);
-					if(match != null) {
-						console.log('match');
-					  var lat = parseFloat(match[1], 10);
-						var lng = parseFloat(match[2], 10);
-						polyline.push([lat, lng]);
+				for(let filelinei in filelines) {
+					let fileline = filelines[filelinei];
+					let regex = /.*?([^:]?(43\.\d\d\d\d+).*?(-79\.\d\d\d\d+)[^-0-9.]+).*?/g;
+					let match;
+					while((match = regex.exec(fileline)) !== null) {
+						console.log(sprintf('got a match.  %d match group(s): %s', match.length, '"'+match.join('", "')+'"'));
+						for(let iMatch=2; iMatch<match.length-1; iMatch+=2) {
+							let lat = parseFloat(match[iMatch], 10);
+							let lng = parseFloat(match[iMatch+1], 10);
+							polyline.push([lat, lng]);
+						}
 					}
+					console.log(sprintf('matched %d pt(s)', polyline.length));
 				}
 			}
 		}
