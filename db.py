@@ -18,8 +18,9 @@ along with ttcskycam.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
 '''
-Tables involved: 
- 
+Tables definitions are below.
+
+The "time string" columns here (eg. time_str, time_retrieved_str) are a muddle w.r.t. time zones.  
 
 create table ttc_vehicle_locations (vehicle_id varchar(100), fudgeroute varchar(20), route_tag varchar(10), dir_tag varchar(100), 
      lat double precision, lon double precision, secs_since_report integer, time_retrieved bigint, 
@@ -62,7 +63,7 @@ DISABLE_GRAPH_PATHS = False
 
 INTERP_USE_PATCHCACHE = c.USE_PATCHCACHES
 
-PASSWORD = file_to_string(os.path.expanduser('~dt/.ttcskycam/DB_PASSWORD')).strip()
+PASSWORD = file_to_string(os.path.expanduser('~/.ttcskycam/DB_PASSWORD')).strip()
 
 g_conn = None
 g_lock = threading.RLock()
@@ -1501,6 +1502,14 @@ def insert_reports_into_db(froute_, dir_, time_, reporttype_to_datazoom_to_repor
 			cols = [c.VERSION, reporttype, froute_, dir_, datazoom, time_, em_to_str(time_), time_inserted_str, reportjson]
 			curs.execute('insert into reports values (%s,%s,%s,%s,%s,%s,%s,%s,%s)', cols)
 			curs.close()
+
+# This method has a bug if the report exists in the lrucache or memcache, but not in the db. 
+def does_report_exist_in_db(report_type_, froute_, dir_, datazoom_, time_):
+	try:
+		get_report(report_type_, froute_, dir_, datazoom_, time_)
+		return True
+	except ReportNotFoundException:
+		return False
 
 def insert_reports_into_memcache(froute_, dir_, time_, reporttype_to_datazoom_to_reportjson_):
 	for reporttype, datazoom_to_reportjson in reporttype_to_datazoom_to_reportjson_.iteritems():

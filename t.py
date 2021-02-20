@@ -27,8 +27,15 @@ import numpy as np
 
 if __name__ == '__main__':
 
-	sg = streets.get_snapgraph()
-	sg.pprint()
+	def pack_into_linesegidx(plineidx_, ptidx_):
+		assert plineidx < 2**30
+		assert ptidx < 2*30
+		r = (plineidx << 30) ^ ptidx
+		return r
 
+	plineidx = (2**31 - 2)
+	plineidx = int(sys.argv[1])
+	ptidx = int(sys.argv[2])
+	linesegidx = pack_into_linesegidx(plineidx, ptidx)
+	print bin(linesegidx)
 
-	

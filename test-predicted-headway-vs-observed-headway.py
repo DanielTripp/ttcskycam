@@ -76,7 +76,7 @@ if __name__ == '__main__':
 		time_retrieved = predictions[0].time_retrieved
 		#pprint.pprint(predictions)
 		print em_to_str_hms(time_retrieved)
-		time_retrieved_rounded_down = round_down_by_minute_step(time_retrieved, 5)
+		# maybe broken feb 5 2021  time_retrieved_rounded_down = round_down_by_minute_step(time_retrieved, 5)
 		for headway_target_time in range(time_retrieved_rounded_down, time_retrieved_rounded_down+1000*60*45, 1000*60*5):
 			tminus = time_retrieved - headway_target_time
 			lo_predictions = [prediction for prediction in predictions if prediction.time <= headway_target_time]

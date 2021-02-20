@@ -17,7 +17,7 @@ You should have received a copy of the GNU General Public License
 along with ttcskycam.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
-import sys, os, os.path, time, math, datetime, calendar, bisect, tempfile, subprocess, StringIO, re, multiprocessing, heapq, random, functools, traceback
+import sys, os, os.path, time, math, datetime, calendar, bisect, tempfile, subprocess, StringIO, re, multiprocessing, heapq, random, functools, traceback, dateutil.parser, pytz
 import profile, cProfile
 from collections import Sequence, MutableSequence, defaultdict, MutableSet
 from itertools import *
@@ -36,6 +36,12 @@ def em_to_str(t_):
 		return None
 	else:
 		return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t_/1000))
+
+def em_to_str_z(t_):
+	if t_ is None or t_ == 0:
+		return None
+	else:
+		return em_to_datetime(t_).strftime('%Y-%m-%d %H:%M:%S %z')
 
 def em_to_str_ymdhms(t_):
 	return time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(t_/1000))
@@ -133,6 +139,17 @@ def decode_url_paramval(str_):
 		sub = int(str_[i+1])
 		result_char = chr(group*10 + sub)
 		r += result_char
+	return r
+
+def is_datetime_tz_aware(dt_):
+	assert isinstance(dt_, datetime.datetime)
+	return dt_.tzinfo is not None and dt_.tzinfo.utcoffset(dt_) is not None
+
+def str_to_em_z(str_):
+	r = dateutil.parser.parse(str_)
+	if not is_datetime_tz_aware(r):
+		raise ValueError('datetime object parsed from "%s" is not time-zone aware' % str_)
+	r = datetime_to_em(r)
 	return r
 
 def str_to_em(datetimestr_, format_=None):
@@ -355,31 +372,36 @@ def firstidx(iterable_, predicate_):
 	raise Exception('Predicate was false for all elements.')
 
 def round_down_by_minute(t_em_):
-	dt = datetime.datetime.fromtimestamp(t_em_/1000.0)
-	dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute) # Omitting second on purpose.  That's what
-			# does the rounding down.
+	dt = em_to_datetime(t_em_)
+	dt = dt.replace(second=0, microsecond=0) 
 	r = datetime_to_em(dt)
 	return r
 
 def round_down_by_minute_step(t_em_, step_):
-	dt = datetime.datetime.fromtimestamp(t_em_/1000.0)
-	dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, round_down(dt.minute, step_)) # Omitting second on purpose.  That's what
-			# does the rounding down by minute.
-	r = long(calendar.timegm(dt.timetuple())*1000)
+	dt = em_to_datetime(t_em_)
+	new_minute = round_down(dt.minute, step_)
+	dt = dt.replace(minute=new_minute, second=0, microsecond=0) 
+	r = datetime_to_em(dt)
 	return r
 
 def datetime_to_em(datetime_):
-	return long(time.mktime(datetime_.timetuple())*1000) + datetime_.microsecond/1000
+	# Thanks to https://stackoverflow.com/a/11111177/321556 
+	epoch = datetime.datetime.utcfromtimestamp(0)
+	epoch = epoch.replace(tzinfo=pytz.UTC)
+	r = long((datetime_ - epoch).total_seconds() * 1000.0)
+	return r
 
 def em_to_datetime(em_):
-	return datetime.datetime.fromtimestamp(em_/1000.0)
+	r = datetime.datetime.fromtimestamp(em_/1000.0)
+	r = r.replace(tzinfo=dateutil.tz.tzlocal())
+	return r
 
 def round_up_by_minute(t_em_):
-	dt = datetime.datetime.fromtimestamp(t_em_/1000.0)
-	dt = datetime.datetime(dt.year, dt.month, dt.day, dt.hour, dt.minute, dt.second)
-	if dt.second > 0 or (0 < t_em_ - round_down_by_minute(t_em_) < 1000):
-		dt -= datetime.timedelta(seconds=dt.second)
+	dt = em_to_datetime(t_em_)
+	if dt.second > 0 or (dt.second == 0 and dt.microsecond > 0):
+		dt = dt.replace(second=0)
 		dt += datetime.timedelta(minutes=1)
+	dt = dt.replace(microsecond=0) 
 	r = datetime_to_em(dt)
 	return r
 
@@ -1268,8 +1290,16 @@ class TimeWindow(object):
 	def gt_trimmed_vilist(self, vilist_):
 		return [vi for vi in vilist_ if vi.time_retrieved > self.end]
 
+def get_index_of_by_identity(seq_, obj_):
+	for idx, e in enumerate(seq_):
+		if e is obj_:
+			return idx
+	else:
+		raise ValueError()
+
 if __name__ == '__main__':
 
 	pass
+
 
 

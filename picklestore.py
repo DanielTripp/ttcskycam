@@ -51,8 +51,8 @@ def decorate(user_function_):
 					r = user_function_(*args, **kwargs)
 					if LOG: printerr('picklestore: %s: done calling user function.' % filename)
 					if LOG: printerr('picklestore: %s: dumping to pickle file.' % filename)
-					with open(full_filename, 'w') as fout:
-						cPickle.dump(r, fout) # tdr 
+					with open(full_filename, 'wb') as fout:
+						cPickle.dump(r, fout)
 					if LOG: printerr('picklestore: %s: done dumping to pickle file.' % filename)
 				g_filename_to_object[filename] = r
 			return r
