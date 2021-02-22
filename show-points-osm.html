@@ -47,20 +47,6 @@ function initialize() {
 		tileSize: 512,
 		zoomOffset: -1
 	}).addTo(g_map);
-
-	/*
-	var marker1 = L.marker([43.65412491212708, -79.45865738111844]).addTo(g_map);
-	var marker2 = L.marker([43.65612491212708, -79.45865738111844]).addTo(g_map);
-
-	var latlngs = [
-		[43.65412491212708, -79.45865738111844], 
-		[43.65412491212708+0.002, -79.45865738111844]
-	];
-
-	var polyline = L.polyline(latlngs, {color: 'blue'}).addTo(g_map);
-
-	g_map.fitBounds(polyline.getBounds());
-	*/
 }
 
 function refresh_everything_from_latlngs() {
@@ -77,29 +63,26 @@ function draw_polylines() {
 		let polyline = L.polyline(polyline_latlngs, {color: 'blue'}).addTo(g_map);
 		g_polylines.add(polyline);
 	});
-	if(g_polyline.getLatLngs().length >= 2) {
-		g_map.fitBounds(g_polyline.getBounds());
+	if(g_polylines.size() > 0) {
+		let bounds = g_polylines.elementAtIndex(0).getBounds();
+		g_polylines.forEach(function(polyline) {
+			bounds.extend(polyline.getBounds());
+		});
+		g_map.fitBounds(bounds);
 	}
 }
 
 function draw_markers() {
-	for(var iLatLng=0; iLatLng<g_polyline_latlngs[0].length; iLatLng++) {
-		var latLng = g_polyline_latlngs[0][iLatLng];
-		var title = sprintf("Point %d", iLatLng);
-		//var icon = iLatLng == 0 ? : ;
-		//var icon = new L.Icon.Default();
-
-/*
-		var icon = new L.icon({
-			iconUrl: 'my-icon.png',
-			iconSize: [38, 95],
-			iconAnchor: [22, 94],
-			//popupAnchor: [-3, -76],
-			});
-*/
-		var icon = makeIcon(iLatLng == 0);
-		g_markers.add(L.marker(latLng, {title: title, icon: icon}).addTo(g_map));
-	}
+	for(let iPolyline=0; iPolyline<g_polyline_latlngs.length; iPolyline++) {
+		let polyline_latlngs = g_polyline_latlngs[iPolyline];
+		for(let iLatLng=0; iLatLng<polyline_latlngs.length; iLatLng++) {
+			let latLng = polyline_latlngs[iLatLng];
+			let title = `Polyline ${iPolyline}/${g_polyline_latlngs.length}, point ${iLatLng}/${polyline_latlngs.length}`
+			let isStartMarker = iLatLng == 0;
+			let icon = makeIcon(isStartMarker);
+			g_markers.add(L.marker(latLng, {title: title, icon: icon}).addTo(g_map));
+		}
+	};
 }
 
 function makeIcon(isStartMarker_) {
@@ -154,7 +137,7 @@ function get_latlngs_from_string(str_) {
 			str = str.replace(/\s/g, '');
 			try {
 				raw_polylines = $.parseJSON(str);
-				console.log('Slightly massaged JSON parse succeeded.');
+				console.log('Slightly massaged JSON parse tentatively succeeded.');
 			} catch(e) {
 				while(str.length > 0 && str.match(/^-79\.\d\d\d\d+/) == null && str.charAt(0) !== '[') { // remove leading non-JSON: 
 					str = str.substring(1, str.length);
@@ -172,6 +155,7 @@ function get_latlngs_from_string(str_) {
 				raw_polylines = [[raw_polylines]];
 			}
 		} catch(e) {
+			raw_polylines = [];
 			console.log('All massaged JSON parse attempts failed.');
 			// So it wasn't JSON.    Maybe it's XML: 
 			try {
