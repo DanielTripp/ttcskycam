@@ -53,11 +53,12 @@ if __name__ == '__main__':
 	
 	#pprint.pprint(dict(vid_to_timestamp_to_latlon), indent=2, width=150)
 
-	for vid, timestamp_to_latlon in vid_to_timestamp_to_latlon.iteritems():
-		#print vid
-		for timestamp, latlon in iteritemssorted(timestamp_to_latlon):
-			pass # print timestamp, latlon 
-		break
+	if 0:
+		for vid, timestamp_to_latlon in vid_to_timestamp_to_latlon.iteritems():
+			print vid
+			for timestamp, latlon in iteritemssorted(timestamp_to_latlon):
+				print timestamp, latlon 
+		sys.exit(0)
 
 	streets_sg = streets.get_snapgraph()
 	if 0:
@@ -67,14 +68,19 @@ if __name__ == '__main__':
 			max_num_pts = max(max_num_pts, len(pts))
 		print max_num_pts
 		sys.exit(0)
-	start_latlon = geom.LatLng(43.667224383419686, -79.46532130569948)
-	dest_latlon =   geom.LatLng(43.65539969538242, -79.46032559867878)
-	dists_n_pathsteps = streets_sg.find_paths(start_latlon, 'm', dest_latlon, 'm')
-	dist, pathsteps = dists_n_pathsteps[0]
-	path = snapgraph.Path([pathsteps], streets_sg)
-	edges = path.get_edges()
-	for edge in edges:
-		print edge.strlong(streets_sg)
+	start_latlon = geom.LatLng(43.666224383419686, -79.46482130569948)
+	for dest_lat_delta in [0.05]:
+		print dest_lat_delta 
+		dest_latlon =  start_latlon.copy()
+		dest_latlon.lat += dest_lat_delta
+		print start_latlon
+		print dest_latlon
+		dists_n_pathsteps = streets_sg.find_paths(start_latlon, 'm', dest_latlon, 'm')
+		dist, pathsteps = dists_n_pathsteps[0]
+		path = snapgraph.Path([pathsteps], streets_sg)
+		edges = path.get_edges()
+		for edge in edges:
+			print edge.strlong(streets_sg)
 	#print path 
 	#pprint.pprint(paths, indent=2, width=150)
 

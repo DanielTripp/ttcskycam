@@ -53,7 +53,7 @@ from misc import *
 # flag 
 # 	A vertex or pline can have flags.  They're contained in the name, as a prefix, in brackets.  
 # 	's' flag means 'stop' 
-# 	'w' flag means 'way', I think. 
+# 	'w' flag means 'walking', I think.  Only exists in the 'system' graph (not tracks or streets), I think.
 
 # 
 # Abbreviations:
@@ -395,17 +395,8 @@ class Path(object):
 		assert all(isinstance(e, PosAddr) or isinstance(e, int) for e in allsteps)
 		r = []
 		for step1, step2 in hopscotch(allsteps):
-			if isinstance(step1, PosAddr) and isinstance(step2, int):
+			if step1 != step2: # It's unclear if this check is needed i.e. if step1 == step2 will ever happen.
 				r.append(self.snapgraph.get_edge_between(step1, step2))
-			elif isinstance(step1, int) and isinstance(step2, int):
-				if step1 != step2: # I don't know if step1 == step2 will ever happen 
-					r.append(self.snapgraph.get_edge_between(step1, step2))
-			elif isinstance(step1, int) and isinstance(step2, PosAddr):
-				r.append(self.snapgraph.get_edge_between(step1, step2))
-			elif isinstance(step1, PosAddr) and isinstance(step2, PosAddr):
-				raise Exception()
-				if step1 != step2:
-					r.append(step1.plinename)
 		return r
 
 	def piece_latlngs(self):
@@ -548,13 +539,13 @@ class Edge(object):
 		return Edge(self.vertidx, self.wdist, self.plinename, self.direction)
 
 	def __str__(self):
-		return 'Edge(%d, %.1f, %s, %s)' % (self.vertidx, self.wdist, self.plinename, self.direction)
+		return 'Edge(endvertidx=%d, %.1f, %s, %s)' % (self.vertidx, self.wdist, self.plinename, self.direction)
 
 	def strlong(self, snapgraph_):
 		from_vertidx = self.get_from_vertidx(snapgraph_)
 		start_pos = snapgraph_.verts[from_vertidx].pos()
 		end_pos = snapgraph_.verts[self.vertidx].pos()
-		return 'Edge(vertidx=%d, wdist=%.1f, pline=\'%s\', dir=%s, [%s, %s]' % \
+		return 'Edge(endvertidx=%d, wdist=%.1f, pline=\'%s\', dir=%s, [%s, %s]' % \
 				(self.vertidx, self.wdist, self.plinename, self.direction, start_pos, end_pos)
 
 	def get_from_vertidx(self, snapgraph_):
@@ -619,16 +610,6 @@ class SnapGraph(object):
 		except AttributeError:
 			self._multipath_patchcache_vid_to_argses_n_results = defaultdict(list)
 		return self._multipath_patchcache_vid_to_argses_n_results
-
-	@property
-	def plinename_to_idx(self):
-		if not hasattr(self, '_plinename_to_idx'):
-			self._plinename_to_idx = {}
-			idx = 0
-			for plinename in sorted(self.plinename2pts.keys()):
-				self._plinename_to_idx[plinename] = idx
-				idx += 1
-		return self._plinename_to_idx
 
 	def get_edges_to_vert(self, to_vertidx_):
 		assert isinstance(to_vertidx_, int) and (0 <= to_vertidx_ < len(self.verts))
@@ -882,8 +863,33 @@ class SnapGraph(object):
 			return self.get_edge_between_impl__vertidx_to_vertidx(loc1_, loc2_)
 		elif isinstance(loc1_, int) and isinstance(loc2_, PosAddr):
 			return self.get_edge_between_impl__vertidx_to_posaddr(loc1_, loc2_)
+		elif isinstance(loc1_, PosAddr) and isinstance(loc2_, PosAddr):
+			return self.get_edge_between_impl__posaddr_to_posaddr(loc1_, loc2_)
 		else:
 			raise Error()
+
+	def get_edge_between_impl__posaddr_to_posaddr(self, start_posaddr_, end_posaddr_):
+		assert isinstance(start_posaddr_, PosAddr) and isinstance(end_posaddr_, PosAddr)
+		if start_posaddr_.plinename != end_posaddr_.plinename:
+			raise Exception()
+		plinename = start_posaddr_.plinename
+		if start_posaddr_.ptidx < end_posaddr_.ptidx:
+			edge_direction = 0
+		elif start_posaddr_.ptidx > end_posaddr_.ptidx:
+			edge_direction = 1
+		else:
+			edge_direction = int(start_posaddr_.pals > end_posaddr_.pals)
+		ptidx_to_vertidx = self.plinename_to_ptidx_to_vertidx[plinename]
+		if edge_direction == 0:
+			ptidx_of_start_vert = max(ptidx for ptidx in ptidx_to_vertidx.keys() if ptidx <= start_posaddr_.ptidx)
+		else:
+			ptidx_of_start_vert = min(ptidx for ptidx in ptidx_to_vertidx.keys() if ptidx >  start_posaddr_.ptidx)
+		start_vertidx = ptidx_to_vertidx[ptidx_of_start_vert]
+		matching_edges = [edge for edge in self.edges[start_vertidx] if edge.plinename == plinename and edge.direction == edge_direction]
+		if len(matching_edges) != 1:
+			raise Exception('edges between %s and %s: there are %d: %s' % (start_posaddr_, end_posaddr_, len(matching_edges), matching_edges))
+		matching_edge = matching_edges[0]
+		return matching_edge
 
 	def get_edge_between_impl__vertidx_to_posaddr(self, start_vertidx_, end_posaddr_):
 		assert isinstance(start_vertidx_, int) and isinstance(end_posaddr_, PosAddr)
@@ -908,11 +914,15 @@ class SnapGraph(object):
 			raise Exception('looping plines not supported here.') 
 		plinename = start_posaddr_.plinename
 		end_vert_ptidx = end_vert.get_ptidx(plinename)
+		print 'end_vert_ptidx', end_vert_ptidx # tdr 
 		all_edges_to_end_vert = self.get_edges_to_vert(end_vertidx_)
+		print 'all_edges_to_end_vert', all_edges_to_end_vert  # tdr 
 		desired_edge_direction = 0 if start_posaddr_.ptidx < end_vert_ptidx else 1
+		print desired_edge_direction # tdr 
 		matching_edges = [edge for edge in all_edges_to_end_vert if edge.plinename == plinename and edge.direction == desired_edge_direction]
 		if len(matching_edges) != 1:
-			raise Exception('edges between %s %s: there are %d: %s' % (start_posaddr_, end_vertidx_, len(matching_edges), matching_edges))
+			raise Exception('edges between %s (%s) and vertidx %s (%s): there are %d: %s' % \
+					(start_posaddr_, self.get_latlng(start_posaddr_), end_vertidx_, end_vert.strlong(), len(matching_edges), matching_edges))
 		matching_edge = matching_edges[0]
 		if 0: # tdr 
 			print 'args', start_posaddr_, self.get_latlng(start_posaddr_)
