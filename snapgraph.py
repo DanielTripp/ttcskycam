@@ -563,6 +563,35 @@ class Edge(object):
 	def __repr__(self):
 		return self.__str__()
 
+# We use these to represent edges that don't exactly exist in the graph.  
+# They don't exist because in the dead end case, our graph has a vertex at only the non-dead end, and our real edge objects 
+# connect two vertices.  No second vertex ==> no edge object.  
+# But we want something to represent that part of the graph - i.e. that segment of that polyline, in that direction 
+# for ML purposes.  This class is that. 
+# The reason for doing it this way is speed of development.
+class DeadEndPseudoEdge(object):
+
+	def __init__(self, from_vertidx_, to_vertidx_, plinename_, direction_):
+		assert isinstance(from_vertidx_, int) ^ isinstance(to_vertidx_, int)
+		assert (from_vertidx_ is None) ^ (to_vertidx_ is None)
+		assert isinstance(plinename_, str)
+		assert direction_ in (0, 1)
+		self.from_vertidx = from_vertidx_
+		self.to_vertidx = to_vertidx_
+		# There is no wdist in this object, because we don't need it. 
+		self.plinename = plinename_
+		self.direction = direction_
+
+	def __str__(self):
+		return 'DeadEndPseudoEdge(from_vertidx=%d, to_vertidx=%d, %s, %s)' % (self.from_vertidx, self.to_vertidx, self.plinename, self.direction)
+
+	def strlong(self, snapgraph_):
+		start_pos = snapgraph_.verts[self.from_vertidx].pos() if self.from_vertidx is not None else None
+		end_pos = snapgraph_.verts[self.to_vertidx].pos() if self.to_vertidx is not None else None
+		return 'DeadEndPseudoEdge(from_vertidx=%s, to_vertidx=%s, pline=\'%s\', dir=%s, [%s, %s]' % \
+				(self.from_vertidx, self.to_vertidx, self.plinename, self.direction, start_pos, end_pos)
+
+
 # This can be pickled or memcached. 
 class SnapGraph(object):
 
@@ -898,14 +927,23 @@ class SnapGraph(object):
 		return edge_in_correct_direction
 
 	def get_reverse_edge_of_edge(self, edge_):
-		desired_plinename = edge_.plinename
-		desired_direction = int(not edge_.direction)
-		matching_edges = [edge for edge in self.edges[edge_.vertidx] \
-				if edge.plinename == desired_plinename and edge.direction == desired_direction]
-		if len(matching_edges) != 1:
-			raise Exception('reverse edge of %s: there are %d: %s' % (edge_, len(matching_edges), matching_edges))
-		r = matching_edges[0]
-		return r
+		if isinstance(edge_, Edge):
+			desired_plinename = edge_.plinename
+			desired_direction = int(not edge_.direction)
+			matching_edges = [edge for edge in self.edges[edge_.vertidx] \
+					if edge.plinename == desired_plinename and edge.direction == desired_direction]
+			if len(matching_edges) != 1:
+				raise Exception('reverse edge of %s: there are %d: %s' % (edge_, len(matching_edges), matching_edges))
+			r = matching_edges[0]
+			return r
+		elif isinstance(edge_, DeadEndPseudoEdge):
+			new_from_vertidx = edge_.to_vertidx
+			new_to_vertidx = edge_.from_vertidx
+			new_direction = int(not edge_.direction)
+			r = DeadEndPseudoEdge(new_from_vertidx, new_to_vertidx, edge_.plinename, new_direction)
+			return r
+		else:
+			raise Exception()
 
 	def get_edge_between_impl__posaddr_to_vertidx(self, start_posaddr_, end_vertidx_):
 		assert isinstance(start_posaddr_, PosAddr) and isinstance(end_vertidx_, int)
@@ -914,22 +952,22 @@ class SnapGraph(object):
 			raise Exception('looping plines not supported here.') 
 		plinename = start_posaddr_.plinename
 		end_vert_ptidx = end_vert.get_ptidx(plinename)
-		print 'end_vert_ptidx', end_vert_ptidx # tdr 
 		all_edges_to_end_vert = self.get_edges_to_vert(end_vertidx_)
-		print 'all_edges_to_end_vert', all_edges_to_end_vert  # tdr 
 		desired_edge_direction = 0 if start_posaddr_.ptidx < end_vert_ptidx else 1
-		print desired_edge_direction # tdr 
 		matching_edges = [edge for edge in all_edges_to_end_vert if edge.plinename == plinename and edge.direction == desired_edge_direction]
-		if len(matching_edges) != 1:
+		if len(matching_edges) == 1:
+			r = matching_edges[0]
+		elif len(matching_edges) == 0:
+			r = DeadEndPseudoEdge(None, end_vertidx_, plinename, desired_edge_direction)
+		else:
 			raise Exception('edges between %s (%s) and vertidx %s (%s): there are %d: %s' % \
 					(start_posaddr_, self.get_latlng(start_posaddr_), end_vertidx_, end_vert.strlong(), len(matching_edges), matching_edges))
-		matching_edge = matching_edges[0]
 		if 0: # tdr 
 			print 'args', start_posaddr_, self.get_latlng(start_posaddr_)
 			print matching_edge.strlong()
 			print 'start vert', end_vert.strlong()
 			print 'end vert', self.verts[matching_edge.vertidx].strlong()
-		return matching_edge
+		return r
 
 	def get_edge_between_impl__vertidx_to_vertidx(self, vertidx1_, vertidx2_):
 		assert isinstance(vertidx1_, int) and isinstance(vertidx2_, int)
@@ -1527,7 +1565,7 @@ class SnapGraph(object):
 						r.append(vert(-2))
 		return set(r)
 
-	# self.edges is a list of list of Edge objects.  the outer list if by starting vertidx. 
+	# self.edges is a list of list of Edge objects.  the outer list is by starting vertidx. 
 	#		i.e. you can use this to find the edges from a vertidx, but not to a vertidx.
 	def init_edges(self):
 		self.edges = [[] for i in range(len(self.verts))]

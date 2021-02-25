@@ -73,6 +73,7 @@ if __name__ == '__main__':
 		print dest_lat_delta 
 		dest_latlon =  start_latlon.copy()
 		dest_latlon.lat += dest_lat_delta
+		start_latlon, dest_latlon = dest_latlon, start_latlon
 		print start_latlon
 		print dest_latlon
 		dists_n_pathsteps = streets_sg.find_paths(start_latlon, 'm', dest_latlon, 'm')
