@@ -563,6 +563,41 @@ class Edge(object):
 	def __repr__(self):
 		return self.__str__()
 
+	def get_mlidx(self):
+		# This code is rough, doesn't work, and is wrong-headed b/c 256 bits is too much, I think.  that'll make for a one-hot vector of length 115792089237316195423570985008687907853269984665640564039457584007913129639936.   
+		# therefore come up w/ shorter mlidxes.   invent a plinenameidx (if we don't have one already.)
+		edge_type_start_bit = 256 
+		edge_type_start_bit = 0 # tdr 
+		endvertidx_start_bit = 255
+		plinename_start_bit = 200
+		plinename_start_bit = 2 # tdr 
+		direction_start_bit = 0
+		edge_type = 0 # 0 means not a DeaEndPseudoEdge 
+		edge_type_packed = (edge_type << edge_type_start_bit)
+		endvertidx_packed = (self.vertidx << endvertidx_start_bit)
+		plinename_packed = get_plinename_packed_for_mlidx(self.plinename)
+		direction_packed = (self.direction < direction_start_bit)
+		packed_vars = [edge_type_packed, endvertidx_packed, plinename_packed, direction_packed]
+		for packed_var_1, packed_var_2 in hopscotch(packed_vars):
+			assert (packed_var_1 & packed_var_2) == 0
+		r = 0
+		for packed_var in packed_vars:
+			r |= packed_var
+		return r
+
+def get_plinename_packed_for_mlidx(plinename_):
+	assert isinstance(plinename_, str)
+	bitesarray = bytearray()
+	bitesarray.extend(plinename_)
+	r = 0
+	for iBite, bites in enumerate(bitesarray):
+		num_bytes_to_shift = len(bitesarray) - 1 - iBite
+		num_bits_to_shift = num_bytes_to_shift*8
+		shifted_bites = (bites << num_bits_to_shift)
+		assert (r & shifted_bites) == 0
+		r |= shifted_bites
+	return r
+
 # We use these to represent edges that don't exactly exist in the graph.  
 # They don't exist because in the dead end case, our graph has a vertex at only the non-dead end, and our real edge objects 
 # connect two vertices.  No second vertex ==> no edge object.  
