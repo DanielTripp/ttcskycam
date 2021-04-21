@@ -1,4 +1,4 @@
-This is the source code that was behind the website http://ttcskycam.ca/.  It's goal is to give an up-to-the-minute visual representation of public transit conditions in Toronto.  That website is no longer online, due to hosting costs.  
+This is the source code that was behind the website http://ttcskycam.ca/.  It's goal is to give an up-to-the-minute visual representation of public transit conditions in Toronto.  That website is no longer online, because the computation required caused the hosting costs to be prohibitively high for a hobby project.
 
 It it based on [NextBus](http://www.nextbus.com/) data.
 
